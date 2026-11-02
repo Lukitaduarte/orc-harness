@@ -1,0 +1,24 @@
+[package]
+name = "orc-daemon"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "orcd"
+path = "src/main.rs"
+
+[[bin]]
+name = "orc-statusline"
+path = "src/bin/orc-statusline.rs"
+
+[dependencies]
+orc-protocol.workspace = true
+serde_json.workspace = true
+alacritty_terminal = "0.26.0"
+portable-pty = "0.9.0"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
