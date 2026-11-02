@@ -23,7 +23,9 @@ void main() {
   final layout = layoutFlowchart(chart, (_) => 48);
 
   test('nodes are ranked by longest path, ignoring the back edge', () {
-    final a = layout.nodes['a']!, b = layout.nodes['b']!, d = layout.nodes['d']!;
+    final a = layout.nodes['a']!,
+        b = layout.nodes['b']!,
+        d = layout.nodes['d']!;
     expect(b.top, greaterThan(a.bottom));
     expect(d.top, greaterThan(b.bottom));
     expect(layout.nodes['c']!.top, b.top); // same layer

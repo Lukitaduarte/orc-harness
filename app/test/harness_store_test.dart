@@ -180,15 +180,18 @@ void main() {
       },
     );
 
-    test('the plan has a deploy section and a deploy loop gated on your OK', () {
-      final plan = push().plan!;
-      expect(plan.sections.map((s) => s.id), contains('deploy'));
-      final deploy = plan.proposedCards.last;
-      expect(deploy.dependsOn, [2, 4]);
-      final prod = deploy.tasks.last;
-      expect(prod.needsOk, isTrue);
-      expect(deploy.tasks.where((t) => t.needsOk), [prod]);
-    });
+    test(
+      'the plan has a deploy section and a deploy loop gated on your OK',
+      () {
+        final plan = push().plan!;
+        expect(plan.sections.map((s) => s.id), contains('deploy'));
+        final deploy = plan.proposedCards.last;
+        expect(deploy.dependsOn, [2, 4]);
+        final prod = deploy.tasks.last;
+        expect(prod.needsOk, isTrue);
+        expect(deploy.tasks.where((t) => t.needsOk), [prod]);
+      },
+    );
 
     test('replying reopens a resolved thread', () {
       final t = push().plan!.threads.first..resolved = true;
@@ -198,16 +201,22 @@ void main() {
     });
 
     test('a new plan is drafted from its sources, then filled', () async {
-      final p = store.createPlan('Favoritos', 'Salvar produtos', [
-        'https://x.atlassian.net/browse/MOB-1',
-        'https://www.figma.com/design/abc',
-      ]);
+      final p = store.createPlan(
+        'Favoritos',
+        'Salvar produtos',
+        [
+          'https://x.atlassian.net/browse/MOB-1',
+          'https://www.figma.com/design/abc',
+        ],
+        store.planTemplates.firstWhere((t) => t.id == 'app'),
+      );
       expect(p.plan!.drafting, isTrue);
       expect(p.plan!.sources.map((s) => s.kind), ['Jira', 'Figma']);
       expect(p.plan!.canStart, isFalse);
       await Future<void>.delayed(const Duration(milliseconds: 1900));
       expect(p.plan!.drafting, isFalse);
-      expect(p.plan!.proposedCards, hasLength(4));
+      expect(p.plan!.proposedCards, hasLength(3));
+      expect(p.plan!.sections.map((s) => s.id), contains('release'));
     });
   });
 

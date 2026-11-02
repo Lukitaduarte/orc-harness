@@ -146,6 +146,18 @@ class _PlanViewState extends State<PlanView> {
             Row(
               children: [
                 Text(s.title).semiBold(),
+                if (s.instruction.isNotEmpty) ...[
+                  const Gap(6),
+                  Tooltip(
+                    tooltip: (context) => TooltipContainer(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 360),
+                        child: Text('Instrução do template: ${s.instruction}'),
+                      ),
+                    ),
+                    child: const Icon(LucideIcons.info, size: 14),
+                  ),
+                ],
                 const Gap(8),
                 if (s.changedAfterApproval)
                   const DestructiveBadge(child: Text('alterada após aprovação'))

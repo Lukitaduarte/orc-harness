@@ -509,6 +509,9 @@ class PlanSection {
   final String title;
   List<PlanBlock> blocks;
 
+  /// What the planning agent must write here, from the template.
+  String instruction = '';
+
   /// Digest of the content when it was approved. Approval is final.
   String? approvedDigest;
   DateTime? approvedAt;
@@ -603,4 +606,16 @@ class Learning {
 
   /// null while waiting for your decision.
   bool? accepted;
+}
+
+/// A plan mode template: a markdown file with the sections a kind of work
+/// needs (deploy for back end, release for apps) and, in each, the
+/// instruction for the planning agent plus example content.
+class PlanTemplate {
+  PlanTemplate(this.id, this.name, this.description, this.markdown);
+
+  final String id;
+  String name;
+  String description;
+  String markdown;
 }

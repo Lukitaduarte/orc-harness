@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   shadcn_flutter: ^0.0.53
+  yaml: ^3.1.4
 
 dev_dependencies:
   flutter_test:

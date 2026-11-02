@@ -2,6 +2,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
 import '../model.dart';
+import 'template_editor.dart';
 
 /// Global catalog of skills, MCPs and envs: configured once here, then
 /// switched on per session in the profile panel.
@@ -43,7 +44,71 @@ class CatalogView extends StatelessWidget {
             _ItemRow(store, item),
           const Gap(16),
         ],
+        Row(
+          children: [
+            const Expanded(
+              child: Text('TEMPLATES DE PLAN MODE'),
+            ).xSmall().semiBold().muted(),
+            GhostButton(
+              size: ButtonSize.small,
+              leading: const Icon(LucideIcons.plus, size: 12),
+              onPressed: () => showTemplateEditor(context, store),
+              child: const Text('Novo template'),
+            ),
+          ],
+        ),
+        const Gap(4),
+        const Text(
+          'Markdown com as seções de cada tipo de trabalho e a instrução de cada uma. '
+          'Escolhido no "Novo plano".',
+        ).xSmall().muted(),
+        const Gap(8),
+        for (final t in store.planTemplates) _TemplateRow(store, t),
       ],
+    );
+  }
+}
+
+class _TemplateRow extends StatelessWidget {
+  const _TemplateRow(this.store, this.template);
+
+  final HarnessStore store;
+  final PlanTemplate template;
+
+  @override
+  Widget build(BuildContext context) {
+    final sections = RegExp(
+      r'^## ',
+      multiLine: true,
+    ).allMatches(template.markdown).length;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: OutlinedContainer(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            const Icon(LucideIcons.fileText, size: 16),
+            const Gap(10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(template.name).small().semiBold(),
+                  Text(template.description).xSmall().muted(),
+                ],
+              ),
+            ),
+            Text('$sections seções').xSmall().muted(),
+            const Gap(12),
+            OutlineButton(
+              size: ButtonSize.small,
+              onPressed: () =>
+                  showTemplateEditor(context, store, template: template),
+              child: const Text('Editar markdown'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

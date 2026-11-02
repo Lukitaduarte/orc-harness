@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 
 import 'mock_data.dart' as mock;
 import 'model.dart';
+import 'plan_markdown.dart';
+import 'plan_templates.dart';
 
 /// App state for phase 0, seeded with fake data. In phase 1 the seeds and the
 /// simulated restart give way to the daemon; the screens keep reading this.
@@ -325,24 +327,96 @@ class HarnessStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// "Novo plano": the planning session reads the sources, then drafts every
-  /// section (simulated).
-  Project createPlan(String name, String description, List<String> links) {
+  /// "Novo plano" from a template: the planning session reads the sources
+  /// and fills each of the template's sections, following the section's
+  /// instruction (simulated: the template's example content is used).
+  Project createPlan(
+    String name,
+    String description,
+    List<String> links,
+    PlanTemplate template,
+  ) {
+    final filled = parsePlanMarkdown(template.markdown).plan;
+    final plan = Plan(
+      summary: description.isEmpty ? name : description,
+      sources: links.map(PlanSource.fromUrl).toList(),
+      proposedCards: [],
+      sections: [
+        for (final s in filled.sections)
+          PlanSection(s.id, s.title, [
+            TextBlock(
+              s.instruction.isEmpty
+                  ? 'Em elaboração a partir das fontes.'
+                  : 'Em elaboração: ${s.instruction}',
+            ),
+          ])..instruction = s.instruction,
+      ],
+    )..drafting = true;
     final p = Project(
       id: _nextId('plano'),
       workspaceId: workspaceId,
       name: name,
       repo: 'a definir',
       cards: [],
-      plan: mock.draftPlan(name, description, links),
+      plan: plan,
     );
     projects.add(p);
     openProjectView(p.id);
     _later(const Duration(milliseconds: 1800), () {
-      mock.fillDraft(p.plan!, name);
+      for (final (i, s) in plan.sections.indexed) {
+        s.blocks = filled.sections[i].blocks;
+      }
+      plan
+        ..proposedCards.addAll(filled.proposedCards)
+        ..drafting = false;
       notifyListeners();
     });
     return p;
+  }
+
+  /// Opens a plan written elsewhere (any markdown in the plan format) as a
+  /// project ready for review.
+  Project importPlan(String markdown) {
+    final parsed = parsePlanMarkdown(markdown);
+    final p = Project(
+      id: _nextId('plano'),
+      workspaceId: workspaceId,
+      name: parsed.title.isEmpty ? 'Plano importado' : parsed.title,
+      repo: parsed.repo.isEmpty ? 'a definir' : parsed.repo,
+      cards: [],
+      plan: parsed.plan,
+    );
+    projects.add(p);
+    openProjectView(p.id);
+    return p;
+  }
+
+  /// Plan mode templates, one markdown each.
+  final List<PlanTemplate> planTemplates = [...seedTemplates];
+
+  PlanTemplate addTemplate(String name, String description, String markdown) {
+    final t = PlanTemplate(_nextId('template'), name, description, markdown);
+    planTemplates.add(t);
+    notifyListeners();
+    return t;
+  }
+
+  void updateTemplate(
+    PlanTemplate t, {
+    String? name,
+    String? description,
+    String? markdown,
+  }) {
+    t
+      ..name = name ?? t.name
+      ..description = description ?? t.description
+      ..markdown = markdown ?? t.markdown;
+    notifyListeners();
+  }
+
+  void removeTemplate(PlanTemplate t) {
+    planTemplates.remove(t);
+    notifyListeners();
   }
 
   /// Learn: comments on the cards become proposed skill changes, applied

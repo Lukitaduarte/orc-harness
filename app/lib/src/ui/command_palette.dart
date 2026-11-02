@@ -4,6 +4,7 @@ import '../harness_store.dart';
 import '../model.dart';
 import 'format.dart';
 import 'new_plan_dialog.dart';
+import 'template_editor.dart';
 
 class _Cmd {
   const _Cmd(this.group, this.title, this.icon, this.run, {this.hint});
@@ -124,9 +125,21 @@ List<_Cmd> _commands(BuildContext context, HarnessStore store) {
       ),
     _Cmd(
       'Projetos',
-      'Novo plano a partir de Jira, Confluence e Figma',
+      'Novo plano a partir de um template',
       LucideIcons.sparkles,
       () => showNewPlanDialog(context, store),
+    ),
+    _Cmd(
+      'Projetos',
+      'Importar plano em markdown',
+      LucideIcons.fileText,
+      () => showNewPlanDialog(context, store, importing: true),
+    ),
+    _Cmd(
+      'Catálogo',
+      'Novo template de plan mode',
+      LucideIcons.filePlus,
+      () => showTemplateEditor(context, store),
     ),
     _Cmd(
       'Catálogo',
