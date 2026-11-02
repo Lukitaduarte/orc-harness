@@ -317,13 +317,6 @@ class CardTask {
   final List<String> dependsOn;
 }
 
-class PlanBox {
-  const PlanBox(this.name, this.detail);
-
-  final String name;
-  final String detail;
-}
-
 /// Content of a plan section, rendered by type (generative UI, the agent
 /// fills the data).
 sealed class PlanBlock {
@@ -369,13 +362,123 @@ class CodeBlock extends PlanBlock {
   String get text => '$caption\n$code';
 }
 
-class FlowBlock extends PlanBlock {
-  const FlowBlock(this.boxes);
+enum NodeKind { component, store, external, decision }
 
-  final List<PlanBox> boxes;
+class DiagramNode {
+  const DiagramNode(
+    this.id,
+    this.label, {
+    this.detail = '',
+    this.kind = NodeKind.component,
+    this.group,
+    this.isNew = false,
+  });
+
+  final String id;
+  final String label;
+  final String detail;
+  final NodeKind kind;
+
+  /// Id of the [DiagramGroup] (subgraph) the node belongs to.
+  final String? group;
+
+  /// Created by this feature; drawn with the accent.
+  final bool isNew;
+}
+
+class DiagramEdge {
+  const DiagramEdge(
+    this.from,
+    this.to, {
+    this.label = '',
+    this.failure = false,
+    this.taken = false,
+  });
+
+  final String from;
+  final String to;
+  final String label;
+
+  /// Failure branch: dashed, in the destructive color.
+  final bool failure;
+
+  /// Path actually taken, in a decision tree: drawn with the accent.
+  final bool taken;
+}
+
+class DiagramGroup {
+  const DiagramGroup(this.id, this.label);
+
+  final String id;
+  final String label;
+}
+
+/// A flowchart (Mermaid `flowchart` in the skill), laid out in layers by
+/// the app. [vertical] = TB, otherwise LR.
+class FlowchartBlock extends PlanBlock {
+  const FlowchartBlock({
+    required this.nodes,
+    required this.edges,
+    this.groups = const [],
+    this.vertical = true,
+    this.caption = '',
+  });
+
+  final List<DiagramNode> nodes;
+  final List<DiagramEdge> edges;
+  final List<DiagramGroup> groups;
+  final bool vertical;
+  final String caption;
 
   @override
-  String get text => boxes.map((b) => '${b.name}:${b.detail}').join('>');
+  String get text => [
+    caption,
+    ...nodes.map((n) => '${n.id}:${n.label}:${n.detail}:${n.group}'),
+    ...edges.map((e) => '${e.from}>${e.to}:${e.label}:${e.failure}'),
+  ].join('\n');
+}
+
+class SequenceMessage {
+  const SequenceMessage(this.from, this.to, this.label, {this.reply = false});
+
+  final String from;
+  final String to;
+  final String label;
+
+  /// A return message: dashed.
+  final bool reply;
+}
+
+/// A frame over a run of messages, like `alt falha` in Mermaid.
+class SequenceFrame {
+  const SequenceFrame(this.label, this.first, this.last);
+
+  final String label;
+  final int first;
+  final int last;
+}
+
+/// A sequence diagram (Mermaid `sequenceDiagram` in the skill).
+class SequenceBlock extends PlanBlock {
+  const SequenceBlock({
+    required this.participants,
+    required this.messages,
+    this.frames = const [],
+    this.caption = '',
+  });
+
+  final List<String> participants;
+  final List<SequenceMessage> messages;
+  final List<SequenceFrame> frames;
+  final String caption;
+
+  @override
+  String get text => [
+    caption,
+    participants.join(','),
+    ...messages.map((m) => '${m.from}>${m.to}:${m.label}:${m.reply}'),
+    ...frames.map((f) => '${f.label}:${f.first}-${f.last}'),
+  ].join('\n');
 }
 
 /// Renders the plan's loops (its proposed cards) with their tasks.

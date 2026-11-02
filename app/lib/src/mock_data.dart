@@ -752,19 +752,143 @@ Plan pushPlan(DateTime now) {
           'Plataformizado: sim, o notifier serve todos os apps',
           'Local: services/notifier + apps/mobile/lib/notifications',
         ]),
+        FlowchartBlock(
+          caption: 'Decisão de escopo, com o caminho tomado',
+          nodes: [
+            DiagramNode('q1', 'Chama back end?', kind: NodeKind.decision),
+            DiagramNode('ui', 'Só UI no app'),
+            DiagramNode('q2', 'Usado por 2+ apps?', kind: NodeKind.decision),
+            DiagramNode(
+              'plat',
+              'Serviço plataforma',
+              detail: 'services/notifier',
+              isNew: true,
+            ),
+            DiagramNode('local', 'Feature no app'),
+          ],
+          edges: [
+            DiagramEdge('q1', 'ui', label: 'não'),
+            DiagramEdge('q1', 'q2', label: 'sim', taken: true),
+            DiagramEdge('q2', 'plat', label: 'sim', taken: true),
+            DiagramEdge('q2', 'local', label: 'não'),
+          ],
+        ),
         TextBlock(
           'Motivo: o notifier é infraestrutura reusável; a UI de permissão é do app.',
         ),
       ]),
       PlanSection('arquitetura', 'Arquitetura', const [
-        FlowBlock([
-          PlanBox('Serviço de pedidos', 'publica order.status_changed'),
-          PlanBox('Fila (SQS)', 'desacopla e reprocessa'),
-          PlanBox('Notifier', 'preferências e mensagem'),
-          PlanBox('FCM / APNs', 'entrega no device'),
-        ]),
-        TextBlock(
-          'Falha: após 3 tentativas a mensagem vai para a DLQ e gera alerta.',
+        FlowchartBlock(
+          caption: 'Componentes e fluxo do evento',
+          groups: [
+            DiagramGroup('pedidos', 'Serviço de pedidos'),
+            DiagramGroup('infra', 'Infra'),
+            DiagramGroup('notifier', 'Notifier'),
+            DiagramGroup('app', 'App mobile'),
+          ],
+          nodes: [
+            DiagramNode(
+              'order',
+              'Pedido salvo',
+              detail: 'muda de status',
+              group: 'pedidos',
+            ),
+            DiagramNode(
+              'outbox',
+              'Outbox',
+              detail: 'tabela transacional',
+              kind: NodeKind.store,
+              group: 'pedidos',
+              isNew: true,
+            ),
+            DiagramNode(
+              'publisher',
+              'Publisher',
+              detail: 'publica o evento v1',
+              group: 'pedidos',
+              isNew: true,
+            ),
+            DiagramNode(
+              'queue',
+              'Fila SQS',
+              detail: 'order.status_changed',
+              kind: NodeKind.store,
+              group: 'infra',
+            ),
+            DiagramNode(
+              'consumer',
+              'Consumer',
+              detail: 'retry com backoff',
+              group: 'notifier',
+              isNew: true,
+            ),
+            DiagramNode(
+              'dlq',
+              'DLQ',
+              detail: 'alerta no Slack',
+              kind: NodeKind.store,
+            ),
+            DiagramNode(
+              'prefs',
+              'Preferências',
+              detail: 'opt-in por canal',
+              kind: NodeKind.store,
+              group: 'notifier',
+              isNew: true,
+            ),
+            DiagramNode(
+              'provider',
+              'PushProvider',
+              detail: 'Strategy: FCM | APNs',
+              group: 'notifier',
+              isNew: true,
+            ),
+            DiagramNode(
+              'fcm',
+              'FCM / APNs',
+              detail: 'entrega no device',
+              kind: NodeKind.external,
+            ),
+            DiagramNode(
+              'app',
+              'push_service',
+              detail: 'abre o pedido',
+              group: 'app',
+              isNew: true,
+            ),
+          ],
+          edges: [
+            DiagramEdge('order', 'outbox', label: 'mesma transação'),
+            DiagramEdge('outbox', 'publisher'),
+            DiagramEdge('publisher', 'queue', label: 'publica'),
+            DiagramEdge('queue', 'consumer', label: 'consome'),
+            DiagramEdge('consumer', 'prefs', label: 'consulta'),
+            DiagramEdge('consumer', 'provider', label: 'envia'),
+            DiagramEdge('consumer', 'dlq', label: 'falha 3x', failure: true),
+            DiagramEdge('provider', 'fcm'),
+            DiagramEdge('fcm', 'app', label: 'push'),
+          ],
+        ),
+        SequenceBlock(
+          caption: 'Interação principal, com o ramo de falha',
+          participants: ['Pedidos', 'Fila', 'Notifier', 'FCM/APNs', 'App'],
+          messages: [
+            SequenceMessage('Pedidos', 'Fila', 'order.status_changed'),
+            SequenceMessage('Fila', 'Notifier', 'entrega evento'),
+            SequenceMessage('Notifier', 'Notifier', 'aplica preferências'),
+            SequenceMessage('Notifier', 'FCM/APNs', 'send(token, msg)'),
+            SequenceMessage('FCM/APNs', 'App', 'push'),
+            SequenceMessage('FCM/APNs', 'Notifier', 'entregue', reply: true),
+            SequenceMessage('Notifier', 'FCM/APNs', 'send(token, msg)'),
+            SequenceMessage(
+              'FCM/APNs',
+              'Notifier',
+              'token inválido',
+              reply: true,
+            ),
+            SequenceMessage('Notifier', 'Notifier', 'remove o token'),
+          ],
+          frames: [SequenceFrame('alt  falha de entrega', 6, 8)],
         ),
       ]),
       PlanSection('padroes', 'Padrões', const [
@@ -848,6 +972,21 @@ apps/mobile/lib/notifications/
         const TextBlock(
           'Cada loop vira um PR. Tarefas do mesmo grupo rodam em paralelo como subagentes; o próximo grupo espera.',
         ),
+        const FlowchartBlock(
+          caption: 'Ordem dos loops: 3 e 4 rodam em paralelo depois do 2',
+          vertical: false,
+          nodes: [
+            DiagramNode('l1', 'Loop 1', detail: 'Evento'),
+            DiagramNode('l2', 'Loop 2', detail: 'Notifier'),
+            DiagramNode('l3', 'Loop 3', detail: 'App'),
+            DiagramNode('l4', 'Loop 4', detail: 'Auditoria'),
+          ],
+          edges: [
+            DiagramEdge('l1', 'l2'),
+            DiagramEdge('l2', 'l3'),
+            DiagramEdge('l2', 'l4'),
+          ],
+        ),
         LoopsBlock(loops),
       ]),
       PlanSection('entregas', 'Entregas', const [
@@ -876,6 +1015,24 @@ apps/mobile/lib/notifications/
           ],
         ),
         TextBlock('PRs 1 e 2 formam uma stack; 3 e 4 saem de 2 em paralelo.'),
+        FlowchartBlock(
+          caption: 'Stacks de PR',
+          groups: [
+            DiagramGroup('back', 'Stack back end'),
+            DiagramGroup('app', 'App'),
+          ],
+          nodes: [
+            DiagramNode('p1', 'PR 1', detail: 'evento', group: 'back'),
+            DiagramNode('p2', 'PR 2', detail: 'notifier', group: 'back'),
+            DiagramNode('p4', 'PR 4', detail: 'auditoria', group: 'back'),
+            DiagramNode('p3', 'PR 3', detail: 'app mobile', group: 'app'),
+          ],
+          edges: [
+            DiagramEdge('p1', 'p2'),
+            DiagramEdge('p2', 'p4'),
+            DiagramEdge('p2', 'p3', label: 'após publicar'),
+          ],
+        ),
       ]),
       PlanSection('pendencias', 'Pendências e riscos', const [
         TableBlock(
@@ -978,12 +1135,78 @@ void fillDraft(Plan plan, String name) {
       ]),
     ],
     'arquitetura': const [
-      FlowBlock([
-        PlanBox('Tela', 'widgets + cubit'),
-        PlanBox('Repositório', 'contrato do domínio'),
-        PlanBox('Data source', 'chamada HTTP'),
-        PlanBox('API', 'back end existente'),
-      ]),
+      FlowchartBlock(
+        caption: 'Camadas da feature',
+        groups: [
+          DiagramGroup('feature', 'Feature'),
+          DiagramGroup('back', 'Back end'),
+        ],
+        nodes: [
+          DiagramNode(
+            'screen',
+            'Tela',
+            detail: 'widgets',
+            group: 'feature',
+            isNew: true,
+          ),
+          DiagramNode(
+            'cubit',
+            'Cubit',
+            detail: 'estado da tela',
+            group: 'feature',
+            isNew: true,
+          ),
+          DiagramNode(
+            'repo',
+            'Repositório',
+            detail: 'contrato do domínio',
+            group: 'feature',
+            isNew: true,
+          ),
+          DiagramNode(
+            'ds',
+            'Data source',
+            detail: 'HTTP',
+            group: 'feature',
+            isNew: true,
+          ),
+          DiagramNode(
+            'api',
+            'API',
+            detail: 'existente',
+            kind: NodeKind.external,
+            group: 'back',
+          ),
+        ],
+        edges: [
+          DiagramEdge('screen', 'cubit', label: 'eventos'),
+          DiagramEdge('cubit', 'repo'),
+          DiagramEdge('repo', 'ds'),
+          DiagramEdge('ds', 'api', label: 'GET'),
+          DiagramEdge('ds', 'cubit', label: 'erro', failure: true),
+        ],
+      ),
+      SequenceBlock(
+        caption: 'Interação principal',
+        participants: ['Usuário', 'Tela', 'Cubit', 'Repositório', 'API'],
+        messages: [
+          SequenceMessage('Usuário', 'Tela', 'abre'),
+          SequenceMessage('Tela', 'Cubit', 'load()'),
+          SequenceMessage('Cubit', 'Repositório', 'fetch'),
+          SequenceMessage('Repositório', 'API', 'GET'),
+          SequenceMessage('API', 'Repositório', '200', reply: true),
+          SequenceMessage('Repositório', 'Cubit', 'entidade', reply: true),
+          SequenceMessage('Cubit', 'Tela', 'sucesso', reply: true),
+          SequenceMessage('API', 'Repositório', '5xx', reply: true),
+          SequenceMessage(
+            'Cubit',
+            'Tela',
+            'erro + tentar de novo',
+            reply: true,
+          ),
+        ],
+        frames: [SequenceFrame('alt  falha', 7, 8)],
+      ),
     ],
     'padroes': const [
       TableBlock(

@@ -3,6 +3,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 import '../harness_store.dart';
 import '../model.dart';
 import 'comments.dart';
+import 'diagrams.dart';
 
 /// Plan mode, after the create-feature skill: sections from the sources,
 /// approved one by one (final), comments that revise open sections or become
@@ -256,7 +257,8 @@ class _PlanViewState extends State<PlanView> {
         ),
       ],
     ),
-    FlowBlock() => _flow(b.boxes),
+    FlowchartBlock() => FlowchartView(b),
+    SequenceBlock() => SequenceView(b),
     LoopsBlock() => _loops(b.loops),
   };
 
@@ -302,33 +304,6 @@ class _PlanViewState extends State<PlanView> {
     ),
     _ => Text(c).small(),
   };
-
-  Widget _flow(List<PlanBox> boxes) => IntrinsicHeight(
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (var i = 0; i < boxes.length; i++) ...[
-          if (i > 0)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 6),
-              child: Icon(LucideIcons.arrowRight, size: 16),
-            ),
-          Expanded(
-            child: OutlinedContainer(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(boxes[i].name).small().semiBold(),
-                  Text(boxes[i].detail).xSmall().muted(),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ],
-    ),
-  );
 
   /// Each loop is one PR; its tasks run in parallel groups.
   Widget _loops(List<TaskCard> loops) => Column(
