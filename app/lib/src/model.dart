@@ -142,3 +142,79 @@ class LayoutLeaf extends LayoutNode {
 
   final String? sessionId;
 }
+
+/// Stored state of a project card. "Ready" and "blocked" are derived from the
+/// dependency graph, never stored.
+enum CardState { todo, running, review, done }
+
+/// Kanban column, derived from [CardState] plus the dependency graph.
+enum KanbanColumn { blocked, ready, running, review, done }
+
+class TaskCard {
+  TaskCard({
+    required this.number,
+    required this.title,
+    required this.type,
+    required this.model,
+    this.dependsOn = const [],
+    this.state = CardState.todo,
+    this.sessionId,
+    this.pr,
+  });
+
+  final int number;
+  final String title;
+
+  /// Conventional commit type: feat, fix, chore, test, docs.
+  final String type;
+  final String model;
+  final List<int> dependsOn;
+  CardState state;
+  String? sessionId;
+  int? pr;
+
+  String get branch => '$type/$number-${_slug(title)}';
+}
+
+const _plain = {
+  'á': 'a', 'à': 'a', 'â': 'a', 'ã': 'a', 'é': 'e', 'ê': 'e', //
+  'í': 'i', 'ó': 'o', 'ô': 'o', 'õ': 'o', 'ú': 'u', 'ç': 'c',
+};
+
+/// Lowercase without Portuguese accents: "Sessões" becomes "sessoes".
+String foldAccents(String s) =>
+    s.toLowerCase().split('').map((ch) => _plain[ch] ?? ch).join();
+
+String _slug(String s) => foldAccents(
+  s,
+).replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-|-$'), '');
+
+class Project {
+  const Project({
+    required this.id,
+    required this.workspaceId,
+    required this.name,
+    required this.repo,
+    required this.cards,
+  });
+
+  final String id;
+  final String workspaceId;
+  final String name;
+  final String repo;
+  final List<TaskCard> cards;
+
+  TaskCard card(int number) => cards.firstWhere((c) => c.number == number);
+
+  KanbanColumn columnOf(TaskCard c) => switch (c.state) {
+    CardState.running => KanbanColumn.running,
+    CardState.review => KanbanColumn.review,
+    CardState.done => KanbanColumn.done,
+    CardState.todo =>
+      c.dependsOn.every((d) => card(d).state == CardState.done)
+          ? KanbanColumn.ready
+          : KanbanColumn.blocked,
+  };
+
+  int get doneCount => cards.where((c) => c.state == CardState.done).length;
+}

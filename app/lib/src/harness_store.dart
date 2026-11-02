@@ -11,6 +11,7 @@ class HarnessStore extends ChangeNotifier {
   HarnessStore() : now = DateTime.now() {
     accounts = mock.seedAccounts(now);
     sessions = mock.seedSessions();
+    projects = mock.seedProjects();
     for (final ws in mock.workspaces) {
       _layouts[ws.id] = mock.seedLayout(ws.id);
       _focusedLeaf[ws.id] = _firstLeaf(_layouts[ws.id]!).id;
@@ -26,12 +27,20 @@ class HarnessStore extends ChangeNotifier {
   DateTime now;
   late final List<Account> accounts;
   late final List<Session> sessions;
+  late final List<Project> projects;
   final _layouts = <String, LayoutNode>{};
   final _focusedLeaf = <String, String>{};
   int _ids = 0;
 
   String workspaceId = mock.workspaces.first.id;
   bool profilePanelOpen = true;
+
+  /// Project whose kanban replaces the panes; null shows the panes.
+  String? openProjectId;
+
+  /// Cards running at once per project; the daemon will derive this from the
+  /// remaining quota.
+  static const maxRunningCards = 3;
 
   List<Workspace> get workspaces => mock.workspaces;
   List<CatalogItem> get catalog => mock.catalog;
@@ -48,6 +57,17 @@ class HarnessStore extends ChangeNotifier {
   Account account(String id) => accounts.firstWhere((a) => a.id == id);
   Session session(String id) => sessions.firstWhere((s) => s.id == id);
 
+  List<Project> get workspaceProjects =>
+      projects.where((p) => p.workspaceId == workspaceId).toList();
+  Project? get openProject => openProjectId == null
+      ? null
+      : projects.firstWhere((p) => p.id == openProjectId);
+
+  /// The workspace account with the most room left in its 5h window.
+  Account get freestAccount => workspaceAccounts.reduce(
+    (a, b) => a.fiveHour.usedPercent <= b.fiveHour.usedPercent ? a : b,
+  );
+
   Session? get focusedSession {
     final leaf = _findLeaf(layout, focusedLeafId);
     return leaf?.sessionId == null ? null : session(leaf!.sessionId!);
@@ -61,6 +81,7 @@ class HarnessStore extends ChangeNotifier {
 
   void selectWorkspace(String id) {
     workspaceId = id;
+    openProjectId = null;
     notifyListeners();
   }
 
@@ -77,6 +98,10 @@ class HarnessStore extends ChangeNotifier {
 
   /// Focuses the pane showing [sessionId], or shows it in the focused pane.
   void showSession(String sessionId) {
+    if (openProjectId != null) {
+      openProjectId = null;
+      notifyListeners();
+    }
     final leaf = _leafShowing(layout, sessionId);
     if (leaf != null) {
       focusLeaf(leaf.id);
@@ -139,6 +164,81 @@ class HarnessStore extends ChangeNotifier {
       ),
     );
     showSession(id);
+  }
+
+  void openProjectView(String? projectId) {
+    openProjectId = projectId;
+    notifyListeners();
+  }
+
+  List<TaskCard> readyCards(Project p) =>
+      p.cards.where((c) => p.columnOf(c) == KanbanColumn.ready).toList();
+
+  int runningCount(Project p) =>
+      p.cards.where((c) => c.state == CardState.running).length;
+
+  bool canRun(Project p) => runningCount(p) < maxRunningCards;
+
+  /// Starts a card: worktree + branch + its own session on the account with
+  /// the most room, using the card's model.
+  void runCard(Project p, TaskCard c) {
+    if (p.columnOf(c) != KanbanColumn.ready || !canRun(p)) return;
+    final id = _nextId('card');
+    sessions.add(
+      Session(
+        id: id,
+        workspaceId: p.workspaceId,
+        accountId: freestAccount.id,
+        name: '${p.id.split('-').first}#${c.number}',
+        branch: c.branch,
+        model: c.model,
+        state: SessionState.running,
+        tokens: 0,
+        costUsd: 0,
+        fiveHourShare: 0,
+        enabledItems: const {'conventional-commits'},
+        lines: [
+          TerminalLine(
+            LineKind.dim,
+            '✻ worktree criada em ~/.orc/worktrees/${c.branch}',
+          ),
+          TerminalLine(LineKind.prompt, '> ${c.title}'),
+          const TerminalLine(
+            LineKind.dim,
+            '✻ Lendo o card e os critérios de aceite…',
+          ),
+        ],
+      ),
+    );
+    c
+      ..state = CardState.running
+      ..sessionId = id;
+    notifyListeners();
+  }
+
+  /// Starts every ready card, up to the concurrency limit.
+  void runReady(Project p) {
+    for (final c in readyCards(p)) {
+      if (!canRun(p)) break;
+      runCard(p, c);
+    }
+  }
+
+  int _nextPr = 20;
+
+  /// Simulation of the agent opening a PR (the daemon reports this later).
+  void simulatePr(TaskCard c) {
+    c
+      ..state = CardState.review
+      ..pr = _nextPr++;
+    if (c.sessionId != null) session(c.sessionId!).state = SessionState.idle;
+    notifyListeners();
+  }
+
+  /// Simulation of the PR being merged; dependents become ready.
+  void simulateMerge(TaskCard c) {
+    c.state = CardState.done;
+    notifyListeners();
   }
 
   void toggleItem(Session s, String itemId) {

@@ -59,4 +59,57 @@ void main() {
     expect(s.hasPendingChanges, isFalse);
     expect(s.state, SessionState.starting);
   });
+
+  group('kanban', () {
+    Project users() => store.projects.firstWhere((p) => p.id == 'users-pagination');
+
+    test('columns come from the dependency graph', () {
+      final p = users();
+      expect(p.columnOf(p.card(5)), KanbanColumn.blocked); // waits on #3, #4
+      expect(p.columnOf(p.card(6)), KanbanColumn.ready); // #1 is done
+      expect(p.columnOf(p.card(3)), KanbanColumn.running);
+    });
+
+    test('running a card opens its own session on the freest account', () {
+      final p = users();
+      store.runCard(p, p.card(6));
+      final c = p.card(6);
+      expect(c.state, CardState.running);
+      final s = store.session(c.sessionId!);
+      expect(s.branch, 'docs/6-documentar-o-contrato-na-api-publica');
+      expect(s.model, 'haiku');
+      expect(s.accountId, 'work-main'); // 62% beats work-alt's 91%
+    });
+
+    test('blocked cards do not run', () {
+      final p = users();
+      store.runCard(p, p.card(5));
+      expect(p.card(5).state, CardState.todo);
+    });
+
+    test('runReady respects the concurrency limit', () {
+      final p = store.projects.firstWhere((p) => p.id == 'onboarding-v2');
+      store.runReady(p); // only #1 is ready
+      store.simulatePr(p.card(1));
+      store.simulateMerge(p.card(1)); // #2 and #3 become ready
+      expect(store.readyCards(p).map((c) => c.number), [2, 3]);
+      store.runReady(p);
+      expect(store.runningCount(p), 2);
+      expect(store.runningCount(p), lessThanOrEqualTo(HarnessStore.maxRunningCards));
+    });
+
+    test('merging the last dependencies unblocks dependents', () {
+      final p = users();
+      for (final n in [3, 4]) {
+        store.simulatePr(p.card(n));
+        store.simulateMerge(p.card(n));
+      }
+      expect(p.columnOf(p.card(5)), KanbanColumn.ready);
+      expect(p.columnOf(p.card(7)), KanbanColumn.blocked); // still waits on #5
+    });
+  });
+
+  test('accent folding lets "sessao" match "Sessões"', () {
+    expect(foldAccents('Sessões'), 'sessoes');
+  });
 }

@@ -84,7 +84,7 @@ class Sidebar extends StatelessWidget {
         for (final s in sessions)
           _SessionRow(
             s,
-            selected: s.id == focused?.id,
+            selected: store.openProjectId == null && s.id == focused?.id,
             onTap: () => store.showSession(s.id),
           ),
         GhostButton(
@@ -95,8 +95,17 @@ class Sidebar extends StatelessWidget {
         ),
         const Gap(16),
         const _SectionLabel('Projetos'),
-        const _ProjectRow('Paginação de usuários', done: 3, total: 7),
-        const _ProjectRow('Onboarding v2', done: 0, total: 5),
+        for (final p in store.workspaceProjects)
+          _ProjectRow(
+            p,
+            selected: p.id == store.openProjectId,
+            onTap: () => store.openProjectView(p.id),
+          ),
+        if (store.workspaceProjects.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8),
+            child: Text('Nenhum projeto ainda'),
+          ).xSmall().muted(),
       ],
     );
   }
@@ -254,22 +263,43 @@ class _SessionRow extends StatelessWidget {
 }
 
 class _ProjectRow extends StatelessWidget {
-  const _ProjectRow(this.name, {required this.done, required this.total});
+  const _ProjectRow(
+    this.project, {
+    required this.selected,
+    required this.onTap,
+  });
 
-  final String name;
-  final int done;
-  final int total;
+  final Project project;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-    child: Row(
-      children: [
-        const Icon(LucideIcons.kanban, size: 14),
-        const Gap(8),
-        Expanded(child: Text(name, overflow: TextOverflow.ellipsis).small()),
-        Text('$done/$total').xSmall().muted(),
-      ],
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? Theme.of(context).colorScheme.accent : null,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          children: [
+            const Icon(LucideIcons.kanban, size: 14),
+            const Gap(8),
+            Expanded(
+              child: Text(
+                project.name,
+                overflow: TextOverflow.ellipsis,
+              ).small(),
+            ),
+            Text(
+              '${project.doneCount}/${project.cards.length}',
+            ).xSmall().muted(),
+          ],
+        ),
+      ),
     ),
   );
 }
