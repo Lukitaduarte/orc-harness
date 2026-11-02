@@ -63,11 +63,11 @@ class WorkspaceScreen extends StatelessWidget {
                                     _ when store.catalogOpen => CatalogView(
                                       store,
                                     ),
-                                    final p? when p.isPlanning => PlanView(
-                                      store,
-                                      p,
-                                      key: ValueKey(p.id),
-                                    ),
+                                    final p?
+                                        when p.isPlanning ||
+                                            (p.plan != null &&
+                                                store.viewingPlan) =>
+                                      PlanView(store, p, key: ValueKey(p.id)),
                                     final p? => KanbanView(store, p),
                                     null => PaneTree(store),
                                   },
@@ -133,6 +133,19 @@ class _Toolbar extends StatelessWidget {
           if (p.isPlanning) ...[
             const Gap(8),
             const OutlineBadge(child: Text('plano')),
+          ] else if (p.plan != null) ...[
+            const Gap(12),
+            _Toggle(
+              'Execução',
+              selected: !store.viewingPlan,
+              onPressed: () => store.setViewingPlan(false),
+            ),
+            const Gap(4),
+            _Toggle(
+              'Plano',
+              selected: store.viewingPlan,
+              onPressed: () => store.setViewingPlan(true),
+            ),
           ],
         ],
         if (store.catalogOpen) ...[
@@ -155,4 +168,25 @@ class _Toolbar extends StatelessWidget {
       ],
     ),
   );
+}
+
+class _Toggle extends StatelessWidget {
+  const _Toggle(this.label, {required this.selected, required this.onPressed});
+
+  final String label;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => selected
+      ? SecondaryButton(
+          size: ButtonSize.small,
+          onPressed: onPressed,
+          child: Text(label),
+        )
+      : GhostButton(
+          size: ButtonSize.small,
+          onPressed: onPressed,
+          child: Text(label),
+        );
 }

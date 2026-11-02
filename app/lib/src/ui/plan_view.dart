@@ -4,8 +4,9 @@ import '../harness_store.dart';
 import '../model.dart';
 import 'comments.dart';
 
-/// Plan mode: the plan as reviewable sections, comments anchored to each
-/// section or proposed card, and approval that turns cards into the board.
+/// Plan mode, after the create-feature skill: sections from the sources,
+/// approved one by one (final), comments that revise open sections or become
+/// amendments on approved ones, and "Iniciar execução" once all are approved.
 class PlanView extends StatefulWidget {
   const PlanView(this.store, this.project, {super.key});
 
@@ -17,14 +18,17 @@ class PlanView extends StatefulWidget {
 }
 
 class _PlanViewState extends State<PlanView> {
-  /// Section or card currently showing the new-comment field.
+  /// Section currently showing the new-comment field.
   String? _composing;
 
-  /// Anchor the review panel is filtered to; null shows every thread.
+  /// Section the review panel is filtered to; null shows every thread.
   String? _filter;
 
   HarnessStore get store => widget.store;
   Plan get plan => widget.project.plan!;
+
+  /// Read-only once execution started.
+  bool get started => plan.startedAt != null;
 
   @override
   Widget build(BuildContext context) {
@@ -32,16 +36,18 @@ class _PlanViewState extends State<PlanView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.all(16),
+          child: Stack(
             children: [
-              _header(),
-              const Gap(16),
-              _section('resumo', 'Resumo', Text(plan.summary).small()),
-              _section('arquitetura', 'Arquitetura', _architecture()),
-              _section('pastas', 'Estrutura de pastas', _folders()),
-              _section('stack', 'Stack', _stack()),
-              _section('cards', 'Cards propostos', _cards()),
+              ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
+                children: [
+                  _header(),
+                  const Gap(16),
+                  for (final s in plan.sections) _section(s),
+                ],
+              ),
+              if (!started)
+                Positioned(right: 24, bottom: 20, child: _startButton()),
             ],
           ),
         ),
@@ -60,239 +66,322 @@ class _PlanViewState extends State<PlanView> {
   }
 
   Widget _header() {
-    final open = plan.openThreads;
-    return Row(
+    final total = plan.sections.length;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(widget.project.name).large().semiBold(),
-                  const Gap(8),
-                  OutlineBadge(child: Text('plano v${plan.version}')),
-                ],
-              ),
-              Text(
-                open == 0
-                    ? '${widget.project.repo} · sem comentários abertos, pronto para aprovar'
-                    : open == 1
-                    ? '${widget.project.repo} · resolva o comentário aberto para aprovar'
-                    : '${widget.project.repo} · resolva os $open comentários abertos para aprovar',
-              ).xSmall().muted(),
-            ],
+        Row(
+          children: [
+            Flexible(child: Text(widget.project.name).large().semiBold()),
+            const Gap(8),
+            OutlineBadge(child: Text('plano v${plan.version}')),
+            const Gap(8),
+            Text(
+              started
+                  ? 'em execução desde ${_time(plan.startedAt!)}'
+                  : '${plan.approvedCount}/$total seções aprovadas',
+            ).xSmall().muted(),
+          ],
+        ),
+        const Gap(6),
+        Text(plan.summary).small(),
+        const Gap(8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final s in plan.sources)
+              OutlineBadge(child: Text('${s.kind} · ${_short(s.url)}')),
+          ],
+        ),
+        if (plan.drafting) ...[
+          const Gap(12),
+          OutlinedContainer(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                const Icon(LucideIcons.loader, size: 14),
+                const Gap(8),
+                Text(
+                  'Claude está lendo ${plan.sources.length} fontes e escrevendo as seções…',
+                ).small().muted(),
+              ],
+            ),
           ),
-        ),
-        PrimaryButton(
-          leading: const Icon(LucideIcons.check, size: 14),
-          onPressed: open == 0 ? () => store.approvePlan(widget.project) : null,
-          child: Text('Aprovar e criar ${plan.proposedCards.length} cards'),
-        ),
+        ],
       ],
     );
   }
 
-  Widget _section(String anchor, String title, Widget body) {
+  Widget _startButton() {
+    final total = plan.sections.length;
+    final changed = plan.sections.where((s) => s.changedAfterApproval).length;
+    final label = plan.canStart
+        ? 'Iniciar execução · ${plan.proposedCards.length} loops'
+        : changed > 0
+        ? '$changed seção alterada após aprovação'
+        : 'Iniciar execução · ${plan.approvedCount}/$total aprovadas';
+    return PrimaryButton(
+      leading: const Icon(LucideIcons.play, size: 14),
+      onPressed: plan.canStart
+          ? () => store.startExecution(widget.project)
+          : null,
+      child: Text(label),
+    );
+  }
+
+  Widget _section(PlanSection s) {
+    final open = plan.threadsOn(s.id).where((t) => !t.resolved).length;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: OutlinedContainer(
         padding: const EdgeInsets.all(14),
+        borderColor: s.changedAfterApproval
+            ? Theme.of(context).colorScheme.destructive
+            : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               children: [
-                Text(title).semiBold(),
+                Text(s.title).semiBold(),
+                const Gap(8),
+                if (s.changedAfterApproval)
+                  const DestructiveBadge(child: Text('alterada após aprovação'))
+                else if (s.approved)
+                  _approvedTag(s),
                 const Spacer(),
-                _commentButton(anchor, title),
+                if (open > 0)
+                  GhostButton(
+                    size: ButtonSize.small,
+                    onPressed: () => setState(() => _filter = s.id),
+                    child: SecondaryBadge(
+                      child: Text('$open aberto${open > 1 ? 's' : ''}'),
+                    ),
+                  ),
+                if (!started)
+                  GhostButton(
+                    size: ButtonSize.small,
+                    leading: const Icon(
+                      LucideIcons.messageSquarePlus,
+                      size: 14,
+                    ),
+                    onPressed: () => setState(
+                      () => _composing = _composing == s.id ? null : s.id,
+                    ),
+                    child: const Text('Comentar'),
+                  ),
+                if (!s.approved && !started) ...[
+                  const Gap(4),
+                  OutlineButton(
+                    size: ButtonSize.small,
+                    leading: const Icon(LucideIcons.check, size: 12),
+                    onPressed: plan.drafting
+                        ? null
+                        : () => store.approveSection(s),
+                    child: const Text('Aprovar'),
+                  ),
+                ],
               ],
             ),
             const Gap(10),
-            body,
-            if (_composing == anchor) ...[
-              const Gap(10),
+            for (final b in s.blocks)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _block(b),
+              ),
+            if (_composing == s.id)
               CommentComposer(
                 autofocus: true,
-                placeholder: 'Comentar em $title…',
+                placeholder: s.approved
+                    ? 'Seção aprovada: o comentário vira emenda do primeiro loop…'
+                    : 'Comentar em ${s.title}…',
                 onSend: (text) {
-                  store.comment(plan, anchor, title, text);
+                  store.comment(plan, s.id, s.title, text);
                   setState(() {
                     _composing = null;
-                    _filter = anchor;
+                    _filter = s.id;
                   });
                 },
               ),
-            ],
           ],
         ),
       ),
     );
   }
 
-  /// Opens the comment field; the count opens the anchor's threads.
-  Widget _commentButton(String anchor, String label) {
-    final open = plan.threadsOn(anchor).where((t) => !t.resolved).length;
-    return Row(
+  Widget _approvedTag(PlanSection s) => Tooltip(
+    tooltip: (context) => TooltipContainer(
+      child: Text(
+        'Aprovada ${_time(s.approvedAt!)} · digest ${s.approvedDigest}',
+      ),
+    ),
+    child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (open > 0)
-          GhostButton(
-            size: ButtonSize.small,
-            onPressed: () => setState(() => _filter = anchor),
-            child: SecondaryBadge(
-              child: Text('$open aberto${open > 1 ? 's' : ''}'),
-            ),
+        const Icon(LucideIcons.circleCheck, size: 14, color: Colors.emerald),
+        const Gap(4),
+        const Text('aprovada').xSmall().medium(color: Colors.emerald),
+      ],
+    ),
+  );
+
+  Widget _block(PlanBlock b) => switch (b) {
+    TextBlock() => Text(b.text).small(),
+    BulletsBlock() => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final item in b.items)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Text('•  $item').small(),
           ),
-        GhostButton(
-          size: ButtonSize.small,
-          leading: const Icon(LucideIcons.messageSquarePlus, size: 14),
-          onPressed: () =>
-              setState(() => _composing = _composing == anchor ? null : anchor),
-          child: const Text('Comentar'),
+      ],
+    ),
+    TableBlock() => _table(b),
+    CodeBlock() => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (b.caption.isNotEmpty) ...[
+          Text(b.caption).mono().xSmall().muted(),
+          const Gap(4),
+        ],
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.muted.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(b.code).mono().xSmall(),
         ),
+      ],
+    ),
+    FlowBlock() => _flow(b.boxes),
+    LoopsBlock() => _loops(b.loops),
+  };
+
+  Widget _table(TableBlock t) {
+    Widget row(List<String> cells, {bool head = false}) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final c in cells)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: head ? Text(c).xSmall().semiBold().muted() : _cell(c),
+              ),
+            ),
+        ],
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        row(t.headers, head: true),
+        const Divider(),
+        for (final r in t.rows) row(r),
       ],
     );
   }
 
-  Widget _architecture() {
-    final boxes = plan.architecture;
-    // Boxes share the width so the whole flow is visible at once.
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (var i = 0; i < boxes.length; i++) ...[
-            if (i > 0)
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 6),
-                child: Icon(LucideIcons.arrowRight, size: 16),
-              ),
-            Expanded(
-              child: OutlinedContainer(
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(boxes[i].name).small().semiBold(),
-                    Text(boxes[i].detail).xSmall().muted(),
-                  ],
-                ),
+  /// Severity, origin and model values read as tags, like the skill's page.
+  Widget _cell(String c) => switch (c) {
+    'bloqueia' => Align(
+      alignment: Alignment.centerLeft,
+      child: DestructiveBadge(child: Text(c)),
+    ),
+    'opus' || 'sonnet' || 'haiku' => Align(
+      alignment: Alignment.centerLeft,
+      child: SecondaryBadge(child: Text(c)),
+    ),
+    'médio' || 'baixo' || 'pendente' => Align(
+      alignment: Alignment.centerLeft,
+      child: OutlineBadge(child: Text(c)),
+    ),
+    _ => Text(c).small(),
+  };
+
+  Widget _flow(List<PlanBox> boxes) => IntrinsicHeight(
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < boxes.length; i++) ...[
+          if (i > 0)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 6),
+              child: Icon(LucideIcons.arrowRight, size: 16),
+            ),
+          Expanded(
+            child: OutlinedContainer(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(boxes[i].name).small().semiBold(),
+                  Text(boxes[i].detail).xSmall().muted(),
+                ],
               ),
             ),
-          ],
+          ),
         ],
-      ),
-    );
-  }
-
-  Widget _folders() => Container(
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.muted.withValues(alpha: 0.5),
-      borderRadius: BorderRadius.circular(8),
+      ],
     ),
-    child: Text(plan.folders).mono().xSmall(),
   );
 
-  Widget _stack() => Column(
+  /// Each loop is one PR; its tasks run in parallel groups.
+  Widget _loops(List<TaskCard> loops) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      for (final (layer, choice) in plan.stack)
+      for (final l in loops)
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(width: 120, child: Text(layer).small().muted()),
-              Expanded(child: Text(choice).small()),
-            ],
+          padding: const EdgeInsets.only(bottom: 10),
+          child: OutlinedContainer(
+            padding: const EdgeInsets.all(10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Text('Loop ${l.number}').xSmall().muted(),
+                    const Gap(6),
+                    Expanded(child: Text(l.title).small().semiBold()),
+                    Text(
+                      l.dependsOn.isEmpty
+                          ? 'pode começar já'
+                          : 'depois do ${l.dependsOn.map((d) => 'loop $d').join(' e ')}',
+                    ).xSmall().muted(),
+                  ],
+                ),
+                const Gap(6),
+                _table(
+                  TableBlock(
+                    ['Tarefa', 'Skill', 'Modelo', 'Grupo'],
+                    [
+                      for (final t in l.tasks)
+                        [
+                          '${t.id} ${t.title}',
+                          t.skill,
+                          t.model,
+                          'G${t.group}${t.dependsOn.isEmpty ? '' : ' · após ${t.dependsOn.join(', ')}'}',
+                        ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
     ],
   );
 
-  /// Cards grouped in waves: every card of a wave can run in parallel.
-  Widget _cards() {
-    final cards = plan.proposedCards;
-    final wave = <int, int>{};
-    int waveOf(TaskCard c) => wave[c.number] ??= c.dependsOn.isEmpty
-        ? 1
-        : 1 +
-              c.dependsOn
-                  .map((d) => waveOf(cards.firstWhere((x) => x.number == d)))
-                  .reduce((a, b) => a > b ? a : b);
-    final waves = <int, List<TaskCard>>{};
-    for (final c in cards) {
-      waves.putIfAbsent(waveOf(c), () => []).add(c);
-    }
-    final keys = waves.keys.toList()..sort();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final w in keys) ...[
-          Padding(
-            padding: const EdgeInsets.only(top: 4, bottom: 6),
-            child: Text(
-              waves[w]!.length > 1
-                  ? 'Onda $w · ${waves[w]!.length} cards em paralelo'
-                  : 'Onda $w',
-            ).xSmall().semiBold().muted(),
-          ),
-          for (final c in waves[w]!) _proposedCard(c),
-        ],
-      ],
-    );
-  }
+  static String _time(DateTime t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
-  Widget _proposedCard(TaskCard c) {
-    final anchor = 'card-${c.number}';
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: OutlinedContainer(
-        padding: const EdgeInsets.all(10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Text('#${c.number}').xSmall().muted(),
-                const Gap(6),
-                OutlineBadge(child: Text(c.type)),
-                const Gap(8),
-                Expanded(child: Text(c.title).small().semiBold()),
-                SecondaryBadge(child: Text(c.model)),
-                const Gap(4),
-                _commentButton(anchor, 'Card #${c.number}'),
-              ],
-            ),
-            if (c.description.isNotEmpty || c.dependsOn.isNotEmpty) ...[
-              const Gap(4),
-              Text(
-                [
-                  if (c.description.isNotEmpty) c.description,
-                  if (c.dependsOn.isNotEmpty)
-                    'depende de ${c.dependsOn.map((d) => '#$d').join(', ')}',
-                ].join(' · '),
-              ).xSmall().muted(),
-            ],
-            if (_composing == anchor) ...[
-              const Gap(8),
-              CommentComposer(
-                autofocus: true,
-                placeholder: 'Comentar no card #${c.number}…',
-                onSend: (text) {
-                  store.comment(plan, anchor, 'Card #${c.number}', text);
-                  setState(() {
-                    _composing = null;
-                    _filter = anchor;
-                  });
-                },
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
+  static String _short(String url) {
+    final u = url.replaceFirst(RegExp(r'^https?://(www\.)?'), '');
+    return u.length > 40 ? '${u.substring(0, 40)}…' : u;
   }
 }
 
@@ -325,6 +414,7 @@ class _ReviewPanelState extends State<_ReviewPanel> {
         .where((t) => _showResolved || !t.resolved)
         .toList();
     final awaiting = plan.threads.where((t) => t.awaitingAgent).length;
+    final open = plan.openThreads;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -334,11 +424,7 @@ class _ReviewPanelState extends State<_ReviewPanel> {
             children: [
               const Text('Comentários').semiBold(),
               const Gap(6),
-              Text(
-                plan.openThreads == 1
-                    ? '1 aberto'
-                    : '${plan.openThreads} abertos',
-              ).xSmall().muted(),
+              Text(open == 1 ? '1 aberto' : '$open abertos').xSmall().muted(),
               const Spacer(),
               GhostButton(
                 size: ButtonSize.small,
@@ -355,7 +441,9 @@ class _ReviewPanelState extends State<_ReviewPanel> {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
               children: [
-                Text('Filtrando: ${_label(widget.filter!)}').xSmall().muted(),
+                Text(
+                  'Filtrando: ${plan.section(widget.filter!).title}',
+                ).xSmall().muted(),
                 const Spacer(),
                 GhostButton(
                   size: ButtonSize.small,
@@ -366,43 +454,60 @@ class _ReviewPanelState extends State<_ReviewPanel> {
             ),
           ),
         Expanded(
-          child: threads.isEmpty
-              ? Center(
+          child: ListView(
+            padding: const EdgeInsets.all(12),
+            children: [
+              if (threads.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
                   child: const Text(
-                    'Nenhum comentário aqui.\nUse "Comentar" em qualquer seção ou card.',
+                    'Nenhum comentário aqui.\nUse "Comentar" em qualquer seção.',
                     textAlign: TextAlign.center,
                   ).small().muted(),
-                )
-              : ListView(
-                  padding: const EdgeInsets.all(12),
-                  children: [for (final t in threads) _thread(t)],
                 ),
+              for (final t in threads) _thread(t),
+              if (plan.amendments.isNotEmpty) ...[
+                const Gap(4),
+                const Text(
+                  'EMENDAS PARA O PRIMEIRO LOOP',
+                ).xSmall().semiBold().muted(),
+                const Gap(6),
+                for (final a in plan.amendments)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text('•  $a').xSmall(),
+                  ),
+              ],
+            ],
+          ),
         ),
-        const Divider(),
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: plan.reviewing
-              ? const Text(
-                  'Claude está revisando os comentários…',
-                ).small().muted()
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    PrimaryButton(
-                      leading: const Icon(LucideIcons.sparkles, size: 14),
-                      onPressed: awaiting == 0
-                          ? null
-                          : () => store.requestPlanReview(plan),
-                      child: Text('Pedir revisão ao Claude ($awaiting)'),
-                    ),
-                    const Gap(6),
-                    const Text(
-                      'Claude responde cada comentário e ajusta o plano. '
-                      'Você resolve o que estiver ok.',
-                    ).xSmall().muted(),
-                  ],
-                ),
-        ),
+        if (plan.startedAt == null) ...[
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: plan.reviewing
+                ? const Text(
+                    'Claude está revisando os comentários…',
+                  ).small().muted()
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      PrimaryButton(
+                        leading: const Icon(LucideIcons.sparkles, size: 14),
+                        onPressed: awaiting == 0
+                            ? null
+                            : () => store.requestPlanReview(plan),
+                        child: Text('Pedir revisão ao Claude ($awaiting)'),
+                      ),
+                      const Gap(6),
+                      const Text(
+                        'Em seção aberta, Claude ajusta a seção. Em seção aprovada, '
+                        'nada muda: o pedido vira emenda do primeiro loop.',
+                      ).xSmall().muted(),
+                    ],
+                  ),
+          ),
+        ],
       ],
     );
   }
@@ -444,13 +549,4 @@ class _ReviewPanelState extends State<_ReviewPanel> {
       ),
     );
   }
-
-  static String _label(String anchor) => switch (anchor) {
-    'resumo' => 'Resumo',
-    'arquitetura' => 'Arquitetura',
-    'pastas' => 'Estrutura de pastas',
-    'stack' => 'Stack',
-    'cards' => 'Cards propostos',
-    _ => 'Card #${anchor.substring(5)}',
-  };
 }

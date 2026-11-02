@@ -3,6 +3,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 import '../harness_store.dart';
 import '../model.dart';
 import 'format.dart';
+import 'new_plan_dialog.dart';
 
 /// Narrow rail with one avatar per workspace, like Slack or Discord.
 class WorkspaceRail extends StatelessWidget {
@@ -120,11 +121,12 @@ class Sidebar extends StatelessWidget {
             selected: p.id == store.openProjectId,
             onTap: () => store.openProjectView(p.id),
           ),
-        if (store.workspaceProjects.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8),
-            child: Text('Nenhum projeto ainda'),
-          ).xSmall().muted(),
+        GhostButton(
+          alignment: Alignment.centerLeft,
+          leading: const Icon(LucideIcons.plus, size: 16),
+          onPressed: () => showNewPlanDialog(context, store),
+          child: const Text('Novo plano').small(),
+        ),
       ],
     );
   }

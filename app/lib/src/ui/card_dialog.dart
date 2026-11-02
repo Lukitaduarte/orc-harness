@@ -113,6 +113,54 @@ class _CardDetails extends StatelessWidget {
                     ),
                   ),
               const Gap(16),
+              if (c.tasks.isNotEmpty) ...[
+                _label('Tarefas · subagentes por grupo'),
+                for (final g in {for (final t in c.tasks) t.group}) ...[
+                  Text(
+                    c.tasks.where((t) => t.group == g).length > 1
+                        ? 'Grupo $g · em paralelo'
+                        : 'Grupo $g',
+                  ).xSmall().semiBold().muted(),
+                  const Gap(4),
+                  for (final t in c.tasks.where((t) => t.group == g))
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 36,
+                            child: Text(t.id).xSmall().muted(),
+                          ),
+                          Expanded(child: Text(t.title).small()),
+                          Text(t.skill).mono().xSmall().muted(),
+                          const Gap(8),
+                          SecondaryBadge(child: Text(t.model)),
+                        ],
+                      ),
+                    ),
+                  const Gap(6),
+                ],
+                const Gap(10),
+              ],
+              if (c.delivered.isNotEmpty ||
+                  c.problems.isNotEmpty ||
+                  c.gates.isNotEmpty) ...[
+                _label('Resultado do loop'),
+                for (final d in c.delivered) Text('✓  $d').small(),
+                for (final p in c.problems) Text('!  $p').small().muted(),
+                if (c.gates.isNotEmpty) ...[
+                  const Gap(6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final MapEntry(:key, :value) in c.gates.entries)
+                        OutlineBadge(child: Text('$key: $value')),
+                    ],
+                  ),
+                ],
+                const Gap(16),
+              ],
               _label('Dependências'),
               if (c.dependsOn.isEmpty)
                 const Text(

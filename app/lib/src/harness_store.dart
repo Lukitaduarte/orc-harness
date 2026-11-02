@@ -51,6 +51,9 @@ class HarnessStore extends ChangeNotifier {
   /// The catalog screen replaces the panes while open.
   bool catalogOpen = false;
 
+  /// For a project already executing: show its plan instead of the board.
+  bool viewingPlan = false;
+
   Workspace get workspace => workspaces.firstWhere((w) => w.id == workspaceId);
   LayoutNode get layout => _layouts[workspaceId]!;
   String get focusedLeafId => _focusedLeaf[workspaceId]!;
@@ -177,6 +180,12 @@ class HarnessStore extends ChangeNotifier {
   void openProjectView(String? projectId) {
     openProjectId = projectId;
     catalogOpen = false;
+    viewingPlan = false;
+    notifyListeners();
+  }
+
+  void setViewingPlan(bool value) {
+    viewingPlan = value;
     notifyListeners();
   }
 
@@ -240,7 +249,19 @@ class HarnessStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Asks the planning agent to address every comment still waiting on it.
+  /// Approval is final: the section's digest is recorded and any later
+  /// change to it blocks execution.
+  void approveSection(PlanSection section) {
+    if (section.approved) return;
+    section
+      ..approvedDigest = section.digest
+      ..approvedAt = DateTime.now();
+    notifyListeners();
+  }
+
+  /// Asks the planning agent to address every comment waiting on it.
+  /// A comment on an open section revises it; one on an approved section
+  /// never edits it and becomes an amendment for the first loop.
   /// Simulated: the daemon will send the comments to the planning session.
   void requestPlanReview(Plan plan) {
     final pending = plan.threads.where((t) => t.awaitingAgent).toList();
@@ -248,29 +269,108 @@ class HarnessStore extends ChangeNotifier {
     plan.reviewing = true;
     notifyListeners();
     _later(const Duration(milliseconds: 1500), () {
+      final version = plan.version + 1;
       for (final t in pending) {
-        t.messages.add(
-          Comment(
-            'Claude',
-            'Considerei: "${t.messages.last.body}". Ajustei ${t.anchorLabel.toLowerCase()} '
-                'na versão ${plan.version + 1} do plano. Se estiver ok, pode resolver.',
-            DateTime.now(),
-          ),
-        );
+        final ask = t.messages.last.body;
+        final section = plan.section(t.anchor);
+        if (section.approved) {
+          plan.amendments.add('${section.title}: $ask');
+          t.messages.add(
+            Comment(
+              'Claude',
+              'Essa seção já está aprovada e não muda. Registrei como emenda: '
+                  'entra nas notas do primeiro loop.',
+              DateTime.now(),
+            ),
+          );
+        } else {
+          section.blocks = [
+            ...section.blocks,
+            TextBlock('Ajuste v$version: $ask'),
+          ];
+          t.messages.add(
+            Comment(
+              'Claude',
+              'Ajustei ${section.title} na versão $version do plano.',
+              DateTime.now(),
+            ),
+          );
+          t.resolved = true;
+        }
       }
       plan
-        ..version += 1
+        ..version = version
         ..reviewing = false;
       notifyListeners();
     });
   }
 
-  /// Approval turns the proposed cards into the project's board.
-  void approvePlan(Project p) {
+  /// "Iniciar execução": the plan's loops become the board's cards and the
+  /// ready ones start. Amendments and open comments go to the first loop.
+  void startExecution(Project p) {
     final plan = p.plan;
-    if (plan == null || plan.openThreads > 0) return;
+    if (plan == null || !plan.canStart || plan.startedAt != null) return;
+    final now = DateTime.now();
+    final carried = [
+      ...plan.amendments.map((a) => 'Emenda: $a'),
+      for (final t in plan.threads.where((t) => !t.resolved))
+        'Comentário em ${t.anchorLabel}: ${t.messages.last.body}',
+    ];
     p.cards.addAll(plan.proposedCards);
-    p.plan = null;
+    if (p.cards.isNotEmpty) {
+      p.cards.first.notes.addAll(carried.map((c) => Comment('Claude', c, now)));
+    }
+    plan.startedAt = now;
+    runReady(p);
+    notifyListeners();
+  }
+
+  /// "Novo plano": the planning session reads the sources, then drafts every
+  /// section (simulated).
+  Project createPlan(String name, String description, List<String> links) {
+    final p = Project(
+      id: _nextId('plano'),
+      workspaceId: workspaceId,
+      name: name,
+      repo: 'a definir',
+      cards: [],
+      plan: mock.draftPlan(name, description, links),
+    );
+    projects.add(p);
+    openProjectView(p.id);
+    _later(const Duration(milliseconds: 1800), () {
+      mock.fillDraft(p.plan!, name);
+      notifyListeners();
+    });
+    return p;
+  }
+
+  /// Learn: comments on the cards become proposed skill changes, applied
+  /// only after your OK.
+  void learn(Project p) {
+    for (final c in p.cards) {
+      final fresh = c.notes.skip(c.learnedNotes).where((n) => !n.byAgent);
+      for (final n in fresh) {
+        p.learnings.add(
+          Learning(
+            skill: c.tasks.isEmpty ? 'create-feature' : c.tasks.first.skill,
+            file: 'SKILL.md',
+            summary: n.body,
+            source: 'Card #${c.number} · comentário',
+          ),
+        );
+      }
+      c.learnedNotes = c.notes.length;
+    }
+    notifyListeners();
+  }
+
+  int unlearnedNotes(Project p) => p.cards
+      .map((c) => c.notes.skip(c.learnedNotes).where((n) => !n.byAgent).length)
+      .fold(0, (a, b) => a + b);
+
+  void decideLearning(Learning l, bool accepted) {
+    l.accepted = accepted;
     notifyListeners();
   }
 

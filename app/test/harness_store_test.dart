@@ -121,52 +121,98 @@ void main() {
     Project push() =>
         store.projects.firstWhere((p) => p.id == 'push-notifications');
 
-    test('approval is blocked while comments are open', () {
+    void approveAll(Plan plan) {
+      for (final s in plan.sections) {
+        store.approveSection(s);
+      }
+    }
+
+    test('execution needs every section approved', () {
       final p = push();
-      expect(p.plan!.openThreads, 1);
-      store.approvePlan(p);
+      expect(p.plan!.approvedCount, 4);
+      store.startExecution(p);
       expect(p.isPlanning, isTrue);
-      expect(p.cards, isEmpty);
+      approveAll(p.plan!);
+      expect(p.plan!.canStart, isTrue);
     });
 
-    test('approving moves the proposed cards to the board', () {
+    test('approval is final: a change to an approved section blocks start', () {
+      final plan = push().plan!;
+      approveAll(plan);
+      final s = plan.section('escopo');
+      s.blocks = [...s.blocks, const TextBlock('mudança silenciosa')];
+      expect(s.changedAfterApproval, isTrue);
+      expect(plan.canStart, isFalse);
+    });
+
+    test('starting moves the loops to the board and runs the ready ones', () {
       final p = push();
-      for (final t in p.plan!.threads) {
-        store.setResolved(t, true);
-      }
-      store.approvePlan(p);
+      approveAll(p.plan!);
+      store.startExecution(p);
       expect(p.isPlanning, isFalse);
-      expect(p.cards, hasLength(6));
-      expect(store.readyCards(p).map((c) => c.number), [1, 3]);
+      expect(p.cards, hasLength(4));
+      expect(p.card(1).state, CardState.running); // the only loop with no deps
+      // the open comment on Padrões is carried into the first loop
+      expect(p.card(1).notes.single.body, contains('Padrões'));
     });
 
     test(
-      'a comment opens a thread awaiting the agent; review answers it',
+      'review revises open sections and turns approved ones into amendments',
       () async {
         final plan = push().plan!;
         store.comment(
           plan,
           'arquitetura',
           'Arquitetura',
-          'Falta o retry no notifier',
+          'Falta a DLQ no fluxo',
         );
-        expect(plan.threads.where((t) => t.awaitingAgent), hasLength(2));
+        final before = plan.section('arquitetura').digest;
         store.requestPlanReview(plan);
-        expect(plan.reviewing, isTrue);
         await Future<void>.delayed(const Duration(milliseconds: 1600));
-        expect(plan.reviewing, isFalse);
+        // Arquitetura was approved: untouched, request became an amendment.
+        expect(plan.section('arquitetura').digest, before);
+        expect(plan.amendments.single, contains('Falta a DLQ'));
+        // Padrões was open: revised and the thread resolved.
+        final padroes = plan.threadsOn('padroes').single;
+        expect(padroes.resolved, isTrue);
+        expect(plan.section('padroes').blocks.last, isA<TextBlock>());
         expect(plan.version, 2);
-        expect(plan.threads.where((t) => t.awaitingAgent), isEmpty);
-        expect(plan.openThreads, 2); // answered, but only you resolve
       },
     );
 
     test('replying reopens a resolved thread', () {
-      final t = push().plan!.threads.firstWhere((t) => t.resolved);
+      final t = push().plan!.threads.first..resolved = true;
       store.reply(t, 'Na verdade, quero repensar isso');
       expect(t.resolved, isFalse);
       expect(t.awaitingAgent, isTrue);
     });
+
+    test('a new plan is drafted from its sources, then filled', () async {
+      final p = store.createPlan('Favoritos', 'Salvar produtos', [
+        'https://x.atlassian.net/browse/MOB-1',
+        'https://www.figma.com/design/abc',
+      ]);
+      expect(p.plan!.drafting, isTrue);
+      expect(p.plan!.sources.map((s) => s.kind), ['Jira', 'Figma']);
+      expect(p.plan!.canStart, isFalse);
+      await Future<void>.delayed(const Duration(milliseconds: 1900));
+      expect(p.plan!.drafting, isFalse);
+      expect(p.plan!.proposedCards, hasLength(3));
+    });
+  });
+
+  test('learn turns your card comments into skill changes, once', () {
+    final p = store.projects.first;
+    store.addCardNote(
+      p.card(3),
+      'Sempre rodar o teste de contrato antes do PR',
+    );
+    expect(store.unlearnedNotes(p), 2); // seeded note + this one
+    store.learn(p);
+    expect(p.learnings.map((l) => l.skill), everyElement('backend-service'));
+    expect(store.unlearnedNotes(p), 0);
+    store.learn(p);
+    expect(p.learnings, hasLength(2));
   });
 
   test('card notes are kept on the card', () {

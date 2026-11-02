@@ -3,6 +3,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 import '../harness_store.dart';
 import '../model.dart';
 import 'format.dart';
+import 'new_plan_dialog.dart';
 
 class _Cmd {
   const _Cmd(this.group, this.title, this.icon, this.run, {this.hint});
@@ -22,7 +23,7 @@ Future<void> openCommandPalette(BuildContext context, HarnessStore store) {
     builder: (dialogContext, query) async* {
       final sans = Theme.of(dialogContext).typography.sans;
       final q = foldAccents(query ?? '');
-      final matches = _commands(store).where(
+      final matches = _commands(context, store).where(
         (c) => q.isEmpty || foldAccents('${c.group} ${c.title}').contains(q),
       );
       final groups = <String, List<_Cmd>>{};
@@ -55,7 +56,7 @@ Future<void> openCommandPalette(BuildContext context, HarnessStore store) {
   );
 }
 
-List<_Cmd> _commands(HarnessStore store) {
+List<_Cmd> _commands(BuildContext context, HarnessStore store) {
   final focused = store.focusedSession;
   final leaf = store.focusedLeafId;
   final project = store.openProject;
@@ -121,6 +122,12 @@ List<_Cmd> _commands(HarnessStore store) {
         LucideIcons.sparkles,
         () => store.requestPlanReview(plan),
       ),
+    _Cmd(
+      'Projetos',
+      'Novo plano a partir de Jira, Confluence e Figma',
+      LucideIcons.sparkles,
+      () => showNewPlanDialog(context, store),
+    ),
     _Cmd(
       'Catálogo',
       'Abrir catálogo de skills, MCPs e envs',

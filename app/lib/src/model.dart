@@ -174,7 +174,14 @@ class TaskCard {
     this.description = '',
     this.criteria = const [],
     List<Comment>? notes,
-  }) : notes = notes ?? [];
+    this.tasks = const [],
+    List<String>? delivered,
+    List<String>? problems,
+    Map<String, String>? gates,
+  }) : notes = notes ?? [],
+       delivered = delivered ?? [],
+       problems = problems ?? [],
+       gates = gates ?? {};
 
   final int number;
   final String title;
@@ -193,6 +200,19 @@ class TaskCard {
 
   /// Comments and notes on the card, from people and agents.
   final List<Comment> notes;
+
+  /// A card is one PR-sized loop; its tasks run as subagents inside the
+  /// card's session, group by group.
+  final List<CardTask> tasks;
+
+  /// Results reported by the loop: what landed, what went wrong, and the
+  /// gates (analyze, unit, coverage, android, ios) with their outcome.
+  final List<String> delivered;
+  final List<String> problems;
+  final Map<String, String> gates;
+
+  /// Notes already turned into learnings.
+  int learnedNotes = 0;
 
   String get branch => '$type/$number-${_slug(title)}';
 }
@@ -226,11 +246,14 @@ class Project {
   final String repo;
   final List<TaskCard> cards;
 
-  /// Set while the project is being planned; cleared when the plan is
-  /// approved and its proposed cards move to the board.
+  /// The project's plan. While not started it is the project's whole view;
+  /// once started its loops are the board's cards and it stays readable.
   Plan? plan;
 
-  bool get isPlanning => plan != null;
+  bool get isPlanning => plan != null && plan!.startedAt == null;
+
+  /// Skill changes proposed by Learn from the comments on the cards.
+  final List<Learning> learnings = [];
 
   TaskCard card(int number) => cards.firstWhere((c) => c.number == number);
 
@@ -272,6 +295,28 @@ class CommentThread {
   bool get awaitingAgent => !resolved && !messages.last.byAgent;
 }
 
+class CardTask {
+  const CardTask(
+    this.id,
+    this.title, {
+    required this.skill,
+    required this.model,
+    required this.group,
+    this.dependsOn = const [],
+  });
+
+  final String id;
+  final String title;
+
+  /// Skill that owns the deliverable; the subagent opens its references.
+  final String skill;
+  final String model;
+
+  /// Tasks of the same group start together; the next group waits.
+  final int group;
+  final List<String> dependsOn;
+}
+
 class PlanBox {
   const PlanBox(this.name, this.detail);
 
@@ -279,30 +324,175 @@ class PlanBox {
   final String detail;
 }
 
-/// Output of plan mode: what will be built and the cards that build it.
+/// Content of a plan section, rendered by type (generative UI, the agent
+/// fills the data).
+sealed class PlanBlock {
+  const PlanBlock();
+
+  /// Text the approval digest is computed over.
+  String get text;
+}
+
+class TextBlock extends PlanBlock {
+  const TextBlock(this.text);
+
+  @override
+  final String text;
+}
+
+class BulletsBlock extends PlanBlock {
+  const BulletsBlock(this.items);
+
+  final List<String> items;
+
+  @override
+  String get text => items.join('\n');
+}
+
+class TableBlock extends PlanBlock {
+  const TableBlock(this.headers, this.rows);
+
+  final List<String> headers;
+  final List<List<String>> rows;
+
+  @override
+  String get text => [headers, ...rows].map((r) => r.join('|')).join('\n');
+}
+
+class CodeBlock extends PlanBlock {
+  const CodeBlock(this.caption, this.code);
+
+  final String caption;
+  final String code;
+
+  @override
+  String get text => '$caption\n$code';
+}
+
+class FlowBlock extends PlanBlock {
+  const FlowBlock(this.boxes);
+
+  final List<PlanBox> boxes;
+
+  @override
+  String get text => boxes.map((b) => '${b.name}:${b.detail}').join('>');
+}
+
+/// Renders the plan's loops (its proposed cards) with their tasks.
+class LoopsBlock extends PlanBlock {
+  const LoopsBlock(this.loops);
+
+  final List<TaskCard> loops;
+
+  @override
+  String get text => loops
+      .map(
+        (l) =>
+            '${l.number}:${l.title}:${l.dependsOn}:'
+            '${l.tasks.map((t) => '${t.id}/${t.skill}/${t.model}/${t.group}').join(',')}',
+      )
+      .join('\n');
+}
+
+class PlanSection {
+  PlanSection(this.id, this.title, this.blocks);
+
+  final String id;
+  final String title;
+  List<PlanBlock> blocks;
+
+  /// Digest of the content when it was approved. Approval is final.
+  String? approvedDigest;
+  DateTime? approvedAt;
+
+  bool get approved => approvedDigest != null;
+
+  /// FNV-1a over the section's text, like the create-feature skill.
+  String get digest {
+    var h = 0x811c9dc5;
+    for (final unit in blocks.map((b) => b.text).join('\n').codeUnits) {
+      h = ((h ^ unit) * 0x01000193) & 0xffffffff;
+    }
+    return h.toRadixString(16).padLeft(8, '0');
+  }
+
+  /// An approved section whose content changed: blocks execution.
+  bool get changedAfterApproval => approved && digest != approvedDigest;
+}
+
+/// A link the plan was built from.
+class PlanSource {
+  const PlanSource(this.kind, this.url);
+
+  /// Jira, Confluence, Figma or Link.
+  final String kind;
+  final String url;
+
+  static PlanSource fromUrl(String url) => PlanSource(
+    url.contains('atlassian.net/browse') || url.contains('/jira/')
+        ? 'Jira'
+        : url.contains('atlassian.net/wiki') || url.contains('confluence')
+        ? 'Confluence'
+        : url.contains('figma.com')
+        ? 'Figma'
+        : 'Link',
+    url,
+  );
+}
+
+/// Output of plan mode: sections approved one by one, then executed as
+/// PR-sized loops (the proposed cards).
 class Plan {
   Plan({
     required this.summary,
-    required this.architecture,
-    required this.folders,
-    required this.stack,
+    required this.sources,
+    required this.sections,
     required this.proposedCards,
     List<CommentThread>? threads,
   }) : threads = threads ?? [];
 
   final String summary;
-
-  /// Components in data-flow order, drawn left to right.
-  final List<PlanBox> architecture;
-  final String folders;
-  final List<(String layer, String choice)> stack;
+  final List<PlanSource> sources;
+  final List<PlanSection> sections;
   final List<TaskCard> proposedCards;
   final List<CommentThread> threads;
+
+  /// Requests on approved sections, carried into the first loop's notes.
+  final List<String> amendments = [];
   int version = 1;
   bool reviewing = false;
+
+  /// True while the agent is still reading the sources (new plans).
+  bool drafting = false;
+  DateTime? startedAt;
+
+  PlanSection section(String id) => sections.firstWhere((s) => s.id == id);
 
   List<CommentThread> threadsOn(String anchor) =>
       threads.where((t) => t.anchor == anchor).toList();
 
   int get openThreads => threads.where((t) => !t.resolved).length;
+  int get approvedCount => sections.where((s) => s.approved).length;
+
+  /// Start needs every section approved and none changed since.
+  bool get canStart =>
+      !drafting && sections.every((s) => s.approved && !s.changedAfterApproval);
+}
+
+/// A skill change proposed by Learn; applied only after your OK.
+class Learning {
+  Learning({
+    required this.skill,
+    required this.file,
+    required this.summary,
+    required this.source,
+  });
+
+  final String skill;
+  final String file;
+  final String summary;
+  final String source;
+
+  /// null while waiting for your decision.
+  bool? accepted;
 }

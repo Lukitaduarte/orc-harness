@@ -3,6 +3,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 import '../harness_store.dart';
 import '../model.dart';
 import 'card_dialog.dart';
+import 'learn_dialog.dart';
 
 /// Project board. Columns come from the dependency graph: a card with every
 /// dependency done is ready and can run in parallel with other ready cards.
@@ -36,6 +37,19 @@ class KanbanView extends StatelessWidget {
                   ],
                 ),
               ),
+              OutlineButton(
+                leading: const Icon(LucideIcons.graduationCap, size: 14),
+                onPressed: () {
+                  store.learn(p);
+                  showLearningsDialog(context, store, p);
+                },
+                child: Text(
+                  store.unlearnedNotes(p) == 0
+                      ? 'Learn'
+                      : 'Learn (${store.unlearnedNotes(p)})',
+                ),
+              ),
+              const Gap(8),
               if (ready.isNotEmpty)
                 PrimaryButton(
                   leading: const Icon(LucideIcons.play, size: 14),
