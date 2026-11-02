@@ -19,11 +19,14 @@ path = "src/bin/orc-hook.rs"
 
 [dependencies]
 orc-protocol.workspace = true
+orc-link.workspace = true
+iroh.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 alacritty_terminal = "0.26.0"
 uuid = { version = "1.29.0", features = ["v4"] }
 portable-pty = "0.9.0"
-tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time"] }
+tokio.workspace = true
 
 [dev-dependencies]
 tempfile = "3.27.0"

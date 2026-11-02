@@ -7,7 +7,9 @@ use std::time::Duration;
 
 use orc_daemon::config;
 use orc_daemon::manager::{ManagerConfig, SessionManager};
+use orc_daemon::remote::{Devices, Remote};
 use orc_daemon::server::Daemon;
+use orc_protocol::DaemonMessage;
 use orc_daemon::session::{Session, SessionSpec};
 
 fn main() -> std::io::Result<()> {
@@ -22,6 +24,8 @@ fn main() -> std::io::Result<()> {
                 .map(PathBuf::from)
                 .unwrap_or_else(|| home.join("orcd.sock"));
             std::fs::create_dir_all(&home)?;
+            // Holds keys, device list and session folders: owner only.
+            std::fs::set_permissions(&home, std::os::unix::fs::PermissionsExt::from_mode(0o700))?;
             let cfg = config::load(&home.join("config.json"))?;
             // The helpers ship next to orcd.
             let bin_dir = std::env::current_exe()?.parent().map(PathBuf::from).unwrap_or_default();
@@ -35,8 +39,39 @@ fn main() -> std::io::Result<()> {
                 },
                 cfg.accounts,
             );
-            eprintln!("orcd: socket em {}", socket.display());
-            tokio::runtime::Runtime::new()?.block_on(Daemon::new(manager).serve(socket))
+            let daemon = Daemon::new(manager);
+            tokio::runtime::Runtime::new()?.block_on(async move {
+                let key = orc_link::load_or_create_key(&home.join("daemon.key"))?;
+                let endpoint = orc_link::endpoint(key, &[orc_link::ALPN_PAIR, orc_link::ALPN_MAIN]).await?;
+                let remote = Remote::new(endpoint, Devices::load(home.join("devices.json")));
+                let _ = daemon.remote.set(remote.clone());
+                eprintln!("orcd: socket em {}", socket.display());
+                eprintln!("orcd: id {}", remote.endpoint.id());
+                eprintln!("orcd: para parear um app, rode `orcd pair`");
+                tokio::spawn(remote.serve(daemon.clone()));
+                tokio::spawn(daemon.clone().stream_grids());
+                daemon.serve(socket).await
+            })
+        }
+        Some("pair") => {
+            // Asks the running daemon for a one-time ticket over the
+            // owner-only local socket.
+            use std::io::{BufRead, BufReader, Write};
+            let socket = config::orc_home().join("orcd.sock");
+            let mut stream = std::os::unix::net::UnixStream::connect(&socket)
+                .map_err(|e| std::io::Error::other(format!("orcd não está rodando ({e})")))?;
+            stream.write_all(b"{\"type\":\"new_pairing_ticket\"}\n")?;
+            let mut line = String::new();
+            BufReader::new(stream).read_line(&mut line)?;
+            match serde_json::from_str::<DaemonMessage>(&line) {
+                Ok(DaemonMessage::PairingTicket { ticket }) => {
+                    println!("{ticket}");
+                    eprintln!("Cole no app em Configurações → Conectar daemon. Vale 10 minutos, uma vez.");
+                    Ok(())
+                }
+                Ok(DaemonMessage::Error { message }) => Err(std::io::Error::other(message)),
+                _ => Err(std::io::Error::other("resposta inesperada do daemon")),
+            }
         }
         Some("run") => {
             let cmd: Vec<&str> = args
@@ -57,7 +92,7 @@ fn main() -> std::io::Result<()> {
             Ok(())
         }
         _ => {
-            eprintln!("uso: orcd serve [--socket PATH] | orcd run -- PROGRAMA [ARGS]");
+            eprintln!("uso: orcd serve [--socket PATH] | orcd pair | orcd run -- PROGRAMA [ARGS]");
             std::process::exit(2);
         }
     }

@@ -3,5 +3,6 @@
 pub mod config;
 pub mod manager;
 pub mod quota;
+pub mod remote;
 pub mod server;
 pub mod session;

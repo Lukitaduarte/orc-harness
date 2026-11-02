@@ -2,16 +2,20 @@
 //! (one JSON message per line). Remote clients (the app) reach the same
 //! `Daemon::handle` through iroh.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::Duration;
 
 use orc_protocol::{ClientMessage, DaemonMessage};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use orc_protocol::GridSnapshot;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
 use tokio::sync::broadcast;
 
 use crate::manager::SessionManager;
 use crate::quota::QuotaStore;
+use crate::remote::Remote;
 
 #[derive(Clone)]
 pub struct Daemon {
@@ -19,6 +23,8 @@ pub struct Daemon {
     pub sessions: Arc<Mutex<SessionManager>>,
     /// Everything clients should see; each connection subscribes.
     pub events: broadcast::Sender<DaemonMessage>,
+    /// Set once iroh is up; mints pairing tickets for `orcd pair`.
+    pub remote: Arc<OnceLock<Remote>>,
 }
 
 impl Daemon {
@@ -27,6 +33,50 @@ impl Daemon {
             quotas: Arc::default(),
             sessions: Arc::new(Mutex::new(sessions)),
             events: broadcast::channel(1024).0,
+            remote: Arc::default(),
+        }
+    }
+
+    /// Sends each session's changed lines as they render, and the session
+    /// list when one exits. Clients never get raw terminal bytes.
+    pub async fn stream_grids(self) {
+        let mut last: HashMap<String, (u64, GridSnapshot)> = HashMap::new();
+        let mut exited: Vec<String> = Vec::new();
+        let mut tick = tokio::time::interval(Duration::from_millis(33));
+        loop {
+            tick.tick().await;
+            let mut out = Vec::new();
+            {
+                let sessions = self.sessions.lock().unwrap();
+                let list = sessions.list();
+                last.retain(|id, _| list.iter().any(|s| &s.id == id));
+                for summary in &list {
+                    let Some(s) = sessions.session(&summary.id) else { continue };
+                    let generation = s.generation();
+                    let entry = last.get(&summary.id);
+                    if entry.is_some_and(|(g, _)| *g == generation) {
+                        continue;
+                    }
+                    let snap = s.snapshot();
+                    let diff = snap.diff_from(entry.map(|(_, p)| p).unwrap_or(&GridSnapshot::default()));
+                    if !diff.lines.is_empty() || entry.is_none_or(|(_, p)| p.cursor != snap.cursor) {
+                        out.push(DaemonMessage::GridDiff { session_id: summary.id.clone(), diff });
+                    }
+                    last.insert(summary.id.clone(), (generation, snap));
+                }
+                let now_exited: Vec<String> = list
+                    .iter()
+                    .filter(|s| s.state == orc_protocol::SessionState::Exited)
+                    .map(|s| s.id.clone())
+                    .collect();
+                if now_exited != exited {
+                    exited = now_exited;
+                    out.push(DaemonMessage::Sessions { sessions: list });
+                }
+            }
+            for m in out {
+                let _ = self.events.send(m);
+            }
         }
     }
 
@@ -93,6 +143,10 @@ impl Daemon {
                 sessions.stop(&session_id);
                 emit(DaemonMessage::Sessions { sessions: sessions.list() });
             }
+            // Only the local socket may mint tickets; see `serve`.
+            ClientMessage::NewPairingTicket => {
+                return vec![DaemonMessage::Error { message: "use orcd pair".into() }];
+            }
             ClientMessage::ListSessions => {
                 return vec![DaemonMessage::Sessions {
                     sessions: self.sessions.lock().unwrap().list(),
@@ -134,12 +188,25 @@ impl Daemon {
             let (stream, _) = listener.accept().await?;
             let daemon = self.clone();
             tokio::spawn(async move {
-                let mut lines = BufReader::new(stream).lines();
+                let (read, mut write) = stream.into_split();
+                let mut lines = BufReader::new(read).lines();
                 while let Ok(Some(line)) = lines.next_line().await {
                     // Malformed lines are dropped; a helper bug must not take
                     // the daemon down.
-                    if let Ok(msg) = serde_json::from_str::<ClientMessage>(&line) {
-                        daemon.handle(msg);
+                    let Ok(msg) = serde_json::from_str::<ClientMessage>(&line) else { continue };
+                    let replies = match msg {
+                        ClientMessage::NewPairingTicket => match daemon.remote.get() {
+                            Some(r) => vec![DaemonMessage::PairingTicket { ticket: r.new_ticket().encode() }],
+                            None => vec![DaemonMessage::Error { message: "iroh ainda não subiu".into() }],
+                        },
+                        other => daemon.handle(other),
+                    };
+                    for reply in replies {
+                        let Ok(mut line) = serde_json::to_vec(&reply) else { continue };
+                        line.push(b'\n');
+                        if write.write_all(&line).await.is_err() {
+                            return;
+                        }
                     }
                 }
             });

@@ -268,6 +268,8 @@ pub enum ClientMessage {
     StopSession { session_id: String },
     /// Ask for the session list (sent on connect).
     ListSessions,
+    /// Mint a pairing ticket. Honored only on the owner-only local socket.
+    NewPairingTicket,
     /// Keystrokes or pasted text for a session's terminal.
     Input { session_id: String, data: String },
     Resize { session_id: String, cols: u16, rows: u16 },
@@ -288,6 +290,7 @@ pub enum DaemonMessage {
     GridDiff { session_id: String, diff: GridDiff },
     Quota { account_id: String, limits: RateLimits, read_at: i64 },
     SessionExited { session_id: String, code: Option<i32> },
+    PairingTicket { ticket: String },
 }
 
 #[cfg(test)]
