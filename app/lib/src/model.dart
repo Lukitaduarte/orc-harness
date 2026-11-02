@@ -3,13 +3,24 @@
 enum CatalogKind { skill, mcp, env }
 
 class CatalogItem {
-  const CatalogItem(this.id, this.kind, this.name, this.description);
+  const CatalogItem(
+    this.id,
+    this.kind,
+    this.name,
+    this.description, {
+    this.detail = '',
+  });
 
   final String id;
   final CatalogKind kind;
   final String name;
   final String description;
+
+  /// MCP: command or URL. Env: where the value lives (never the value).
+  final String detail;
 }
+
+enum McpCheck { untested, testing, ok, failed }
 
 class Workspace {
   const Workspace(this.id, this.name, this.initials);
@@ -160,7 +171,10 @@ class TaskCard {
     this.state = CardState.todo,
     this.sessionId,
     this.pr,
-  });
+    this.description = '',
+    this.criteria = const [],
+    List<Comment>? notes,
+  }) : notes = notes ?? [];
 
   final int number;
   final String title;
@@ -172,6 +186,13 @@ class TaskCard {
   CardState state;
   String? sessionId;
   int? pr;
+  final String description;
+
+  /// Acceptance criteria; the card is done when all hold.
+  final List<String> criteria;
+
+  /// Comments and notes on the card, from people and agents.
+  final List<Comment> notes;
 
   String get branch => '$type/$number-${_slug(title)}';
 }
@@ -190,12 +211,13 @@ String _slug(String s) => foldAccents(
 ).replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-|-$'), '');
 
 class Project {
-  const Project({
+  Project({
     required this.id,
     required this.workspaceId,
     required this.name,
     required this.repo,
     required this.cards,
+    this.plan,
   });
 
   final String id;
@@ -203,6 +225,12 @@ class Project {
   final String name;
   final String repo;
   final List<TaskCard> cards;
+
+  /// Set while the project is being planned; cleared when the plan is
+  /// approved and its proposed cards move to the board.
+  Plan? plan;
+
+  bool get isPlanning => plan != null;
 
   TaskCard card(int number) => cards.firstWhere((c) => c.number == number);
 
@@ -217,4 +245,64 @@ class Project {
   };
 
   int get doneCount => cards.where((c) => c.state == CardState.done).length;
+}
+
+class Comment {
+  Comment(this.author, this.body, this.at);
+
+  /// 'Você' or an agent name such as 'Claude'.
+  final String author;
+  final String body;
+  final DateTime at;
+
+  bool get byAgent => author != 'Você';
+}
+
+/// Comments on one part of a plan. [anchor] is a section key or `card-<n>`.
+class CommentThread {
+  CommentThread(this.id, this.anchor, this.anchorLabel, this.messages);
+
+  final String id;
+  final String anchor;
+  final String anchorLabel;
+  final List<Comment> messages;
+  bool resolved = false;
+
+  /// Open and still waiting for the agent to answer.
+  bool get awaitingAgent => !resolved && !messages.last.byAgent;
+}
+
+class PlanBox {
+  const PlanBox(this.name, this.detail);
+
+  final String name;
+  final String detail;
+}
+
+/// Output of plan mode: what will be built and the cards that build it.
+class Plan {
+  Plan({
+    required this.summary,
+    required this.architecture,
+    required this.folders,
+    required this.stack,
+    required this.proposedCards,
+    List<CommentThread>? threads,
+  }) : threads = threads ?? [];
+
+  final String summary;
+
+  /// Components in data-flow order, drawn left to right.
+  final List<PlanBox> architecture;
+  final String folders;
+  final List<(String layer, String choice)> stack;
+  final List<TaskCard> proposedCards;
+  final List<CommentThread> threads;
+  int version = 1;
+  bool reviewing = false;
+
+  List<CommentThread> threadsOn(String anchor) =>
+      threads.where((t) => t.anchor == anchor).toList();
+
+  int get openThreads => threads.where((t) => !t.resolved).length;
 }

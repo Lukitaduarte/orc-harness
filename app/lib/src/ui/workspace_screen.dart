@@ -2,9 +2,11 @@ import 'package:flutter/services.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import 'catalog_view.dart';
 import 'command_palette.dart';
 import 'kanban.dart';
 import 'panes.dart';
+import 'plan_view.dart';
 import 'profile_panel.dart';
 import 'sidebar.dart';
 
@@ -19,7 +21,10 @@ class WorkspaceScreen extends StatelessWidget {
       listenable: store,
       builder: (context, _) {
         // The profile belongs to a session; the kanban gets the full width.
-        final showProfile = store.profilePanelOpen && store.openProject == null;
+        final showProfile =
+            store.profilePanelOpen &&
+            store.openProject == null &&
+            !store.catalogOpen;
         return CallbackShortcuts(
           bindings: {
             const SingleActivator(LogicalKeyboardKey.keyK, meta: true): () =>
@@ -54,9 +59,18 @@ class WorkspaceScreen extends StatelessWidget {
                               Expanded(
                                 child: Padding(
                                   padding: const EdgeInsets.all(4),
-                                  child: store.openProject == null
-                                      ? PaneTree(store)
-                                      : KanbanView(store, store.openProject!),
+                                  child: switch (store.openProject) {
+                                    _ when store.catalogOpen => CatalogView(
+                                      store,
+                                    ),
+                                    final p? when p.isPlanning => PlanView(
+                                      store,
+                                      p,
+                                      key: ValueKey(p.id),
+                                    ),
+                                    final p? => KanbanView(store, p),
+                                    null => PaneTree(store),
+                                  },
                                 ),
                               ),
                             ],
@@ -116,6 +130,21 @@ class _Toolbar extends StatelessWidget {
           const Text('/').small().muted(),
           const Gap(8),
           Text(p.name).small().semiBold(),
+          if (p.isPlanning) ...[
+            const Gap(8),
+            const OutlineBadge(child: Text('plano')),
+          ],
+        ],
+        if (store.catalogOpen) ...[
+          const Gap(8),
+          GhostButton(
+            leading: const Icon(LucideIcons.arrowLeft, size: 14),
+            onPressed: () => store.openProjectView(null),
+            child: const Text('Sessões').small(),
+          ),
+          const Text('/').small().muted(),
+          const Gap(8),
+          const Text('Catálogo').small().semiBold(),
         ],
         const Spacer(),
         GhostButton(

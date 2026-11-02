@@ -48,6 +48,25 @@ class WorkspaceRail extends StatelessWidget {
             const Gap(8),
           ],
           const Spacer(),
+          Tooltip(
+            tooltip: (context) => const TooltipContainer(
+              child: Text('Catálogo de skills, MCPs e envs'),
+            ),
+            alignment: Alignment.centerLeft,
+            anchorAlignment: Alignment.centerRight,
+            child: store.catalogOpen
+                ? SecondaryButton(
+                    density: ButtonDensity.icon,
+                    onPressed: store.openCatalog,
+                    child: const Icon(LucideIcons.blocks, size: 18),
+                  )
+                : GhostButton(
+                    density: ButtonDensity.icon,
+                    onPressed: store.openCatalog,
+                    child: const Icon(LucideIcons.blocks, size: 18),
+                  ),
+          ),
+          const Gap(4),
           GhostButton(
             density: ButtonDensity.icon,
             onPressed: () {},
@@ -294,9 +313,11 @@ class _ProjectRow extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ).small(),
             ),
-            Text(
-              '${project.doneCount}/${project.cards.length}',
-            ).xSmall().muted(),
+            project.isPlanning
+                ? const OutlineBadge(child: Text('plano'))
+                : Text(
+                    '${project.doneCount}/${project.cards.length}',
+                  ).xSmall().muted(),
           ],
         ),
       ),

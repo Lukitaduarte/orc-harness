@@ -8,37 +8,78 @@ const catalog = [
     CatalogKind.skill,
     'code-review',
     'Revisa o diff atual',
+    detail: '~/.orc/skills/code-review',
   ),
   CatalogItem(
     'conventional-commits',
     CatalogKind.skill,
     'conventional-commits',
     'Padrão de commits',
+    detail: '~/.orc/skills/conventional-commits',
   ),
   CatalogItem(
     'flutter-architecture',
     CatalogKind.skill,
     'flutter-architecture',
     'Camadas UI, lógica e dados',
+    detail: '~/.orc/skills/flutter-architecture',
   ),
-  CatalogItem('docs', CatalogKind.skill, 'docs', 'Escreve documentação'),
-  CatalogItem('postgres', CatalogKind.mcp, 'postgres', 'Banco de staging'),
-  CatalogItem('linear', CatalogKind.mcp, 'linear', 'Issues e projetos'),
-  CatalogItem('browser', CatalogKind.mcp, 'browser', 'Chromium do workspace'),
-  CatalogItem('memory', CatalogKind.mcp, 'memory', 'Memória de longo prazo'),
+  CatalogItem(
+    'docs',
+    CatalogKind.skill,
+    'docs',
+    'Escreve documentação',
+    detail: '~/.orc/skills/docs',
+  ),
+  CatalogItem(
+    'postgres',
+    CatalogKind.mcp,
+    'postgres',
+    'Banco de staging',
+    detail: 'npx @modelcontextprotocol/server-postgres \$STAGING_DB_URL',
+  ),
+  CatalogItem(
+    'linear',
+    CatalogKind.mcp,
+    'linear',
+    'Issues e projetos',
+    detail: 'https://mcp.linear.app/sse',
+  ),
+  CatalogItem(
+    'browser',
+    CatalogKind.mcp,
+    'browser',
+    'Chromium do workspace',
+    detail: 'agent-browser mcp --cdp-endpoint <perfil do workspace>',
+  ),
+  CatalogItem(
+    'memory',
+    CatalogKind.mcp,
+    'memory',
+    'Memória de longo prazo',
+    detail: 'npx @modelcontextprotocol/server-memory',
+  ),
   CatalogItem(
     'env-staging',
     CatalogKind.env,
     'STAGING',
     'API e banco de staging',
+    detail: 'Keychain · orc-harness/work/STAGING',
   ),
   CatalogItem(
     'env-prod-ro',
     CatalogKind.env,
     'PROD_READONLY',
     'Produção, só leitura',
+    detail: 'Keychain · orc-harness/work/PROD_READONLY',
   ),
-  CatalogItem('env-sentry', CatalogKind.env, 'SENTRY_TOKEN', 'Token do Sentry'),
+  CatalogItem(
+    'env-sentry',
+    CatalogKind.env,
+    'SENTRY_TOKEN',
+    'Token do Sentry',
+    detail: 'Keychain · orc-harness/work/SENTRY_TOKEN',
+  ),
 ];
 
 const workspaces = [
@@ -241,111 +282,282 @@ const _fendaLines = [
   TerminalLine(LineKind.dim, '✻ Rodando testes…'),
 ];
 
-List<Project> seedProjects() => [
-  Project(
-    id: 'users-pagination',
-    workspaceId: 'work',
-    name: 'Paginação de usuários',
-    repo: 'work/platform',
-    cards: [
-      TaskCard(
-        number: 1,
-        title: 'Contrato de paginação por cursor',
-        type: 'feat',
-        model: 'opus',
-        state: CardState.done,
-        pr: 10,
+List<Project> seedProjects(DateTime now) {
+  DateTime ago(int minutes) => now.subtract(Duration(minutes: minutes));
+  return [
+    Project(
+      id: 'users-pagination',
+      workspaceId: 'work',
+      name: 'Paginação de usuários',
+      repo: 'work/platform',
+      cards: [
+        TaskCard(
+          number: 1,
+          title: 'Contrato de paginação por cursor',
+          type: 'feat',
+          model: 'opus',
+          state: CardState.done,
+          pr: 10,
+          description:
+              'Define o formato do cursor e da resposta paginada, compartilhado por API e front.',
+          criteria: [
+            'Tipo PageCursor exportado no pacote de contratos',
+            'Cursor opaco em base64',
+            'Documentado no OpenAPI',
+          ],
+        ),
+        TaskCard(
+          number: 2,
+          title: 'Helper de cursor no banco',
+          type: 'feat',
+          model: 'sonnet',
+          dependsOn: [1],
+          state: CardState.done,
+          pr: 11,
+          description:
+              'Helper genérico de keyset pagination sobre o query builder.',
+          criteria: [
+            'Ordenação estável por (created_at, id)',
+            'Testes com 10k linhas',
+          ],
+        ),
+        TaskCard(
+          number: 3,
+          title: 'GET /users com cursor',
+          type: 'feat',
+          model: 'opus',
+          dependsOn: [1, 2],
+          state: CardState.running,
+          sessionId: 'api',
+          description:
+              'Troca a paginação por offset do GET /users pela de cursor, mantendo compatibilidade por uma versão.',
+          criteria: [
+            'Aceita ?cursor= e ?limit= (máx. 100)',
+            'Retorna next_cursor nulo na última página',
+            'Offset continua funcionando com header de depreciação',
+          ],
+          notes: [
+            Comment(
+              'Você',
+              'Mantém o offset até o app mobile migrar, combinado com o time.',
+              ago(95),
+            ),
+            Comment(
+              'Claude',
+              'Ok. Coloquei o header Deprecation e um teste garantindo que offset ainda responde.',
+              ago(80),
+            ),
+          ],
+        ),
+        TaskCard(
+          number: 4,
+          title: 'Tabela de usuários com paginação',
+          type: 'feat',
+          model: 'sonnet',
+          dependsOn: [1],
+          state: CardState.running,
+          sessionId: 'front',
+          description:
+              'Tabela com scroll infinito consumindo o contrato do card #1.',
+          criteria: [
+            'Carrega a próxima página ao chegar a 80% do scroll',
+            'Estado vazio e de erro',
+            'Sem requisições duplicadas',
+          ],
+        ),
+        TaskCard(
+          number: 5,
+          title: 'Testes e2e da listagem',
+          type: 'test',
+          model: 'sonnet',
+          dependsOn: [3, 4],
+          description: 'Fluxo completo: login, listagem, scroll até o fim.',
+          criteria: [
+            'Roda no CI em menos de 2 min',
+            'Cobre última página e lista vazia',
+          ],
+        ),
+        TaskCard(
+          number: 6,
+          title: 'Documentar o contrato na API pública',
+          type: 'docs',
+          model: 'haiku',
+          dependsOn: [1],
+          description:
+              'Página de referência com exemplos de request e response.',
+          criteria: [
+            'Exemplo de iteração completa',
+            'Nota de migração do offset',
+          ],
+        ),
+        TaskCard(
+          number: 7,
+          title: 'Remover paginação por offset',
+          type: 'chore',
+          model: 'sonnet',
+          dependsOn: [3, 4, 5],
+          description:
+              'Remove o caminho antigo depois que o app mobile migrar.',
+          criteria: ['Nenhum cliente usando offset nos logs de 7 dias'],
+        ),
+      ],
+    ),
+    Project(
+      id: 'onboarding-v2',
+      workspaceId: 'work',
+      name: 'Onboarding v2',
+      repo: 'work/web',
+      cards: [
+        TaskCard(
+          number: 1,
+          title: 'Mapear etapas atuais',
+          type: 'docs',
+          model: 'sonnet',
+          description:
+              'Levantamento do funil atual com os números de conversão.',
+        ),
+        TaskCard(
+          number: 2,
+          title: 'Novo fluxo de convite',
+          type: 'feat',
+          model: 'opus',
+          dependsOn: [1],
+        ),
+        TaskCard(
+          number: 3,
+          title: 'Tela de boas-vindas',
+          type: 'feat',
+          model: 'sonnet',
+          dependsOn: [1],
+        ),
+        TaskCard(
+          number: 4,
+          title: 'E-mails transacionais',
+          type: 'feat',
+          model: 'sonnet',
+          dependsOn: [2],
+        ),
+        TaskCard(
+          number: 5,
+          title: 'Métricas de ativação',
+          type: 'feat',
+          model: 'haiku',
+          dependsOn: [2, 3],
+        ),
+      ],
+    ),
+    Project(
+      id: 'push-notifications',
+      workspaceId: 'work',
+      name: 'Notificações push',
+      repo: 'work/mobile',
+      cards: [],
+      plan: Plan(
+        summary:
+            'Enviar notificações push para iOS e Android quando um pedido muda de status, '
+            'com preferências por usuário e entrega auditável.',
+        architecture: const [
+          PlanBox('Serviço de pedidos', 'publica order.status_changed'),
+          PlanBox('Fila (SQS)', 'desacopla e reprocessa'),
+          PlanBox('Notifier', 'aplica preferências e monta a mensagem'),
+          PlanBox('FCM / APNs', 'entrega no device'),
+        ],
+        folders: '''services/notifier/
+  src/
+    consumer.ts        # lê a fila
+    preferences.ts     # opt-in por canal
+    providers/
+      fcm.ts
+      apns.ts
+  test/
+apps/mobile/lib/notifications/
+  push_service.dart
+  permission_prompt.dart''',
+        stack: const [
+          ('Fila', 'SQS com DLQ'),
+          ('Notifier', 'Node 22 + TypeScript'),
+          ('Push', 'Firebase Cloud Messaging (Android) e APNs (iOS)'),
+          ('App', 'Flutter + firebase_messaging'),
+          ('Auditoria', 'tabela notification_deliveries'),
+        ],
+        proposedCards: [
+          TaskCard(
+            number: 1,
+            title: 'Evento order.status_changed',
+            type: 'feat',
+            model: 'sonnet',
+            description: 'Publica o evento na fila a cada mudança de status.',
+            criteria: [
+              'Evento versionado',
+              'Idempotente por order_id + status',
+            ],
+          ),
+          TaskCard(
+            number: 2,
+            title: 'Notifier consumindo a fila',
+            type: 'feat',
+            model: 'opus',
+            dependsOn: [1],
+            description: 'Consumidor com retry e DLQ.',
+            criteria: [
+              '3 tentativas com backoff',
+              'Mensagens com erro vão para a DLQ',
+            ],
+          ),
+          TaskCard(
+            number: 3,
+            title: 'Preferências de notificação',
+            type: 'feat',
+            model: 'sonnet',
+            description: 'Opt-in por canal e por tipo de evento.',
+            criteria: ['Padrão: ligado para status de pedido'],
+          ),
+          TaskCard(
+            number: 4,
+            title: 'Integração FCM e APNs',
+            type: 'feat',
+            model: 'opus',
+            dependsOn: [2, 3],
+            criteria: ['Token inválido é removido automaticamente'],
+          ),
+          TaskCard(
+            number: 5,
+            title: 'Permissão e recebimento no app',
+            type: 'feat',
+            model: 'sonnet',
+            dependsOn: [4],
+            criteria: ['Pede permissão só depois do primeiro pedido'],
+          ),
+          TaskCard(
+            number: 6,
+            title: 'Painel de entregas',
+            type: 'feat',
+            model: 'haiku',
+            dependsOn: [4],
+          ),
+        ],
+        threads: [
+          CommentThread('t1', 'stack', 'Stack', [
+            Comment(
+              'Você',
+              'SQS mesmo? Já temos Kafka rodando para eventos de pedido.',
+              ago(40),
+            ),
+          ]),
+          CommentThread('t2', 'card-5', 'Card #5', [
+            Comment(
+              'Você',
+              'Pedir permissão depois do primeiro pedido é ótimo, mantém.',
+              ago(30),
+            ),
+            Comment(
+              'Claude',
+              'Mantido. Também adicionei um critério para não pedir de novo se o usuário negar.',
+              ago(28),
+            ),
+          ])..resolved = true,
+        ],
       ),
-      TaskCard(
-        number: 2,
-        title: 'Helper de cursor no banco',
-        type: 'feat',
-        model: 'sonnet',
-        dependsOn: [1],
-        state: CardState.done,
-        pr: 11,
-      ),
-      TaskCard(
-        number: 3,
-        title: 'GET /users com cursor',
-        type: 'feat',
-        model: 'opus',
-        dependsOn: [1, 2],
-        state: CardState.running,
-        sessionId: 'api',
-      ),
-      TaskCard(
-        number: 4,
-        title: 'Tabela de usuários com paginação',
-        type: 'feat',
-        model: 'sonnet',
-        dependsOn: [1],
-        state: CardState.running,
-        sessionId: 'front',
-      ),
-      TaskCard(
-        number: 5,
-        title: 'Testes e2e da listagem',
-        type: 'test',
-        model: 'sonnet',
-        dependsOn: [3, 4],
-      ),
-      TaskCard(
-        number: 6,
-        title: 'Documentar o contrato na API pública',
-        type: 'docs',
-        model: 'haiku',
-        dependsOn: [1],
-      ),
-      TaskCard(
-        number: 7,
-        title: 'Remover paginação por offset',
-        type: 'chore',
-        model: 'sonnet',
-        dependsOn: [3, 4, 5],
-      ),
-    ],
-  ),
-  Project(
-    id: 'onboarding-v2',
-    workspaceId: 'work',
-    name: 'Onboarding v2',
-    repo: 'work/web',
-    cards: [
-      TaskCard(
-        number: 1,
-        title: 'Mapear etapas atuais',
-        type: 'docs',
-        model: 'sonnet',
-      ),
-      TaskCard(
-        number: 2,
-        title: 'Novo fluxo de convite',
-        type: 'feat',
-        model: 'opus',
-        dependsOn: [1],
-      ),
-      TaskCard(
-        number: 3,
-        title: 'Tela de boas-vindas',
-        type: 'feat',
-        model: 'sonnet',
-        dependsOn: [1],
-      ),
-      TaskCard(
-        number: 4,
-        title: 'E-mails transacionais',
-        type: 'feat',
-        model: 'sonnet',
-        dependsOn: [2],
-      ),
-      TaskCard(
-        number: 5,
-        title: 'Métricas de ativação',
-        type: 'feat',
-        model: 'haiku',
-        dependsOn: [2, 3],
-      ),
-    ],
-  ),
-];
+    ),
+  ];
+}

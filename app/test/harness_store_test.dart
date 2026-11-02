@@ -3,9 +3,9 @@ import 'package:orc_harness/src/harness_store.dart';
 import 'package:orc_harness/src/model.dart';
 
 List<String> leafIds(LayoutNode n) => switch (n) {
-      LayoutLeaf() => [n.id],
-      LayoutSplit() => [for (final c in n.children) ...leafIds(c)],
-    };
+  LayoutLeaf() => [n.id],
+  LayoutSplit() => [for (final c in n.children) ...leafIds(c)],
+};
 
 void main() {
   late HarnessStore store;
@@ -61,7 +61,8 @@ void main() {
   });
 
   group('kanban', () {
-    Project users() => store.projects.firstWhere((p) => p.id == 'users-pagination');
+    Project users() =>
+        store.projects.firstWhere((p) => p.id == 'users-pagination');
 
     test('columns come from the dependency graph', () {
       final p = users();
@@ -95,7 +96,10 @@ void main() {
       expect(store.readyCards(p).map((c) => c.number), [2, 3]);
       store.runReady(p);
       expect(store.runningCount(p), 2);
-      expect(store.runningCount(p), lessThanOrEqualTo(HarnessStore.maxRunningCards));
+      expect(
+        store.runningCount(p),
+        lessThanOrEqualTo(HarnessStore.maxRunningCards),
+      );
     });
 
     test('merging the last dependencies unblocks dependents', () {
@@ -111,5 +115,73 @@ void main() {
 
   test('accent folding lets "sessao" match "Sessões"', () {
     expect(foldAccents('Sessões'), 'sessoes');
+  });
+
+  group('plan mode', () {
+    Project push() =>
+        store.projects.firstWhere((p) => p.id == 'push-notifications');
+
+    test('approval is blocked while comments are open', () {
+      final p = push();
+      expect(p.plan!.openThreads, 1);
+      store.approvePlan(p);
+      expect(p.isPlanning, isTrue);
+      expect(p.cards, isEmpty);
+    });
+
+    test('approving moves the proposed cards to the board', () {
+      final p = push();
+      for (final t in p.plan!.threads) {
+        store.setResolved(t, true);
+      }
+      store.approvePlan(p);
+      expect(p.isPlanning, isFalse);
+      expect(p.cards, hasLength(6));
+      expect(store.readyCards(p).map((c) => c.number), [1, 3]);
+    });
+
+    test(
+      'a comment opens a thread awaiting the agent; review answers it',
+      () async {
+        final plan = push().plan!;
+        store.comment(
+          plan,
+          'arquitetura',
+          'Arquitetura',
+          'Falta o retry no notifier',
+        );
+        expect(plan.threads.where((t) => t.awaitingAgent), hasLength(2));
+        store.requestPlanReview(plan);
+        expect(plan.reviewing, isTrue);
+        await Future<void>.delayed(const Duration(milliseconds: 1600));
+        expect(plan.reviewing, isFalse);
+        expect(plan.version, 2);
+        expect(plan.threads.where((t) => t.awaitingAgent), isEmpty);
+        expect(plan.openThreads, 2); // answered, but only you resolve
+      },
+    );
+
+    test('replying reopens a resolved thread', () {
+      final t = push().plan!.threads.firstWhere((t) => t.resolved);
+      store.reply(t, 'Na verdade, quero repensar isso');
+      expect(t.resolved, isFalse);
+      expect(t.awaitingAgent, isTrue);
+    });
+  });
+
+  test('card notes are kept on the card', () {
+    final c = store.projects.first.card(6);
+    store.addCardNote(c, 'Incluir exemplo em curl');
+    expect(c.notes.single.body, 'Incluir exemplo em curl');
+  });
+
+  test('removing a catalog item takes it out of every session', () {
+    final item = store.catalog.firstWhere((i) => i.id == 'code-review');
+    store.removeCatalogItem(item);
+    expect(
+      store.sessions.any((s) => s.appliedItems.contains('code-review')),
+      isFalse,
+    );
+    expect(store.catalog.contains(item), isFalse);
   });
 }

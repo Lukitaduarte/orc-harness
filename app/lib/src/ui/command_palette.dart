@@ -95,10 +95,12 @@ List<_Cmd> _commands(HarnessStore store) {
     for (final p in store.workspaceProjects) ...[
       _Cmd(
         'Projetos',
-        'Abrir ${p.name}',
+        p.isPlanning ? 'Abrir plano de ${p.name}' : 'Abrir ${p.name}',
         LucideIcons.kanban,
         () => store.openProjectView(p.id),
-        hint: '${p.doneCount}/${p.cards.length}',
+        hint: p.isPlanning
+            ? '${p.plan!.openThreads} comentários abertos'
+            : '${p.doneCount}/${p.cards.length}',
       ),
       if (store.readyCards(p).isNotEmpty && store.canRun(p))
         _Cmd(
@@ -111,6 +113,20 @@ List<_Cmd> _commands(HarnessStore store) {
               : '${store.readyCards(p).length} prontos',
         ),
     ],
+    if (project?.plan case final plan?
+        when plan.threads.any((t) => t.awaitingAgent) && !plan.reviewing)
+      _Cmd(
+        'Projetos',
+        'Pedir revisão dos comentários ao Claude',
+        LucideIcons.sparkles,
+        () => store.requestPlanReview(plan),
+      ),
+    _Cmd(
+      'Catálogo',
+      'Abrir catálogo de skills, MCPs e envs',
+      LucideIcons.blocks,
+      store.openCatalog,
+    ),
     if (project != null)
       _Cmd(
         'Projetos',

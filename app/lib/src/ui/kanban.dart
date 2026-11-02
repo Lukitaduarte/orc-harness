@@ -2,6 +2,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
 import '../model.dart';
+import 'card_dialog.dart';
 
 /// Project board. Columns come from the dependency graph: a card with every
 /// dependency done is ready and can run in parallel with other ready cards.
@@ -144,43 +145,59 @@ class _CardTile extends StatelessWidget {
     };
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: OutlinedContainer(
-        backgroundColor: Theme.of(context).colorScheme.card,
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: GestureDetector(
+        onTap: () => showCardDialog(context, store, project, c),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: OutlinedContainer(
+            backgroundColor: Theme.of(context).colorScheme.card,
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('#${c.number}').xSmall().muted(),
-                const Gap(6),
-                OutlineBadge(child: Text(c.type)),
-                const Spacer(),
-                SecondaryBadge(child: Text(c.model)),
-              ],
-            ),
-            const Gap(8),
-            Text(c.title).small().semiBold(),
-            const Gap(4),
-            Text(deps).xSmall().muted(),
-            if (column != KanbanColumn.blocked &&
-                column != KanbanColumn.ready) ...[
-              const Gap(6),
-              Row(
-                children: [
-                  const Icon(LucideIcons.gitBranch, size: 12),
-                  const Gap(4),
-                  Expanded(
-                    child: Text(
-                      c.branch,
-                      overflow: TextOverflow.ellipsis,
-                    ).mono().xSmall().muted(),
+                Row(
+                  children: [
+                    Text('#${c.number}').xSmall().muted(),
+                    const Gap(6),
+                    OutlineBadge(child: Text(c.type)),
+                    const Spacer(),
+                    SecondaryBadge(child: Text(c.model)),
+                  ],
+                ),
+                const Gap(8),
+                Text(c.title).small().semiBold(),
+                const Gap(4),
+                Text(deps).xSmall().muted(),
+                if (column != KanbanColumn.blocked &&
+                    column != KanbanColumn.ready) ...[
+                  const Gap(6),
+                  Row(
+                    children: [
+                      const Icon(LucideIcons.gitBranch, size: 12),
+                      const Gap(4),
+                      Expanded(
+                        child: Text(
+                          c.branch,
+                          overflow: TextOverflow.ellipsis,
+                        ).mono().xSmall().muted(),
+                      ),
+                    ],
                   ),
                 ],
-              ),
-            ],
-            ..._actions(),
-          ],
+                ..._actions(),
+                if (c.notes.isNotEmpty) ...[
+                  const Gap(8),
+                  Row(
+                    children: [
+                      const Icon(LucideIcons.messageSquare, size: 12),
+                      const Gap(4),
+                      Text('${c.notes.length}').xSmall().muted(),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );

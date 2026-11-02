@@ -11,7 +11,7 @@ class HarnessStore extends ChangeNotifier {
   HarnessStore() : now = DateTime.now() {
     accounts = mock.seedAccounts(now);
     sessions = mock.seedSessions();
-    projects = mock.seedProjects();
+    projects = mock.seedProjects(now);
     for (final ws in mock.workspaces) {
       _layouts[ws.id] = mock.seedLayout(ws.id);
       _focusedLeaf[ws.id] = _firstLeaf(_layouts[ws.id]!).id;
@@ -43,7 +43,13 @@ class HarnessStore extends ChangeNotifier {
   static const maxRunningCards = 3;
 
   List<Workspace> get workspaces => mock.workspaces;
-  List<CatalogItem> get catalog => mock.catalog;
+
+  /// Global catalog, configured once and enabled per session.
+  final List<CatalogItem> catalog = [...mock.catalog];
+  final mcpChecks = <String, McpCheck>{};
+
+  /// The catalog screen replaces the panes while open.
+  bool catalogOpen = false;
 
   Workspace get workspace => workspaces.firstWhere((w) => w.id == workspaceId);
   LayoutNode get layout => _layouts[workspaceId]!;
@@ -82,6 +88,7 @@ class HarnessStore extends ChangeNotifier {
   void selectWorkspace(String id) {
     workspaceId = id;
     openProjectId = null;
+    catalogOpen = false;
     notifyListeners();
   }
 
@@ -98,8 +105,9 @@ class HarnessStore extends ChangeNotifier {
 
   /// Focuses the pane showing [sessionId], or shows it in the focused pane.
   void showSession(String sessionId) {
-    if (openProjectId != null) {
+    if (openProjectId != null || catalogOpen) {
       openProjectId = null;
+      catalogOpen = false;
       notifyListeners();
     }
     final leaf = _leafShowing(layout, sessionId);
@@ -168,6 +176,106 @@ class HarnessStore extends ChangeNotifier {
 
   void openProjectView(String? projectId) {
     openProjectId = projectId;
+    catalogOpen = false;
+    notifyListeners();
+  }
+
+  void openCatalog() {
+    openProjectId = null;
+    catalogOpen = true;
+    notifyListeners();
+  }
+
+  void addCatalogItem(
+    CatalogKind kind,
+    String name,
+    String description,
+    String detail,
+  ) {
+    catalog.add(
+      CatalogItem(_nextId('item'), kind, name, description, detail: detail),
+    );
+    notifyListeners();
+  }
+
+  void removeCatalogItem(CatalogItem item) {
+    catalog.remove(item);
+    for (final s in sessions) {
+      s.appliedItems.remove(item.id);
+      s.draftItems.remove(item.id);
+    }
+    notifyListeners();
+  }
+
+  /// Simulates the daemon starting the MCP and listing its tools.
+  void testMcp(CatalogItem item) {
+    mcpChecks[item.id] = McpCheck.testing;
+    notifyListeners();
+    _later(const Duration(milliseconds: 900), () {
+      // linear's token is expired in the mock, to show the failure state.
+      mcpChecks[item.id] = item.id == 'linear' ? McpCheck.failed : McpCheck.ok;
+      notifyListeners();
+    });
+  }
+
+  // Plan mode.
+
+  void comment(Plan plan, String anchor, String anchorLabel, String body) {
+    plan.threads.add(
+      CommentThread(_nextId('thread'), anchor, anchorLabel, [
+        Comment('Você', body, DateTime.now()),
+      ]),
+    );
+    notifyListeners();
+  }
+
+  void reply(CommentThread t, String body) {
+    t.messages.add(Comment('Você', body, DateTime.now()));
+    t.resolved = false;
+    notifyListeners();
+  }
+
+  void setResolved(CommentThread t, bool resolved) {
+    t.resolved = resolved;
+    notifyListeners();
+  }
+
+  /// Asks the planning agent to address every comment still waiting on it.
+  /// Simulated: the daemon will send the comments to the planning session.
+  void requestPlanReview(Plan plan) {
+    final pending = plan.threads.where((t) => t.awaitingAgent).toList();
+    if (pending.isEmpty || plan.reviewing) return;
+    plan.reviewing = true;
+    notifyListeners();
+    _later(const Duration(milliseconds: 1500), () {
+      for (final t in pending) {
+        t.messages.add(
+          Comment(
+            'Claude',
+            'Considerei: "${t.messages.last.body}". Ajustei ${t.anchorLabel.toLowerCase()} '
+                'na versão ${plan.version + 1} do plano. Se estiver ok, pode resolver.',
+            DateTime.now(),
+          ),
+        );
+      }
+      plan
+        ..version += 1
+        ..reviewing = false;
+      notifyListeners();
+    });
+  }
+
+  /// Approval turns the proposed cards into the project's board.
+  void approvePlan(Project p) {
+    final plan = p.plan;
+    if (plan == null || plan.openThreads > 0) return;
+    p.cards.addAll(plan.proposedCards);
+    p.plan = null;
+    notifyListeners();
+  }
+
+  void addCardNote(TaskCard c, String body) {
+    c.notes.add(Comment('Você', body, DateTime.now()));
     notifyListeners();
   }
 
@@ -257,7 +365,7 @@ class HarnessStore extends ChangeNotifier {
     s.state = SessionState.starting;
     s.appliedItems = Set.of(s.draftItems);
     notifyListeners();
-    Timer(const Duration(milliseconds: 1200), () {
+    _later(const Duration(milliseconds: 1200), () {
       s.state = previous == SessionState.starting
           ? SessionState.idle
           : previous;
@@ -265,9 +373,25 @@ class HarnessStore extends ChangeNotifier {
     });
   }
 
+  /// One-shot timers for simulated daemon events; cancelled on dispose so
+  /// none fires into a disposed store.
+  final _pending = <Timer>{};
+
+  void _later(Duration delay, VoidCallback f) {
+    late final Timer t;
+    t = Timer(delay, () {
+      _pending.remove(t);
+      f();
+    });
+    _pending.add(t);
+  }
+
   @override
   void dispose() {
     _clock.cancel();
+    for (final t in _pending) {
+      t.cancel();
+    }
     super.dispose();
   }
 
