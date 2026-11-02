@@ -133,6 +133,10 @@ class _CardDetails extends StatelessWidget {
                           ),
                           Expanded(child: Text(t.title).small()),
                           Text(t.skill).mono().xSmall().muted(),
+                          if (t.needsOk) ...[
+                            const Gap(8),
+                            const PrimaryBadge(child: Text('seu OK')),
+                          ],
                           const Gap(8),
                           SecondaryBadge(child: Text(t.model)),
                         ],

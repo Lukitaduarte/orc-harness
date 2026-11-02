@@ -60,6 +60,34 @@ const catalog = [
     detail: 'npx @modelcontextprotocol/server-memory',
   ),
   CatalogItem(
+    'use-railway',
+    CatalogKind.skill,
+    'use-railway',
+    'Deploy e infra no Railway',
+    detail: '~/.claude/skills/use-railway',
+  ),
+  CatalogItem(
+    'railway',
+    CatalogKind.mcp,
+    'railway',
+    'Deploy no Railway',
+    detail: 'npx -y @railway/mcp-server',
+  ),
+  CatalogItem(
+    'gcloud',
+    CatalogKind.mcp,
+    'gcloud',
+    'GCP e Firebase',
+    detail: 'npx -y @google-cloud/gcloud-mcp',
+  ),
+  CatalogItem(
+    'aws',
+    CatalogKind.mcp,
+    'aws',
+    'AWS (SQS, CloudWatch)',
+    detail: 'uvx awslabs.core-mcp-server',
+  ),
+  CatalogItem(
     'env-staging',
     CatalogKind.env,
     'STAGING',
@@ -681,6 +709,62 @@ List<TaskCard> _pushLoops() => [
       ),
     ],
   ),
+  TaskCard(
+    number: 5,
+    title: 'Deploy em staging e produção',
+    type: 'chore',
+    model: 'sonnet',
+    dependsOn: [2, 4],
+    description:
+        'Provisiona a fila, as credenciais de push e o serviço notifier pelos MCPs do catálogo. '
+        'Não gera PR de código.',
+    criteria: [
+      'Smoke test em staging entrega um push de teste',
+      'Produção só sobe com o seu OK',
+      'Rollback testado em staging',
+    ],
+    tasks: const [
+      CardTask(
+        'T15',
+        'Fila SQS e DLQ',
+        skill: 'aws (MCP)',
+        model: 'sonnet',
+        group: 1,
+      ),
+      CardTask(
+        'T16',
+        'Projeto Firebase e chave do FCM',
+        skill: 'gcloud (MCP)',
+        model: 'haiku',
+        group: 1,
+      ),
+      CardTask(
+        'T17',
+        'Serviço notifier em staging',
+        skill: 'use-railway + railway (MCP)',
+        model: 'sonnet',
+        group: 2,
+        dependsOn: ['T15', 'T16'],
+      ),
+      CardTask(
+        'T18',
+        'Smoke test em staging',
+        skill: 'run-test-learn',
+        model: 'sonnet',
+        group: 3,
+        dependsOn: ['T17'],
+      ),
+      CardTask(
+        'T19',
+        'Deploy em produção',
+        skill: 'use-railway + railway (MCP)',
+        model: 'sonnet',
+        group: 4,
+        dependsOn: ['T18'],
+        needsOk: true,
+      ),
+    ],
+  ),
 ];
 
 Plan pushPlan(DateTime now) {
@@ -968,23 +1052,133 @@ apps/mobile/lib/notifications/
           'Ordem: emulador Android, depois simulador iOS',
         ]),
       ]),
+      PlanSection('deploy', 'Deploy', const [
+        TextBlock(
+          'Notifier no Railway, fila na AWS, push pelo Firebase (GCP). Cada provider entra pelo MCP '
+          'do catálogo, ligado só na sessão do loop de deploy.',
+        ),
+        TableBlock(
+          ['Provider', 'O que sobe', 'Via', 'No catálogo'],
+          [
+            [
+              'Railway',
+              'serviço notifier, staging e produção',
+              'use-railway + MCP railway',
+              'configurado',
+            ],
+            [
+              'AWS',
+              'fila SQS, DLQ e alarme no CloudWatch',
+              'MCP aws',
+              'configurado',
+            ],
+            [
+              'GCP',
+              'projeto Firebase e chave do FCM',
+              'MCP gcloud',
+              'configurado',
+            ],
+            ['Apple', 'chave APNs (.p8)', 'manual, no portal', 'pendente'],
+          ],
+        ),
+        TableBlock(
+          ['Ambiente', 'Gatilho', 'Segredos (Keychain)', 'Aprovação'],
+          [
+            [
+              'staging',
+              'merge na main',
+              'STAGING, FCM_KEY_STAGING',
+              'automática',
+            ],
+            [
+              'produção',
+              'tag v*',
+              'PROD_READONLY, FCM_KEY, APNS_KEY',
+              'seu OK',
+            ],
+          ],
+        ),
+        FlowchartBlock(
+          caption: 'Pipeline, com o caminho de rollback',
+          groups: [
+            DiagramGroup('stg', 'Staging'),
+            DiagramGroup('prd', 'Produção'),
+          ],
+          nodes: [
+            DiagramNode('merge', 'Merge na main'),
+            DiagramNode('ci', 'CI', detail: 'analyze, testes, build'),
+            DiagramNode(
+              'deploy-stg',
+              'Deploy',
+              detail: 'Railway · SQS staging',
+              group: 'stg',
+              isNew: true,
+            ),
+            DiagramNode(
+              'smoke',
+              'Smoke test',
+              detail: 'push de teste no device',
+              group: 'stg',
+              isNew: true,
+            ),
+            DiagramNode('ok', 'Seu OK?', kind: NodeKind.decision),
+            DiagramNode(
+              'deploy-prd',
+              'Deploy',
+              detail: 'Railway · SQS produção',
+              group: 'prd',
+              isNew: true,
+            ),
+            DiagramNode(
+              'watch',
+              'Monitorar 30 min',
+              detail: 'alarmes da DLQ',
+              group: 'prd',
+            ),
+            DiagramNode(
+              'rollback',
+              'Rollback',
+              detail: 'imagem anterior no Railway',
+              kind: NodeKind.external,
+            ),
+          ],
+          edges: [
+            DiagramEdge('merge', 'ci'),
+            DiagramEdge('ci', 'deploy-stg'),
+            DiagramEdge('deploy-stg', 'smoke'),
+            DiagramEdge('smoke', 'ok', label: 'verde'),
+            DiagramEdge('smoke', 'rollback', label: 'falhou', failure: true),
+            DiagramEdge('ok', 'deploy-prd', label: 'sim', taken: true),
+            DiagramEdge('deploy-prd', 'watch'),
+            DiagramEdge('watch', 'rollback', label: 'alarme', failure: true),
+          ],
+        ),
+        BulletsBlock([
+          'Produção sempre espera o seu OK, mesmo com o plano aprovado e a execução iniciada',
+          'Segredos vão do Keychain para o provider pelo MCP; nunca no repositório nem no plano',
+          'Rollback: redeploy da imagem anterior; fila e DLQ nunca são apagadas',
+        ]),
+      ]),
       PlanSection('execucao', 'Execução', [
         const TextBlock(
           'Cada loop vira um PR. Tarefas do mesmo grupo rodam em paralelo como subagentes; o próximo grupo espera.',
         ),
         const FlowchartBlock(
-          caption: 'Ordem dos loops: 3 e 4 rodam em paralelo depois do 2',
+          caption:
+              'Ordem dos loops: 3 e 4 rodam em paralelo depois do 2; o deploy fecha',
           vertical: false,
           nodes: [
             DiagramNode('l1', 'Loop 1', detail: 'Evento'),
             DiagramNode('l2', 'Loop 2', detail: 'Notifier'),
             DiagramNode('l3', 'Loop 3', detail: 'App'),
             DiagramNode('l4', 'Loop 4', detail: 'Auditoria'),
+            DiagramNode('l5', 'Loop 5', detail: 'Deploy'),
           ],
           edges: [
             DiagramEdge('l1', 'l2'),
             DiagramEdge('l2', 'l3'),
             DiagramEdge('l2', 'l4'),
+            DiagramEdge('l4', 'l5'),
           ],
         ),
         LoopsBlock(loops),
@@ -1014,7 +1208,10 @@ apps/mobile/lib/notifications/
             ],
           ],
         ),
-        TextBlock('PRs 1 e 2 formam uma stack; 3 e 4 saem de 2 em paralelo.'),
+        TextBlock(
+          'PRs 1 e 2 formam uma stack; 3 e 4 saem de 2 em paralelo. '
+          'O loop 5 não gera PR: provisiona e faz deploy pelos MCPs.',
+        ),
         FlowchartBlock(
           caption: 'Stacks de PR',
           groups: [
@@ -1041,6 +1238,8 @@ apps/mobile/lib/notifications/
             ['Contrato do evento sem OpenAPI', 'bloqueia', 'back end'],
             ['E-mail como fallback (PRD x Jira)', 'médio', 'produto'],
             ['Cota do APNs em staging', 'baixo', 'dev'],
+            ['Chave APNs de produção (manual)', 'bloqueia', 'dev'],
+            ['Release do app nas lojas fora deste plano', 'médio', 'mobile'],
           ],
         ),
       ]),
@@ -1093,6 +1292,7 @@ Plan draftPlan(String name, String description, List<String> links) {
         ('codigo', 'Código'),
         ('observabilidade', 'Observabilidade'),
         ('testes', 'Testes'),
+        ('deploy', 'Deploy'),
         ('execucao', 'Execução'),
         ('entregas', 'Entregas'),
         ('pendencias', 'Pendências e riscos'),
@@ -1240,12 +1440,33 @@ void fillDraft(Plan plan, String name) {
         'Flow E2E: Android, depois iOS',
       ]),
     ],
-    'entregas': const [TextBlock('Um PR por loop, em stack.')],
+    'deploy': const [
+      TextBlock('Provider a escolher entre os MCPs de deploy do catálogo.'),
+      TableBlock(
+        ['Provider', 'O que sobe', 'Via', 'No catálogo'],
+        [
+          ['Railway', 'serviço', 'use-railway + MCP railway', 'configurado'],
+          ['GCP', 'Cloud Run', 'MCP gcloud', 'configurado'],
+          ['AWS', 'ECS ou Lambda', 'MCP aws', 'configurado'],
+        ],
+      ),
+      TableBlock(
+        ['Ambiente', 'Gatilho', 'Segredos (Keychain)', 'Aprovação'],
+        [
+          ['staging', 'merge na main', 'STAGING', 'automática'],
+          ['produção', 'tag v*', 'a definir', 'seu OK'],
+        ],
+      ),
+    ],
+    'entregas': const [
+      TextBlock('Um PR por loop, em stack. O deploy não gera PR.'),
+    ],
     'pendencias': const [
       TableBlock(
         ['Item', 'Impacto', 'Quem resolve'],
         [
           ['Métrica de sucesso', 'médio', 'produto'],
+          ['Escolher o provider de deploy', 'bloqueia', 'dev'],
         ],
       ),
     ],
@@ -1357,6 +1578,47 @@ void fillDraft(Plan plan, String name) {
           model: 'sonnet',
           group: 3,
           dependsOn: ['T10'],
+        ),
+      ],
+    ),
+    TaskCard(
+      number: 4,
+      title: 'Deploy',
+      type: 'chore',
+      model: 'sonnet',
+      dependsOn: [3],
+      tasks: const [
+        CardTask(
+          'T12',
+          'Infra no provider',
+          skill: 'MCP do provider',
+          model: 'haiku',
+          group: 1,
+        ),
+        CardTask(
+          'T13',
+          'Deploy em staging',
+          skill: 'use-railway',
+          model: 'sonnet',
+          group: 2,
+          dependsOn: ['T12'],
+        ),
+        CardTask(
+          'T14',
+          'Smoke test',
+          skill: 'run-test-learn',
+          model: 'sonnet',
+          group: 3,
+          dependsOn: ['T13'],
+        ),
+        CardTask(
+          'T15',
+          'Deploy em produção',
+          skill: 'use-railway',
+          model: 'sonnet',
+          group: 4,
+          dependsOn: ['T14'],
+          needsOk: true,
         ),
       ],
     ),

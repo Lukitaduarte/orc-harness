@@ -303,6 +303,7 @@ class CardTask {
     required this.model,
     required this.group,
     this.dependsOn = const [],
+    this.needsOk = false,
   });
 
   final String id;
@@ -315,6 +316,10 @@ class CardTask {
   /// Tasks of the same group start together; the next group waits.
   final int group;
   final List<String> dependsOn;
+
+  /// Outward-facing step (production deploy): waits for your OK even with
+  /// the plan approved and execution started.
+  final bool needsOk;
 }
 
 /// Content of a plan section, rendered by type (generative UI, the agent

@@ -150,7 +150,7 @@ void main() {
       approveAll(p.plan!);
       store.startExecution(p);
       expect(p.isPlanning, isFalse);
-      expect(p.cards, hasLength(4));
+      expect(p.cards, hasLength(5));
       expect(p.card(1).state, CardState.running); // the only loop with no deps
       // the open comment on Padrões is carried into the first loop
       expect(p.card(1).notes.single.body, contains('Padrões'));
@@ -180,6 +180,16 @@ void main() {
       },
     );
 
+    test('the plan has a deploy section and a deploy loop gated on your OK', () {
+      final plan = push().plan!;
+      expect(plan.sections.map((s) => s.id), contains('deploy'));
+      final deploy = plan.proposedCards.last;
+      expect(deploy.dependsOn, [2, 4]);
+      final prod = deploy.tasks.last;
+      expect(prod.needsOk, isTrue);
+      expect(deploy.tasks.where((t) => t.needsOk), [prod]);
+    });
+
     test('replying reopens a resolved thread', () {
       final t = push().plan!.threads.first..resolved = true;
       store.reply(t, 'Na verdade, quero repensar isso');
@@ -197,7 +207,7 @@ void main() {
       expect(p.plan!.canStart, isFalse);
       await Future<void>.delayed(const Duration(milliseconds: 1900));
       expect(p.plan!.drafting, isFalse);
-      expect(p.plan!.proposedCards, hasLength(3));
+      expect(p.plan!.proposedCards, hasLength(4));
     });
   });
 

@@ -298,6 +298,18 @@ class _PlanViewState extends State<PlanView> {
       alignment: Alignment.centerLeft,
       child: SecondaryBadge(child: Text(c)),
     ),
+    'configurado' => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(LucideIcons.circleCheck, size: 13, color: Colors.emerald),
+        const Gap(4),
+        Text(c).small().medium(color: Colors.emerald),
+      ],
+    ),
+    'seu OK' => Align(
+      alignment: Alignment.centerLeft,
+      child: PrimaryBadge(child: Text(c)),
+    ),
     'médio' || 'baixo' || 'pendente' => Align(
       alignment: Alignment.centerLeft,
       child: OutlineBadge(child: Text(c)),
@@ -339,7 +351,7 @@ class _PlanViewState extends State<PlanView> {
                           '${t.id} ${t.title}',
                           t.skill,
                           t.model,
-                          'G${t.group}${t.dependsOn.isEmpty ? '' : ' · após ${t.dependsOn.join(', ')}'}',
+                          'G${t.group}${t.dependsOn.isEmpty ? '' : ' · após ${t.dependsOn.join(', ')}'}${t.needsOk ? ' · seu OK' : ''}',
                         ],
                     ],
                   ),

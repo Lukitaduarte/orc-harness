@@ -397,8 +397,43 @@ class _FlowPainter extends CustomPainter {
   void _edge(Canvas canvas, Rect a, Rect b, DiagramEdge e, Color color) {
     final vertical = block.vertical;
     final forward = vertical ? b.top > a.bottom - 1 : b.left > a.right - 1;
+    // Nodes a straight forward edge would cross (long edges spanning layers).
+    final blockers = layout.nodes.values.where((r) {
+      if (r == a || r == b) return false;
+      if (vertical) {
+        final x0 = math.min(a.center.dx, b.center.dx);
+        final x1 = math.max(a.center.dx, b.center.dx);
+        return r.top > a.bottom &&
+            r.bottom < b.top &&
+            r.right > x0 &&
+            r.left < x1 + 1;
+      }
+      final y0 = math.min(a.center.dy, b.center.dy);
+      final y1 = math.max(a.center.dy, b.center.dy);
+      return r.left > a.right &&
+          r.right < b.left &&
+          r.bottom > y0 &&
+          r.top < y1 + 1;
+    }).toList();
     late Offset p0, p3, c1, c2;
-    if (forward) {
+    if (forward && blockers.isNotEmpty) {
+      // Detour beside the blockers instead of drawing through them.
+      if (vertical) {
+        p0 = a.centerRight;
+        p3 = b.centerRight;
+        final out =
+            [a, b, ...blockers].map((r) => r.right).fold(0.0, math.max) + 40;
+        c1 = Offset(out, p0.dy);
+        c2 = Offset(out, p3.dy);
+      } else {
+        p0 = a.bottomCenter;
+        p3 = b.bottomCenter;
+        final out =
+            [a, b, ...blockers].map((r) => r.bottom).fold(0.0, math.max) + 36;
+        c1 = Offset(p0.dx, out);
+        c2 = Offset(p3.dx, out);
+      }
+    } else if (forward) {
       if (vertical) {
         p0 = a.bottomCenter;
         p3 = b.topCenter;
@@ -510,7 +545,11 @@ class SequenceView extends StatelessWidget {
             final col = math.max(minCol, (c.maxWidth - 2 * _pad) / n);
             final size = Size(
               col * n + 2 * _pad,
-              _pad + _headerHeight + 30 + block.messages.length * _rowHeight,
+              // Header, messages, then the participants repeated at the foot.
+              2 * _pad +
+                  2 * _headerHeight +
+                  30 +
+                  block.messages.length * _rowHeight,
             );
             return _Canvas(
               size: size,
@@ -540,7 +579,8 @@ class _SequencePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final s = p.scheme;
-    final bottom = size.height - _pad / 2;
+    final headY = _pad + _headerHeight / 2;
+    final footY = size.height - _pad - _headerHeight / 2;
 
     for (final f in block.frames) {
       final r = Rect.fromLTRB(
@@ -568,36 +608,40 @@ class _SequencePainter extends CustomPainter {
 
     for (final pt in block.participants) {
       final x = _x(pt);
+      // Lifeline in the muted text color: the border token is too faint on
+      // the diagram's background, especially in dark mode.
       _dashedLine(
         canvas,
-        Offset(x, _pad + _headerHeight),
-        Offset(x, bottom),
+        Offset(x, headY + _headerHeight / 2),
+        Offset(x, footY - _headerHeight / 2),
         Paint()
-          ..color = s.border
-          ..strokeWidth = 1,
+          ..color = s.mutedForeground.withValues(alpha: 0.6)
+          ..strokeWidth = 1.2,
       );
       final label = _text(pt, p.label, col - 16, align: TextAlign.center);
-      final box = Rect.fromCenter(
-        center: Offset(x, _pad + _headerHeight / 2),
-        width: math.min(col - 16, label.width + 24),
-        height: _headerHeight,
-      );
-      final rr = RRect.fromRectAndRadius(box, const Radius.circular(8));
-      canvas
-        ..drawRRect(rr, Paint()..color = s.card)
-        ..drawRRect(
-          rr,
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..color = s.border,
+      for (final y in [headY, footY]) {
+        final box = Rect.fromCenter(
+          center: Offset(x, y),
+          width: math.min(col - 16, label.width + 24),
+          height: _headerHeight,
         );
-      label.paint(
-        canvas,
-        Offset(
-          box.center.dx - label.width / 2,
-          box.center.dy - label.height / 2,
-        ),
-      );
+        final rr = RRect.fromRectAndRadius(box, const Radius.circular(8));
+        canvas
+          ..drawRRect(rr, Paint()..color = s.card)
+          ..drawRRect(
+            rr,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..color = s.mutedForeground.withValues(alpha: 0.5),
+          );
+        label.paint(
+          canvas,
+          Offset(
+            box.center.dx - label.width / 2,
+            box.center.dy - label.height / 2,
+          ),
+        );
+      }
     }
 
     for (var i = 0; i < block.messages.length; i++) {
@@ -678,6 +722,8 @@ void _dashedPath(
   double dash = 5,
   double gap = 4,
 }) {
+  // Dashes are strokes; a fill paint would draw nothing on a line.
+  paint.style = PaintingStyle.stroke;
   for (final ui.PathMetric m in path.computeMetrics()) {
     var d = 0.0;
     while (d < m.length) {
