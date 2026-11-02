@@ -5,6 +5,7 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
+use orc_daemon::manager::{Account, ManagerConfig, SessionManager};
 use orc_daemon::server::Daemon;
 use orc_protocol::DaemonMessage;
 
@@ -32,11 +33,28 @@ fn run_helper(socket: &std::path::Path, input: &str) -> String {
     String::from_utf8(out.stdout).unwrap()
 }
 
+fn daemon(dir: &std::path::Path, socket: &std::path::Path) -> Daemon {
+    // `cat` stands in for claude: it ignores nothing and waits.
+    let fake = dir.join("fake-claude");
+    std::fs::write(&fake, "#!/bin/sh\nexec cat\n").unwrap();
+    std::fs::set_permissions(&fake, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    Daemon::new(SessionManager::new(
+        ManagerConfig {
+            claude: fake.display().to_string(),
+            statusline: env!("CARGO_BIN_EXE_orc-statusline").into(),
+            hook: env!("CARGO_BIN_EXE_orc-hook").into(),
+            runtime_root: dir.join("sessions"),
+            socket: socket.to_path_buf(),
+        },
+        vec![Account { id: "work-main".into(), config_dir: None }],
+    ))
+}
+
 #[tokio::test]
 async fn statusline_reports_reach_the_daemon() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("orcd.sock");
-    let daemon = Daemon::default();
+    let daemon = daemon(dir.path(), &socket);
     let mut events = daemon.events.subscribe();
     tokio::spawn(daemon.clone().serve(socket.clone()));
     while !socket.exists() {
@@ -67,4 +85,49 @@ async fn statusline_reports_reach_the_daemon() {
 fn helper_never_fails_without_a_daemon() {
     let printed = run_helper(std::path::Path::new("/nonexistent/orcd.sock"), "not json");
     assert_eq!(printed.trim(), "");
+}
+
+#[tokio::test]
+async fn hooks_move_the_session_state() {
+    use orc_protocol::{ClientMessage, Profile, SessionState};
+
+    let dir = tempfile::tempdir().unwrap();
+    let socket = dir.path().join("orcd.sock");
+    let daemon = daemon(dir.path(), &socket);
+    let mut events = daemon.events.subscribe();
+    tokio::spawn(daemon.clone().serve(socket.clone()));
+    while !socket.exists() {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    daemon.handle(ClientMessage::CreateSession {
+        account_id: "work-main".into(),
+        cwd: Some(dir.path().display().to_string()),
+        profile: Profile::default(),
+        cols: 80,
+        rows: 24,
+    });
+    let session_id = daemon.sessions.lock().unwrap().list()[0].id.clone();
+
+    for (event, expected) in [
+        ("UserPromptSubmit", SessionState::Running),
+        ("Notification", SessionState::WaitingInput),
+        ("Stop", SessionState::Idle),
+    ] {
+        let status = Command::new(env!("CARGO_BIN_EXE_orc-hook"))
+            .arg(event)
+            .env("ORC_SOCKET", &socket)
+            .env("ORC_SESSION", &session_id)
+            .stdin(Stdio::null())
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let state = loop {
+            match tokio::time::timeout(Duration::from_secs(5), events.recv()).await {
+                Ok(Ok(DaemonMessage::SessionState { state, .. })) => break state,
+                Ok(Ok(_)) => continue,
+                other => panic!("no state event: {other:?}"),
+            }
+        };
+        assert_eq!(state, expected);
+    }
 }

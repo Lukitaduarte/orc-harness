@@ -1,0 +1,86 @@
+//! `~/.orc/config.json`: the accounts and where `claude` is.
+//!
+//! ```json
+//! { "claude": "claude",
+//!   "accounts": [ { "id": "trabalho", "config_dir": "~/.claude-trabalho" },
+//!                 { "id": "pessoal" } ] }
+//! ```
+//! An account without `config_dir` uses Claude Code's default folder.
+//! Missing file: one account, `default`.
+
+use std::path::{Path, PathBuf};
+
+use crate::manager::Account;
+
+pub struct Config {
+    pub claude: String,
+    pub accounts: Vec<Account>,
+}
+
+pub fn orc_home() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+    PathBuf::from(home).join(".orc")
+}
+
+fn expand(path: &str) -> PathBuf {
+    match path.strip_prefix("~/") {
+        Some(rest) => PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(rest),
+        None => PathBuf::from(path),
+    }
+}
+
+pub fn load(path: &Path) -> std::io::Result<Config> {
+    let default = || Config {
+        claude: "claude".into(),
+        accounts: vec![Account { id: "default".into(), config_dir: None }],
+    };
+    let Ok(raw) = std::fs::read(path) else {
+        return Ok(default());
+    };
+    let v: serde_json::Value = serde_json::from_slice(&raw)?;
+    let accounts: Vec<Account> = v["accounts"]
+        .as_array()
+        .map(|list| {
+            list.iter()
+                .filter_map(|a| {
+                    Some(Account {
+                        id: a["id"].as_str()?.to_string(),
+                        config_dir: a["config_dir"].as_str().map(expand),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut cfg = default();
+    if let Some(c) = v["claude"].as_str() {
+        cfg.claude = c.into();
+    }
+    if !accounts.is_empty() {
+        cfg.accounts = accounts;
+    }
+    Ok(cfg)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_accounts_and_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = load(&dir.path().join("none.json")).unwrap();
+        assert_eq!(missing.accounts[0].id, "default");
+
+        let file = dir.path().join("config.json");
+        std::fs::write(
+            &file,
+            r#"{"accounts":[{"id":"trabalho","config_dir":"~/.claude-trabalho"},{"id":"pessoal"}]}"#,
+        )
+        .unwrap();
+        let cfg = load(&file).unwrap();
+        assert_eq!(cfg.claude, "claude");
+        assert_eq!(cfg.accounts.len(), 2);
+        assert!(cfg.accounts[0].config_dir.as_ref().unwrap().ends_with(".claude-trabalho"));
+        assert!(cfg.accounts[1].config_dir.is_none());
+    }
+}

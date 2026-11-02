@@ -26,6 +26,9 @@ pub struct SessionSpec {
     pub args: Vec<String>,
     /// Extra environment, e.g. `CLAUDE_CONFIG_DIR` for the account.
     pub env: HashMap<String, String>,
+    /// Inherited variables to drop, so the daemon's own environment never
+    /// leaks into a session (e.g. another account's `CLAUDE_CONFIG_DIR`).
+    pub env_remove: Vec<String>,
     /// Working directory (a card's worktree). `None` means the daemon's
     /// current directory, never the home folder portable-pty would pick.
     pub cwd: Option<PathBuf>,
@@ -39,6 +42,7 @@ impl SessionSpec {
             program: program.into(),
             args: args.iter().map(|a| a.to_string()).collect(),
             env: HashMap::new(),
+            env_remove: Vec::new(),
             cwd: None,
             cols: 100,
             rows: 30,
@@ -110,6 +114,9 @@ impl Session {
         cmd.args(&spec.args);
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
+        for k in &spec.env_remove {
+            cmd.env_remove(k);
+        }
         for (k, v) in &spec.env {
             cmd.env(k, v);
         }
@@ -184,6 +191,11 @@ impl Session {
             .term
             .resize(Size { cols: cols as usize, rows: rows as usize });
         Ok(())
+    }
+
+    /// Bumped on every output chunk; clients poll it to send diffs.
+    pub fn generation(&self) -> u64 {
+        self.screen.0.lock().unwrap().generation
     }
 
     /// `Some(code)` once the process exited (code may be unknown).

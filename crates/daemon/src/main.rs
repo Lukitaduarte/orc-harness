@@ -5,29 +5,38 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+use orc_daemon::config;
+use orc_daemon::manager::{ManagerConfig, SessionManager};
 use orc_daemon::server::Daemon;
 use orc_daemon::session::{Session, SessionSpec};
-
-fn default_socket() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-    PathBuf::from(home).join(".orc").join("orcd.sock")
-}
 
 fn main() -> std::io::Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("serve") => {
+            let home = config::orc_home();
             let socket = args
                 .iter()
                 .position(|a| a == "--socket")
                 .and_then(|i| args.get(i + 1))
                 .map(PathBuf::from)
-                .unwrap_or_else(default_socket);
-            if let Some(dir) = socket.parent() {
-                std::fs::create_dir_all(dir)?;
-            }
+                .unwrap_or_else(|| home.join("orcd.sock"));
+            std::fs::create_dir_all(&home)?;
+            let cfg = config::load(&home.join("config.json"))?;
+            // The helpers ship next to orcd.
+            let bin_dir = std::env::current_exe()?.parent().map(PathBuf::from).unwrap_or_default();
+            let manager = SessionManager::new(
+                ManagerConfig {
+                    claude: cfg.claude,
+                    statusline: bin_dir.join("orc-statusline"),
+                    hook: bin_dir.join("orc-hook"),
+                    runtime_root: home.join("sessions"),
+                    socket: socket.clone(),
+                },
+                cfg.accounts,
+            );
             eprintln!("orcd: socket em {}", socket.display());
-            tokio::runtime::Runtime::new()?.block_on(Daemon::default().serve(socket))
+            tokio::runtime::Runtime::new()?.block_on(Daemon::new(manager).serve(socket))
         }
         Some("run") => {
             let cmd: Vec<&str> = args

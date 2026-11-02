@@ -201,6 +201,50 @@ impl GridSnapshot {
 }
 
 // ---------------------------------------------------------------------------
+// Sessions
+// ---------------------------------------------------------------------------
+
+/// Session state, driven by Claude Code's hooks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionState {
+    Starting,
+    /// Working on a prompt.
+    Running,
+    /// Asked for permission or input.
+    WaitingInput,
+    /// Finished its turn.
+    Idle,
+    Exited,
+}
+
+/// Skills, MCP servers and env a session runs with, picked from the
+/// catalog. Changing it restarts the session with `--resume`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Profile {
+    /// Skill folders (each with a SKILL.md).
+    #[serde(default)]
+    pub skills: Vec<String>,
+    /// MCP servers in Claude Code's `mcpServers` format.
+    #[serde(default)]
+    pub mcp_servers: std::collections::BTreeMap<String, serde_json::Value>,
+    #[serde(default)]
+    pub env: std::collections::BTreeMap<String, String>,
+    pub model: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionSummary {
+    pub id: String,
+    pub account_id: String,
+    pub cwd: String,
+    pub state: SessionState,
+    pub model: Option<String>,
+    /// Claude Code's own session id, used for `--resume`.
+    pub claude_session_id: String,
+}
+
+// ---------------------------------------------------------------------------
 // Daemon <-> client messages
 // ---------------------------------------------------------------------------
 
@@ -210,6 +254,20 @@ impl GridSnapshot {
 pub enum ClientMessage {
     /// Sent by `orc-statusline` on every statusLine refresh.
     Status(StatusReport),
+    /// Sent by `orc-hook` for Claude Code hook events (Stop, Notification…).
+    Hook { session_id: String, event: String },
+    CreateSession {
+        account_id: String,
+        cwd: Option<String>,
+        profile: Profile,
+        cols: u16,
+        rows: u16,
+    },
+    /// Restarts the session with the new profile, keeping the conversation.
+    ApplyProfile { session_id: String, profile: Profile },
+    StopSession { session_id: String },
+    /// Ask for the session list (sent on connect).
+    ListSessions,
     /// Keystrokes or pasted text for a session's terminal.
     Input { session_id: String, data: String },
     Resize { session_id: String, cols: u16, rows: u16 },
@@ -221,6 +279,11 @@ pub enum ClientMessage {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DaemonMessage {
+    /// Accounts the daemon knows, sent on connect.
+    Hello { accounts: Vec<String> },
+    Sessions { sessions: Vec<SessionSummary> },
+    SessionState { session_id: String, state: SessionState },
+    Error { message: String },
     Grid { session_id: String, snapshot: GridSnapshot },
     GridDiff { session_id: String, diff: GridDiff },
     Quota { account_id: String, limits: RateLimits, read_at: i64 },
