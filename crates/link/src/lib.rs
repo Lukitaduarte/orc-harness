@@ -102,11 +102,56 @@ pub fn key_from_hex(hex: &str) -> Result<SecretKey, String> {
     Ok(SecretKey::from_bytes(&bytes))
 }
 
-/// An endpoint with no relay and no address publishing (see module docs).
-pub async fn endpoint(key: SecretKey, alpns: &[&[u8]]) -> std::io::Result<Endpoint> {
+/// Which relay the daemon uses to be reachable outside its network. The
+/// relay only forwards end-to-end encrypted packets; with none, apps reach
+/// the daemon on the same network only.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Relay {
+    Off,
+    /// n0's public relays.
+    N0,
+    /// Your own (iroh-relay), e.g. `https://relay.example.com`.
+    Url(iroh::RelayUrl),
+}
+
+impl Relay {
+    /// From config.json's `relay`: missing or "off", "n0", or a URL.
+    pub fn parse(s: Option<&str>) -> Result<Self, String> {
+        match s.map(str::trim) {
+            None | Some("") | Some("off") => Ok(Self::Off),
+            Some("n0") => Ok(Self::N0),
+            Some(url) => url.parse().map(Self::Url).map_err(|e| format!("relay inválido {url}: {e}")),
+        }
+    }
+
+    fn mode(&self) -> RelayMode {
+        match self {
+            Self::Off => RelayMode::Disabled,
+            Self::N0 => RelayMode::Default,
+            Self::Url(url) => RelayMode::Custom(iroh::RelayMap::from(url.clone())),
+        }
+    }
+}
+
+/// A client's relay: the ones in the daemon's address (none: disabled).
+pub fn relay_for(daemon: &EndpointAddr) -> RelayMode {
+    let urls: Vec<iroh::RelayUrl> = daemon
+        .addrs
+        .iter()
+        .filter_map(|a| match a {
+            iroh::TransportAddr::Relay(url) => Some(url.clone()),
+            _ => None,
+        })
+        .collect();
+    if urls.is_empty() { RelayMode::Disabled } else { RelayMode::Custom(urls.into_iter().collect()) }
+}
+
+/// A client endpoint, no address publishing (see module docs); `relay` from
+/// [`relay_for`].
+pub async fn endpoint(key: SecretKey, alpns: &[&[u8]], relay: RelayMode) -> std::io::Result<Endpoint> {
     Endpoint::builder(presets::Minimal)
         .secret_key(key)
-        .relay_mode(RelayMode::Disabled)
+        .relay_mode(relay)
         .alpns(alpns.iter().map(|a| a.to_vec()).collect())
         .bind()
         .await
@@ -116,11 +161,11 @@ pub async fn endpoint(key: SecretKey, alpns: &[&[u8]]) -> std::io::Result<Endpoi
 /// The daemon's endpoint, on a fixed UDP `port` (0 picks one) on every
 /// interface. Paired apps keep the daemon's addresses from the ticket and
 /// there is no relay, so the port must survive restarts.
-pub async fn endpoint_on(key: SecretKey, alpns: &[&[u8]], port: u16) -> std::io::Result<Endpoint> {
+pub async fn endpoint_on(key: SecretKey, alpns: &[&[u8]], port: u16, relay: &Relay) -> std::io::Result<Endpoint> {
     use iroh::endpoint::BindOpts;
     Endpoint::builder(presets::Minimal)
         .secret_key(key)
-        .relay_mode(RelayMode::Disabled)
+        .relay_mode(relay.mode())
         .alpns(alpns.iter().map(|a| a.to_vec()).collect())
         .clear_ip_transports()
         .bind_addr(std::net::SocketAddr::from(([0, 0, 0, 0], port)))
@@ -188,8 +233,23 @@ mod tests {
     async fn the_daemon_binds_the_port_it_is_given() {
         let free = std::net::UdpSocket::bind("0.0.0.0:0").unwrap().local_addr().unwrap().port();
         let key = SecretKey::generate();
-        let e = endpoint_on(key, &[], free).await.unwrap();
+        let e = endpoint_on(key, &[], free, &Relay::Off).await.unwrap();
         assert_eq!(bound_port(&e), Some(free));
         e.close().await;
+    }
+
+    #[test]
+    fn relay_from_config_and_from_the_daemon_address() {
+        assert_eq!(Relay::parse(None).unwrap(), Relay::Off);
+        assert_eq!(Relay::parse(Some("off")).unwrap(), Relay::Off);
+        assert_eq!(Relay::parse(Some("n0")).unwrap(), Relay::N0);
+        assert!(matches!(Relay::parse(Some("https://relay.example.com")).unwrap(), Relay::Url(_)));
+        assert!(Relay::parse(Some("not a url")).is_err());
+
+        let id = SecretKey::generate().public();
+        let direct = EndpointAddr::new(id).with_ip_addr("127.0.0.1:1".parse().unwrap());
+        assert!(matches!(relay_for(&direct), RelayMode::Disabled));
+        let via = direct.with_relay_url("https://relay.example.com".parse().unwrap());
+        assert!(matches!(relay_for(&via), RelayMode::Custom(_)));
     }
 }

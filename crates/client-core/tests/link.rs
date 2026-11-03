@@ -34,7 +34,7 @@ async fn start_daemon(dir: &std::path::Path) -> (Daemon, Remote) {
             commit_check: "/usr/bin/true".into(),
         });
     let key = orc_link::load_or_create_key(&dir.join("daemon.key")).unwrap();
-    let endpoint = orc_link::endpoint_on(key, &[orc_link::ALPN_PAIR, orc_link::ALPN_MAIN], 0)
+    let endpoint = orc_link::endpoint_on(key, &[orc_link::ALPN_PAIR, orc_link::ALPN_MAIN], 0, &orc_link::Relay::Off)
         .await
         .unwrap();
     let remote = Remote::new(endpoint, Devices::load(dir.join("devices.json")));

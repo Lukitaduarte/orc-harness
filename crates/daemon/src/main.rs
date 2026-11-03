@@ -32,6 +32,7 @@ fn main() -> std::io::Result<()> {
             // Holds keys, device list and session folders: owner only.
             std::fs::set_permissions(&home, std::os::unix::fs::PermissionsExt::from_mode(0o700))?;
             let cfg = config::load(&home.join("config.json"))?;
+            let relay_cfg = cfg.relay.clone();
             // The helpers ship next to orcd.
             let bin_dir = std::env::current_exe()?.parent().map(PathBuf::from).unwrap_or_default();
             let secrets = std::sync::Arc::new(if std::env::var("ORC_SECRETS").as_deref() == Ok("file") {
@@ -87,17 +88,24 @@ fn main() -> std::io::Result<()> {
                 let port_file = home.join("link-port");
                 let saved: u16 = std::fs::read_to_string(&port_file).ok().and_then(|p| p.trim().parse().ok()).unwrap_or(0);
                 let alpns = [orc_link::ALPN_PAIR, orc_link::ALPN_MAIN];
-                let endpoint = match orc_link::endpoint_on(key.clone(), &alpns, saved).await {
+                let relay = orc_link::Relay::parse(relay_cfg.as_deref()).map_err(std::io::Error::other)?;
+                match &relay {
+                    orc_link::Relay::Off => eprintln!("orcd: sem relay: apps alcançam o daemon só na mesma rede"),
+                    orc_link::Relay::N0 => eprintln!("orcd: relay público da n0 (tráfego cifrado de ponta a ponta)"),
+                    orc_link::Relay::Url(u) => eprintln!("orcd: relay próprio {u}"),
+                }
+                let endpoint = match orc_link::endpoint_on(key.clone(), &alpns, saved, &relay).await {
                     Ok(e) => e,
                     Err(e) => {
                         eprintln!("orcd: porta {saved} indisponível ({e}); apps pareados precisam parear de novo");
-                        orc_link::endpoint_on(key, &alpns, 0).await?
+                        orc_link::endpoint_on(key, &alpns, 0, &relay).await?
                     }
                 };
                 if let Some(port) = orc_link::bound_port(&endpoint).filter(|p| *p != saved) {
                     std::fs::write(&port_file, port.to_string())?;
                 }
-                let remote = Remote::new(endpoint, Devices::load(home.join("devices.json")));
+                let remote = Remote::new(endpoint, Devices::load(home.join("devices.json")))
+                    .with_relay(relay != orc_link::Relay::Off);
                 let _ = daemon.remote.set(remote.clone());
                 eprintln!("orcd: socket em {}", socket.display());
                 eprintln!("orcd: id {}", remote.endpoint.id());

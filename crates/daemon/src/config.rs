@@ -16,6 +16,9 @@ use crate::manager::Account;
 pub struct Config {
     pub claude: String,
     pub accounts: Vec<Account>,
+    /// `relay`: "off" (default: same network only), "n0" (public relays) or
+    /// the URL of your own iroh-relay. Traffic stays end-to-end encrypted.
+    pub relay: Option<String>,
 }
 
 /// `~/.orc`, or `ORC_HOME` (tests and side-by-side daemons). Never change
@@ -70,6 +73,7 @@ pub fn load(path: &Path) -> std::io::Result<Config> {
     let default = || Config {
         claude: "claude".into(),
         accounts: vec![Account { id: "default".into(), config_dir: None, gh_config_dir: None }],
+        relay: None,
     };
     let Ok(raw) = std::fs::read(path) else {
         return Ok(default());
@@ -93,6 +97,7 @@ pub fn load(path: &Path) -> std::io::Result<Config> {
     if let Some(c) = v["claude"].as_str() {
         cfg.claude = c.into();
     }
+    cfg.relay = v["relay"].as_str().map(String::from);
     if !accounts.is_empty() {
         cfg.accounts = accounts;
     }

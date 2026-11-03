@@ -79,6 +79,8 @@ pub struct Remote {
     pairing: Arc<Mutex<Option<(String, Instant)>>>,
     /// Live connections by device key (closed on revoke).
     connected: Arc<Mutex<std::collections::HashMap<String, Connection>>>,
+    /// A relay is configured: tickets wait for its address too.
+    relay: bool,
 }
 
 impl Remote {
@@ -88,7 +90,14 @@ impl Remote {
             devices: Arc::new(Mutex::new(devices)),
             pairing: Arc::default(),
             connected: Arc::default(),
+            relay: false,
         }
+    }
+
+    /// Tickets carry the relay address (reachable outside this network).
+    pub fn with_relay(mut self, relay: bool) -> Self {
+        self.relay = relay;
+        self
     }
 
     /// Paired devices; `asking` is marked as `this`.
@@ -126,10 +135,11 @@ impl Remote {
     /// binding they may not be there yet, and a ticket without them is
     /// useless with no relay.
     pub async fn new_ticket(&self) -> Ticket {
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + Duration::from_secs(if self.relay { 15 } else { 5 });
         let mut addr = self.endpoint.addr();
+        let has_relay = |a: &iroh::EndpointAddr| a.addrs.iter().any(|t| matches!(t, TransportAddr::Relay(_)));
         // (`addr` gains loopback entries below.)
-        while addr.addrs.is_empty() && Instant::now() < deadline {
+        while (addr.addrs.is_empty() || (self.relay && !has_relay(&addr))) && Instant::now() < deadline {
             tokio::time::sleep(Duration::from_millis(50)).await;
             addr = self.endpoint.addr();
         }

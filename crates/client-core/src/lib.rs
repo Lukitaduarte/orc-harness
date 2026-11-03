@@ -25,7 +25,7 @@ fn err(e: impl std::fmt::Display) -> String {
 pub async fn pair(ticket: &str, device_name: &str) -> Result<String, String> {
     let ticket = Ticket::decode(ticket)?;
     let key = SecretKey::generate();
-    let endpoint = orc_link::endpoint(key.clone(), &[]).await.map_err(err)?;
+    let endpoint = orc_link::endpoint(key.clone(), &[], orc_link::relay_for(&ticket.addr)).await.map_err(err)?;
     let conn = endpoint.connect(ticket.addr.clone(), ALPN_PAIR).await.map_err(err)?;
     let (mut send, recv) = conn.open_bi().await.map_err(err)?;
     write_line(
@@ -79,7 +79,7 @@ pub async fn connect(
 ) -> Result<Connection, String> {
     let identity: Identity = serde_json::from_str(identity_json).map_err(err)?;
     let key = key_from_hex(&identity.device_key)?;
-    let endpoint = orc_link::endpoint(key, &[]).await.map_err(err)?;
+    let endpoint = orc_link::endpoint(key, &[], orc_link::relay_for(&identity.daemon)).await.map_err(err)?;
     let conn = endpoint.connect(identity.daemon, ALPN_MAIN).await.map_err(err)?;
     let (mut send, recv) = conn.open_bi().await.map_err(err)?;
     // The daemon only accepts the stream once something is sent on it.
