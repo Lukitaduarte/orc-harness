@@ -21,6 +21,7 @@ async fn start_daemon(dir: &std::path::Path) -> (Daemon, Remote) {
             runtime_root: dir.join("sessions"),
             socket: dir.join("orcd.sock"),
             otlp_metrics: None,
+            orc_mcp: None,
         },
         vec![Account { id: "work-main".into(), config_dir: None, gh_config_dir: None }],
         std::sync::Arc::new(orc_daemon::secrets::SecretStore::memory()),

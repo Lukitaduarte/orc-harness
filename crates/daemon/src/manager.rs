@@ -43,6 +43,8 @@ pub struct ManagerConfig {
     /// Where sessions send OpenTelemetry metrics (the daemon's local OTLP
     /// endpoint); `None` turns telemetry off.
     pub otlp_metrics: Option<String>,
+    /// The harness MCP server (`orc-mcp`), added to every session.
+    pub orc_mcp: Option<PathBuf>,
 }
 
 struct Managed {
@@ -116,6 +118,22 @@ impl SessionManager {
         cols: u16,
         rows: u16,
     ) -> std::io::Result<SessionSummary> {
+        self.create_with_prompt(account_id, cwd, project, profile, None, cols, rows)
+    }
+
+    /// A session that starts working on `prompt` right away (delegation,
+    /// cards).
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_with_prompt(
+        &mut self,
+        account_id: &str,
+        cwd: Option<PathBuf>,
+        project: Option<(String, String)>,
+        profile: Profile,
+        prompt: Option<String>,
+        cols: u16,
+        rows: u16,
+    ) -> std::io::Result<SessionSummary> {
         let account = self
             .accounts
             .get(account_id)
@@ -137,7 +155,11 @@ impl SessionManager {
             project_id: project.as_ref().map(|p| p.0.clone()),
             branch: project.map(|p| p.1),
         };
-        let spec = self.prepare(&summary, &account, &profile, cols, rows, false)?;
+        let mut spec = self.prepare(&summary, &account, &profile, cols, rows, false)?;
+        if let Some(p) = prompt {
+            // Claude Code's interactive mode takes an initial prompt.
+            spec.args.push(p);
+        }
         let session = Session::spawn(&spec)?;
         self.sessions.insert(
             id.clone(),
@@ -238,7 +260,19 @@ impl SessionManager {
             "hooks": HOOK_EVENTS.iter().map(|e| (e.to_string(), hook(e))).collect::<serde_json::Map<_, _>>(),
         });
         write_json(&dir.join("settings.json"), &settings)?;
-        write_json(&dir.join("mcp.json"), &json!({ "mcpServers": profile.mcp_servers }))?;
+        let mut servers = profile.mcp_servers.clone();
+        if let Some(orc) = &self.cfg.orc_mcp {
+            // The harness tools; the session id ties every call to it.
+            servers.insert(
+                "orc".into(),
+                json!({
+                    "command": orc.display().to_string(),
+                    "args": [],
+                    "env": { "ORC_SOCKET": self.cfg.socket.display().to_string(), "ORC_SESSION": s.id },
+                }),
+            );
+        }
+        write_json(&dir.join("mcp.json"), &json!({ "mcpServers": servers }))?;
 
         // Skills go in through a local plugin made of links to the catalog.
         let plugin = dir.join("plugin");
@@ -371,6 +405,7 @@ mod tests {
                 runtime_root: dir.join("sessions"),
                 socket: dir.join("orcd.sock"),
                 otlp_metrics: Some("http://127.0.0.1:4318/v1/metrics".into()),
+                orc_mcp: Some("/opt/orc/orc-mcp".into()),
             },
             vec![
                 Account { id: "work-main".into(), config_dir: Some("/cfg/work".into()), gh_config_dir: None },
@@ -424,6 +459,8 @@ mod tests {
         let mcp: serde_json::Value =
             serde_json::from_slice(&fs::read(dir.join("mcp.json")).unwrap()).unwrap();
         assert_eq!(mcp["mcpServers"]["postgres"]["command"], "npx");
+        assert_eq!(mcp["mcpServers"]["orc"]["command"], "/opt/orc/orc-mcp");
+        assert_eq!(mcp["mcpServers"]["orc"]["env"]["ORC_SESSION"], s.id.as_str());
         let link = dir.join("plugin/skills/code-review");
         assert_eq!(fs::read_link(link).unwrap(), Path::new("/catalog/skills/code-review"));
     }
@@ -448,7 +485,8 @@ mod tests {
         assert!(!dir.join("plugin/skills/code-review").exists());
         let mcp: serde_json::Value =
             serde_json::from_slice(&fs::read(dir.join("mcp.json")).unwrap()).unwrap();
-        assert_eq!(mcp["mcpServers"], json!({}));
+        // Only the harness MCP remains.
+        assert_eq!(mcp["mcpServers"].as_object().unwrap().keys().collect::<Vec<_>>(), ["orc"]);
     }
 
     #[test]

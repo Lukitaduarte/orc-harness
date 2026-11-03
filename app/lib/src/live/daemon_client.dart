@@ -97,6 +97,23 @@ class DaemonClient extends ChangeNotifier {
   List<Map<String, dynamic>> catalog = [];
   List<Map<String, dynamic>> templates = [];
 
+  /// Env values agents asked to store, waiting for you: (id, session, name).
+  List<(String, String, String)> envRequests = [];
+
+  /// Recent messages between sessions: (from, to, body), newest last.
+  List<(String, String, String)> messages = [];
+
+  void resolveEnvRequest(String id, bool approve) {
+    send({'type': 'resolve_env_request', 'id': id, 'approve': approve});
+    envRequests = envRequests.where((r) => r.$1 != id).toList();
+    notifyListeners();
+  }
+
+  void dismissMessages() {
+    messages = [];
+    notifyListeners();
+  }
+
   /// Local repositories the daemon makes worktrees from.
   List<Map<String, dynamic>> projects = [];
 
@@ -306,6 +323,23 @@ class DaemonClient extends ChangeNotifier {
                 (u['cost_usd'] as num).toDouble(),
               );
             }(),
+        ];
+        notifyListeners();
+      case 'env_request':
+        envRequests = [
+          ...envRequests,
+          (m['id'] as String, m['session_id'] as String, m['name'] as String),
+        ];
+        notifyListeners();
+      case 'env_request_resolved':
+        envRequests = envRequests.where((r) => r.$1 != m['id']).toList();
+        notifyListeners();
+      case 'session_message':
+        messages = [
+          ...messages.length >= 5
+              ? messages.sublist(messages.length - 4)
+              : messages,
+          (m['from'] as String, m['to'] as String, m['body'] as String),
         ];
         notifyListeners();
       case 'projects':

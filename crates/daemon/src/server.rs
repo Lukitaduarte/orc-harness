@@ -21,6 +21,12 @@ use crate::quota::QuotaStore;
 use crate::usage::{UsageStore, day_of, parse_otlp};
 use crate::remote::Remote;
 
+/// Messages between sessions, by recipient: (from, body).
+pub type Inbox = HashMap<String, Vec<(String, String)>>;
+
+/// Env values agents asked to store, waiting for you: id → (session, name, value).
+pub type EnvRequests = HashMap<String, (String, String, String)>;
+
 /// Where worktrees and the commit hook live, and the hook's checker.
 #[derive(Clone, Debug)]
 pub struct GitPaths {
@@ -37,6 +43,8 @@ pub struct Daemon {
     pub usage: Arc<Mutex<UsageStore>>,
     pub projects: Arc<Mutex<Projects>>,
     pub git: GitPaths,
+    pub inbox: Arc<Mutex<Inbox>>,
+    pub env_requests: Arc<Mutex<EnvRequests>>,
     /// Everything clients should see; each connection subscribes.
     pub events: broadcast::Sender<DaemonMessage>,
     /// Set once iroh is up; mints pairing tickets for `orcd pair`.
@@ -58,6 +66,8 @@ impl Daemon {
             usage: Arc::new(Mutex::new(usage)),
             projects: Arc::new(Mutex::new(projects)),
             git,
+            inbox: Arc::default(),
+            env_requests: Arc::default(),
             events: broadcast::channel(1024).0,
             remote: Arc::default(),
         }
@@ -132,6 +142,109 @@ impl Daemon {
             }
         }
         out
+    }
+
+    fn deliver(&self, from: &str, to: &str, body: &str) {
+        self.inbox.lock().unwrap().entry(to.into()).or_default().push((from.into(), body.into()));
+        let _ = self.events.send(DaemonMessage::SessionMessage {
+            from: from.into(),
+            to: to.into(),
+            body: body.into(),
+        });
+    }
+
+    /// The harness MCP tools. `session_id` is the caller (set by orc-mcp
+    /// from the session's own environment).
+    fn mcp_call(&self, session_id: &str, tool: &str, args: &serde_json::Value) -> Result<String, String> {
+        let arg = |k: &str| args.get(k).and_then(|v| v.as_str()).map(str::to_string);
+        let me = self.sessions.lock().unwrap().summary(session_id).ok_or("sessão desconhecida")?;
+        match tool {
+            "list_sessions" => {
+                let list = self.sessions.lock().unwrap().list();
+                Ok(list
+                    .iter()
+                    .map(|s| {
+                        format!(
+                            "{}{} · {:?} · {} · {}",
+                            s.id,
+                            if s.id == me.id { " (você)" } else { "" },
+                            s.state,
+                            s.branch.as_deref().unwrap_or(&s.cwd),
+                            s.model.as_deref().unwrap_or("modelo padrão"),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n"))
+            }
+            "send_message" => {
+                let to = arg("to").ok_or("falta `to`")?;
+                let body = arg("body").ok_or("falta `body`")?;
+                if self.sessions.lock().unwrap().summary(&to).is_none() {
+                    return Err(format!("sessão {to} não existe; veja list_sessions"));
+                }
+                self.deliver(&me.id, &to, &body);
+                Ok(format!("mensagem entregue a {to}"))
+            }
+            "read_inbox" => {
+                let msgs = self.inbox.lock().unwrap().remove(&me.id).unwrap_or_default();
+                if msgs.is_empty() {
+                    return Ok("nenhuma mensagem".into());
+                }
+                Ok(msgs.iter().map(|(f, b)| format!("de {f}: {b}")).collect::<Vec<_>>().join("\n\n"))
+            }
+            "delegate_task" => {
+                let prompt = arg("prompt").ok_or("falta `prompt`")?;
+                let mut sessions = self.sessions.lock().unwrap();
+                let mut profile = sessions.profile(&me.id).cloned().unwrap_or_default();
+                if let Some(model) = arg("model") {
+                    profile.model = Some(model);
+                }
+                let (cwd, project) = match (arg("branch"), &me.project_id) {
+                    (Some(branch), Some(pid)) => {
+                        let project = self.projects.lock().unwrap().get(pid).cloned().ok_or("projeto sumiu")?;
+                        let repo = PathBuf::from(&project.repo);
+                        let path = git::worktree_path(&self.git.worktrees, &project.id, &branch);
+                        git::worktree_add(&repo, &path, &branch, &project.base_branch)
+                            .and_then(|_| git::enable_commit_check(&repo, &path, &self.git.hooks, &self.git.commit_check))
+                            .map_err(|e| e.to_string())?;
+                        (path, Some((project.id, branch)))
+                    }
+                    (Some(_), None) => return Err("branch só vale para sessões de projeto".into()),
+                    (None, _) => (PathBuf::from(&me.cwd), me.project_id.clone().zip(me.branch.clone())),
+                };
+                let full = format!(
+                    "{prompt}\n\n(Você foi criado pela sessão {} via delegate_task do harness. Ao terminar,                      use a tool send_message para {} com o resultado.)",
+                    me.id, me.id
+                );
+                let new = sessions
+                    .create_with_prompt(&me.account_id, Some(cwd), project, profile, Some(full), 100, 30)
+                    .map_err(|e| e.to_string())?;
+                let _ = self.events.send(DaemonMessage::Sessions { sessions: sessions.list() });
+                Ok(format!("sessão {} criada; ela vai responder com send_message", new.id))
+            }
+            "search_code" => {
+                let query = arg("query").ok_or("falta `query`")?;
+                let regex = args.get("regex").and_then(|v| v.as_bool()).unwrap_or(false);
+                let (hits, more) = git::search(std::path::Path::new(&me.cwd), &query, regex, 100)?;
+                let mut out: Vec<String> = hits.iter().map(|h| format!("{}:{}: {}", h.path, h.line, h.text.trim())).collect();
+                if more {
+                    out.push("(mais resultados omitidos; refine a busca)".into());
+                }
+                Ok(if out.is_empty() { "nada encontrado".into() } else { out.join("\n") })
+            }
+            "request_env_change" => {
+                let name = arg("name").ok_or("falta `name`")?;
+                let value = arg("value").ok_or("falta `value`")?;
+                if !crate::secrets::valid_env_name(&name) {
+                    return Err(format!("nome de env inválido: {name}"));
+                }
+                let id = uuid::Uuid::new_v4().simple().to_string();
+                self.env_requests.lock().unwrap().insert(id.clone(), (me.id.clone(), name.clone(), value));
+                let _ = self.events.send(DaemonMessage::EnvRequest { id, session_id: me.id, name: name.clone() });
+                Ok(format!("pedido enviado ao usuário; {name} só é gravada se ele aprovar no app (a resposta chega no read_inbox)"))
+            }
+            other => Err(format!("tool desconhecida: {other}")),
+        }
     }
 
     /// A project session's folder and its project's base branch.
@@ -343,6 +456,28 @@ impl Daemon {
                     let _ = events.send(DaemonMessage::Pr { session_id, pr });
                 });
             }
+            ClientMessage::McpCall { session_id, tool, args } => {
+                let (text, is_error) = match self.mcp_call(&session_id, &tool, &args) {
+                    Ok(t) => (t, false),
+                    Err(e) => (e, true),
+                };
+                return vec![DaemonMessage::McpResult { text, is_error }];
+            }
+            ClientMessage::ResolveEnvRequest { id, approve } => {
+                let Some((session, name, value)) = self.env_requests.lock().unwrap().remove(&id) else {
+                    return vec![DaemonMessage::Error { message: "pedido de env não encontrado".into() }];
+                };
+                if approve {
+                    let secrets = self.sessions.lock().unwrap().secrets.clone();
+                    if let Err(e) = secrets.set(&crate::secrets::env_key(&name), &value) {
+                        return error(e);
+                    }
+                    emit(self.catalog_message());
+                }
+                let verdict = if approve { "aprovou" } else { "recusou" };
+                self.deliver("harness", &session, &format!("O usuário {verdict} gravar {name}."));
+                emit(DaemonMessage::EnvRequestResolved { id, approved: approve });
+            }
             ClientMessage::ListSessions => {
                 return vec![DaemonMessage::Sessions {
                     sessions: self.sessions.lock().unwrap().list(),
@@ -391,6 +526,11 @@ impl Daemon {
                     // the daemon down.
                     let Ok(msg) = serde_json::from_str::<ClientMessage>(&line) else { continue };
                     let replies = match msg {
+                        // Approvals come from you in the app, never from the
+                        // socket the sessions' tools use.
+                        ClientMessage::ResolveEnvRequest { .. } => vec![DaemonMessage::Error {
+                            message: "aprovação só pelo app".into(),
+                        }],
                         ClientMessage::NewPairingTicket => match daemon.remote.get() {
                             Some(r) => vec![DaemonMessage::PairingTicket { ticket: r.new_ticket().await.encode() }],
                             None => vec![DaemonMessage::Error { message: "iroh ainda não subiu".into() }],

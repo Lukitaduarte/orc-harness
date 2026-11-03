@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import 'agent_notices.dart';
 import 'analytics_view.dart';
 import 'catalog_view.dart';
 import 'command_palette.dart';
@@ -65,6 +66,7 @@ class WorkspaceScreen extends StatelessWidget {
                             children: [
                               _Toolbar(store),
                               const Divider(),
+                              AgentNotices(store),
                               Expanded(
                                 child: Padding(
                                   padding: const EdgeInsets.all(4),

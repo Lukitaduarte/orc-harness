@@ -52,6 +52,7 @@ fn main() -> std::io::Result<()> {
                     runtime_root: home.join("sessions"),
                     socket: socket.clone(),
                     otlp_metrics: Some(otlp_url),
+                    orc_mcp: Some(bin_dir.join("orc-mcp")),
                 },
                 cfg.accounts,
                 secrets.clone(),

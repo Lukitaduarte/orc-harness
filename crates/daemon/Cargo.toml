@@ -18,6 +18,10 @@ name = "orc-commit-check"
 path = "src/bin/orc-commit-check.rs"
 
 [[bin]]
+name = "orc-mcp"
+path = "src/bin/orc-mcp.rs"
+
+[[bin]]
 name = "orc-hook"
 path = "src/bin/orc-hook.rs"
 

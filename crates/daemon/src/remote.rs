@@ -191,7 +191,13 @@ impl Remote {
             let mut lines = BufReader::new(recv).lines();
             while let Ok(Some(line)) = lines.next_line().await {
                 if let Ok(msg) = serde_json::from_str::<ClientMessage>(&line) {
-                    for reply in daemon.handle(msg) {
+                    // Tool calls act as a session: only orc-mcp, locally.
+                    let replies = if matches!(msg, ClientMessage::McpCall { .. }) {
+                        vec![DaemonMessage::Error { message: "McpCall só pelo socket local".into() }]
+                    } else {
+                        daemon.handle(msg)
+                    };
+                    for reply in replies {
                         if tx.send(reply).await.is_err() {
                             return;
                         }

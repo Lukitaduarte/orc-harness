@@ -41,6 +41,7 @@ fn worktree_session_enforces_conventional_commits() {
                 runtime_root: dir.join("sessions"),
                 socket: dir.join("orcd.sock"),
                 otlp_metrics: None,
+            orc_mcp: None,
             },
             vec![Account { id: "work".into(), config_dir: None, gh_config_dir: None }],
             std::sync::Arc::new(orc_daemon::secrets::SecretStore::memory()),

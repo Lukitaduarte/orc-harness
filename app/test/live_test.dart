@@ -155,4 +155,26 @@ void main() {
     store.dispose();
     d.dispose();
   });
+
+  test('env requests wait for you and messages are kept briefly', () {
+    final d = DaemonClient();
+    final sent = <Map<String, Object?>>[];
+    d.sendHook = sent.add;
+    d.handle(
+      '{"type":"env_request","id":"r1","session_id":"s1","name":"API_TOKEN"}',
+    );
+    expect(d.envRequests.single.$3, 'API_TOKEN');
+    d.resolveEnvRequest('r1', true);
+    expect(sent.single, {
+      'type': 'resolve_env_request',
+      'id': 'r1',
+      'approve': true,
+    });
+    expect(d.envRequests, isEmpty);
+    for (var i = 0; i < 7; i++) {
+      d.handle('{"type":"session_message","from":"s1","to":"s2","body":"m$i"}');
+    }
+    expect(d.messages.map((m) => m.$3), ['m2', 'm3', 'm4', 'm5', 'm6']);
+    d.dispose();
+  });
 }

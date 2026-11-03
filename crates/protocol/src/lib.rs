@@ -386,6 +386,11 @@ pub enum ClientMessage {
     Search { project_id: Option<String>, session_id: Option<String>, query: String, regex: bool },
     /// The GitHub PR of the session's branch, through `gh`.
     PrStatus { session_id: String },
+    /// A harness MCP tool call from a session (sent by `orc-mcp` over the
+    /// local socket; the session id comes from its environment).
+    McpCall { session_id: String, tool: String, args: serde_json::Value },
+    /// Your answer to an agent asking to store an env value.
+    ResolveEnvRequest { id: String, approve: bool },
     /// Keystrokes or pasted text for a session's terminal.
     Input { session_id: String, data: String },
     Resize { session_id: String, cols: u16, rows: u16 },
@@ -419,6 +424,14 @@ pub enum DaemonMessage {
     SearchResults { query: String, hits: Vec<SearchHit>, truncated: bool },
     /// `gh pr view` JSON (number, state, url, checks, review), or `none`.
     Pr { session_id: String, pr: Option<serde_json::Value> },
+    /// Reply to an `McpCall`: text for the agent.
+    McpResult { text: String, is_error: bool },
+    /// A message between sessions (`send_message`), for the app to show.
+    SessionMessage { from: String, to: String, body: String },
+    /// An agent asks to store an env value; nothing happens until you
+    /// approve it. The value is never sent to clients.
+    EnvRequest { id: String, session_id: String, name: String },
+    EnvRequestResolved { id: String, approved: bool },
 }
 
 #[cfg(test)]

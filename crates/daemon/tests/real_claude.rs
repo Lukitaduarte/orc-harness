@@ -27,6 +27,7 @@ fn real_claude_accepts_the_generated_session() {
             runtime_root: dir.path().join("sessions"),
             socket: dir.path().join("orcd.sock"),
             otlp_metrics: None,
+            orc_mcp: None,
         },
         vec![Account { id: "default".into(), config_dir: None, gh_config_dir: None }],
         std::sync::Arc::new(orc_daemon::secrets::SecretStore::memory()),
