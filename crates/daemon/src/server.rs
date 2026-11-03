@@ -68,6 +68,8 @@ pub struct Daemon {
     pub language_servers: crate::ide::LanguageServers,
     pub workspaces: Arc<Mutex<crate::workspaces::Workspaces>>,
     pub approvals: Arc<Mutex<Approvals>>,
+    /// The harness's memory provider (set with a home).
+    pub memory: Option<Arc<crate::memory::Memory>>,
     /// `~/.orc` and its config.json, for new accounts (unset: refused).
     home: Option<PathBuf>,
 }
@@ -102,6 +104,7 @@ impl Daemon {
             language_servers: Default::default(),
             workspaces: Arc::new(Mutex::new(crate::workspaces::Workspaces::load(None))),
             approvals: Arc::default(),
+            memory: None,
             home: None,
         }
     }
@@ -110,8 +113,33 @@ impl Daemon {
     /// accounts to `home/config.json`.
     pub fn with_home(mut self, home: PathBuf) -> Self {
         self.workspaces = Arc::new(Mutex::new(crate::workspaces::Workspaces::load(Some(home.join("workspaces.json")))));
+        self.memory = Some(Arc::new(crate::memory::Memory::new(home.join("memory"))));
         self.home = Some(home);
+        self.sync_memory_providers();
         self
+    }
+
+    /// The workspace an account is in.
+    fn workspace_of(&self, account_id: &str) -> Option<orc_protocol::WorkspaceInfo> {
+        let all = self.sessions.lock().unwrap().account_ids();
+        self.workspaces.lock().unwrap().view(&all).into_iter().find(|w| w.accounts.iter().any(|a| a == account_id))
+    }
+
+    /// Gives each account's sessions its workspace's external memory MCP
+    /// (the harness's own needs nothing: its tools are in `orc`).
+    fn sync_memory_providers(&self) {
+        let all = self.sessions.lock().unwrap().account_ids();
+        let view = self.workspaces.lock().unwrap().view(&all);
+        let catalog = self.catalog.lock().unwrap().list();
+        let mut extra = HashMap::new();
+        for w in view {
+            let Some(id) = w.memory.as_deref().filter(|m| *m != "orc" && *m != "off") else { continue };
+            let Some(config) = catalog.iter().find(|e| e.id == id && e.kind == "mcp").and_then(|e| e.mcp.clone()) else { continue };
+            for a in w.accounts {
+                extra.insert(a, std::collections::BTreeMap::from([("memory".to_string(), config.clone())]));
+            }
+        }
+        self.sessions.lock().unwrap().set_extra_mcp(extra);
     }
 
     fn workspaces_message(&self) -> DaemonMessage {
@@ -418,6 +446,47 @@ impl Daemon {
                 self.env_requests.lock().unwrap().insert(id.clone(), (me.id.clone(), name.clone(), value));
                 let _ = self.events.send(DaemonMessage::EnvRequest { id, session_id: me.id, name: name.clone() });
                 Ok(format!("pedido enviado ao usuário; {name} só é gravada se ele aprovar no app (a resposta chega no read_inbox)"))
+            }
+            "remember" | "recall" | "forget" => {
+                let memory = self.memory.as_ref().ok_or("este harness não tem memória")?;
+                let ws = self.workspace_of(&me.account_id).ok_or("a sessão não está em nenhum workspace")?;
+                match ws.memory.as_deref() {
+                    None | Some("orc") => {}
+                    Some("off") => return Err("a memória está desligada neste workspace".into()),
+                    Some(other) => return Err(format!("a memória deste workspace é o MCP {other}; use as tools dele")),
+                }
+                match tool {
+                    "remember" => {
+                        let tags: Vec<String> = args
+                            .get("tags")
+                            .and_then(|v| v.as_array())
+                            .map(|a| a.iter().filter_map(|t| t.as_str().map(String::from)).collect())
+                            .unwrap_or_default();
+                        let e = memory.remember(&ws.id, &me.id, &arg("text").ok_or("falta `text`")?, tags).map_err(|e| e.to_string())?;
+                        Ok(format!("guardado ({}) na memória do workspace {}", e.id, ws.name))
+                    }
+                    "recall" => {
+                        let hits = memory.recall(&ws.id, &arg("query").unwrap_or_default(), 10);
+                        Ok(if hits.is_empty() {
+                            "nada na memória sobre isso".into()
+                        } else {
+                            hits.iter()
+                                .map(|e| {
+                                    let tags = if e.tags.is_empty() { String::new() } else { format!(" [{}]", e.tags.join(", ")) };
+                                    format!("{}{}: {}", e.id, tags, e.text)
+                                })
+                                .collect::<Vec<_>>()
+                                .join("\n")
+                        })
+                    }
+                    _ => {
+                        let id = arg("id").ok_or("falta `id`")?;
+                        match memory.forget(&ws.id, &id).map_err(|e| e.to_string())? {
+                            true => Ok(format!("esquecido: {id}")),
+                            false => Err(format!("não há memória {id}")),
+                        }
+                    }
+                }
             }
             "list_envs" => {
                 // Names and whether they have a value; values never.
@@ -939,12 +1008,14 @@ impl Daemon {
                 if let Err(e) = self.catalog.lock().unwrap().upsert(entry) {
                     return error(e);
                 }
+                self.sync_memory_providers();
                 emit(self.catalog_message());
             }
             ClientMessage::RemoveCatalog { id } => {
                 if let Err(e) = self.catalog.lock().unwrap().remove(&id) {
                     return error(e);
                 }
+                self.sync_memory_providers();
                 emit(self.catalog_message());
             }
             ClientMessage::UpsertTemplate { template } => {
@@ -991,6 +1062,7 @@ impl Daemon {
                     return error(e);
                 }
                 emit(self.workspaces_message());
+                self.sync_memory_providers();
             }
             ClientMessage::RemoveWorkspace { id } => {
                 let known = self.sessions.lock().unwrap().account_ids();
@@ -998,6 +1070,7 @@ impl Daemon {
                     return error(e);
                 }
                 emit(self.workspaces_message());
+                self.sync_memory_providers();
             }
             ClientMessage::AddAccount { id, workspace_id } => {
                 let Some(home) = &self.home else {
@@ -1017,6 +1090,7 @@ impl Daemon {
                 }
                 emit(DaemonMessage::Hello { accounts: known });
                 emit(self.workspaces_message());
+                self.sync_memory_providers();
             }
             ClientMessage::AddProject { name, repo, base_branch, workspace_id } => {
                 let mut projects = self.projects.lock().unwrap();
@@ -1185,6 +1259,17 @@ impl Daemon {
                 };
                 let _ = waiting.send(approve);
                 emit(DaemonMessage::ApprovalResolved { id, approved: approve });
+            }
+            ClientMessage::ListMemory { workspace_id } => {
+                let entries = self.memory.as_ref().map(|m| m.list(&workspace_id)).unwrap_or_default();
+                return vec![DaemonMessage::Memory { workspace_id, entries }];
+            }
+            ClientMessage::ForgetMemory { workspace_id, id } => {
+                let Some(memory) = &self.memory else { return Vec::new() };
+                if let Err(e) = memory.forget(&workspace_id, &id) {
+                    return error(e);
+                }
+                return vec![DaemonMessage::Memory { entries: memory.list(&workspace_id), workspace_id }];
             }
             ClientMessage::RetryCard { plan_id, number } => {
                 let mut plans = self.plans.lock().unwrap();

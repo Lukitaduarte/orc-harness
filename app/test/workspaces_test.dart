@@ -77,6 +77,7 @@ void main() {
         'id': 'cliente-x',
         'name': 'Cliente X',
         'accounts': ['b'],
+        'memory': null,
       },
     });
     d.handle(
@@ -114,6 +115,42 @@ void main() {
     d.handle('{"type":"hello","accounts":["a","b","c"]}');
     expect(sent.last['type'], 'create_session');
     expect(sent.last['account_id'], 'c');
+
+    // Memory: the provider goes with the workspace; you see and clean entries.
+    store.saveWorkspace(
+      'Cliente X',
+      ['b'],
+      id: 'cliente-x',
+      memory: 'mcp-mem0',
+    );
+    expect((sent.last['workspace'] as Map)['memory'], 'mcp-mem0');
+    expect(
+      store.memoryOf('trabalho'),
+      'orc',
+      reason: 'the harness memory by default',
+    );
+    d.handle(
+      jsonEncode({
+        'type': 'memory',
+        'workspace_id': 'trabalho',
+        'entries': [
+          {
+            'id': 'm1',
+            'at': 1,
+            'session': 's1',
+            'text': 'Deploy no Railway',
+            'tags': [],
+          },
+        ],
+      }),
+    );
+    expect(d.memory['trabalho']!.single['text'], 'Deploy no Railway');
+    d.forgetMemory('trabalho', 'm1');
+    expect(sent.last, {
+      'type': 'forget_memory',
+      'workspace_id': 'trabalho',
+      'id': 'm1',
+    });
 
     store.deleteWorkspace('pessoal');
     expect(sent.last, {'type': 'remove_workspace', 'id': 'pessoal'});

@@ -50,16 +50,90 @@ class _WorkspaceFormState extends State<_WorkspaceForm> {
     if (widget.editing case final w?) ...widget.store.liveAccountsOf(w.id),
   };
 
+  late String _memory = widget.editing == null
+      ? 'orc'
+      : widget.store.memoryOf(widget.editing!.id);
+
   @override
   void initState() {
     super.initState();
     _name.addListener(() => setState(() {}));
+    if (widget.editing case final w?) widget.store.daemon?.listMemory(w.id);
   }
 
   @override
   void dispose() {
     _name.dispose();
     super.dispose();
+  }
+
+  Widget _choice(String value, String label) => value == _memory
+      ? SecondaryButton(
+          size: ButtonSize.small,
+          onPressed: () {},
+          child: Text(label),
+        )
+      : GhostButton(
+          size: ButtonSize.small,
+          onPressed: () => setState(() => _memory = value),
+          child: Text(label),
+        );
+
+  /// Which memory its sessions share, and what the harness's holds.
+  List<Widget> _memorySection(HarnessStore store, Workspace? editing) {
+    final d = store.daemon!;
+    final mcps = d.catalog.where((e) => e['kind'] == 'mcp');
+    final entries = editing == null
+        ? const []
+        : d.memory[editing.id] ?? const [];
+    return [
+      const Gap(14),
+      const Text('Memória das sessões').small().medium(),
+      const Text(
+        'O que os agentes guardam (decisões, preferências, fatos dos projetos) '
+        'e as outras sessões do workspace encontram.',
+      ).xSmall().muted(),
+      const Gap(6),
+      Wrap(
+        spacing: 4,
+        runSpacing: 4,
+        children: [
+          _choice('orc', 'Do harness'),
+          for (final m in mcps) _choice(m['id'] as String, m['name'] as String),
+          _choice('off', 'Desligada'),
+        ],
+      ),
+      if (_memory == 'orc' && entries.isNotEmpty) ...[
+        const Gap(8),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 160),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              for (final e in entries.reversed)
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${e['text']}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ).xSmall(),
+                    ),
+                    GhostButton(
+                      density: ButtonDensity.icon,
+                      size: ButtonSize.small,
+                      onPressed: () =>
+                          d.forgetMemory(editing!.id, e['id'] as String),
+                      child: const Icon(LucideIcons.trash2, size: 12),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ],
+    ];
   }
 
   @override
@@ -110,6 +184,14 @@ class _WorkspaceFormState extends State<_WorkspaceForm> {
               ),
             ),
         ],
+        // Entries arrive from the daemon after the dialog opens.
+        ListenableBuilder(
+          listenable: store.daemon!,
+          builder: (context, _) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: _memorySection(store, editing),
+          ),
+        ),
         const Gap(20),
         Row(
           children: [
@@ -135,6 +217,7 @@ class _WorkspaceFormState extends State<_WorkspaceForm> {
                         _name.text,
                         _accounts.toList(),
                         id: editing?.id,
+                        memory: _memory,
                       );
                       closeOverlay(context);
                     },

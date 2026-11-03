@@ -99,9 +99,14 @@ class HarnessStore extends ChangeNotifier {
   ];
 
   /// Creates (no [id]) or updates a daemon workspace; returns its id.
-  String saveWorkspace(String name, List<String> accountIds, {String? id}) {
+  String saveWorkspace(
+    String name,
+    List<String> accountIds, {
+    String? id,
+    String? memory,
+  }) {
     final wsId = id ?? _freeWorkspaceId(name);
-    daemon!.upsertWorkspace(wsId, name.trim(), accountIds);
+    daemon!.upsertWorkspace(wsId, name.trim(), accountIds, memory: memory);
     // Select it once the daemon reports it.
     if (id == null) _selectWhenLive = wsId;
     return wsId;
@@ -127,6 +132,15 @@ class HarnessStore extends ChangeNotifier {
   ];
 
   void deleteWorkspace(String id) => daemon!.removeWorkspace(id);
+
+  /// A live workspace's memory provider: `orc` (the harness's own, the
+  /// default), `off`, or a catalog MCP id.
+  String memoryOf(String workspaceId) =>
+      daemon?.workspaces
+          .where((w) => w['id'] == workspaceId)
+          .map((w) => w['memory'] as String?)
+          .firstOrNull ??
+      'orc';
 
   /// A new Claude Code account in the current workspace; a session opens on
   /// it so you can log in.

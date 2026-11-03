@@ -357,6 +357,23 @@ pub struct WorkspaceInfo {
     pub id: String,
     pub name: String,
     pub accounts: Vec<String>,
+    /// Memory provider of its sessions: none or `orc` (the harness's
+    /// own), `off`, or the id of a catalog MCP (mem0, basic-memory…).
+    #[serde(default)]
+    pub memory: Option<String>,
+}
+
+/// One entry of the harness's memory provider.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MemoryEntry {
+    pub id: String,
+    /// Unix seconds.
+    pub at: i64,
+    /// The session that remembered it.
+    pub session: String,
+    pub text: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -547,6 +564,8 @@ pub enum ClientMessage {
     Gate { session_id: String, tool: String, input: serde_json::Value },
     /// Your decision on an action waiting for OK (app only).
     ResolveApproval { id: String, approve: bool },
+    ListMemory { workspace_id: String },
+    ForgetMemory { workspace_id: String, id: String },
     /// Puts a failed or stopped card back in line.
     RetryCard { plan_id: String, number: u32 },
     /// Keystrokes or pasted text for a session's terminal.
@@ -584,6 +603,7 @@ pub enum DaemonMessage {
     Pr { session_id: String, pr: Option<serde_json::Value> },
     Plans { plans: Vec<PlanDoc> },
     Workspaces { workspaces: Vec<WorkspaceInfo> },
+    Memory { workspace_id: String, entries: Vec<MemoryEntry> },
     /// Reply to `Gate`.
     GateDecision { allow: bool, reason: String },
     /// A session wants to do something that needs your OK.

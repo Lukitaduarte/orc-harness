@@ -176,10 +176,29 @@ class DaemonClient extends ChangeNotifier {
   /// Workspaces (orc_protocol::WorkspaceInfo JSON); empty until reported.
   List<Map<String, dynamic>> workspaces = [];
 
-  void upsertWorkspace(String id, String name, List<String> accounts) => send({
+  void upsertWorkspace(
+    String id,
+    String name,
+    List<String> accounts, {
+    String? memory,
+  }) => send({
     'type': 'upsert_workspace',
-    'workspace': {'id': id, 'name': name, 'accounts': accounts},
+    'workspace': {
+      'id': id,
+      'name': name,
+      'accounts': accounts,
+      'memory': memory,
+    },
   });
+
+  /// The harness memory of each workspace (orc_protocol::MemoryEntry JSON).
+  final memory = <String, List<Map<String, dynamic>>>{};
+
+  void listMemory(String workspaceId) =>
+      send({'type': 'list_memory', 'workspace_id': workspaceId});
+
+  void forgetMemory(String workspaceId, String id) =>
+      send({'type': 'forget_memory', 'workspace_id': workspaceId, 'id': id});
 
   void removeWorkspace(String id) =>
       send({'type': 'remove_workspace', 'id': id});
@@ -550,6 +569,10 @@ class DaemonClient extends ChangeNotifier {
         notifyListeners();
       case 'learnings':
         learnings[m['plan_id'] as String] = (m['items'] as List)
+            .cast<Map<String, dynamic>>();
+        notifyListeners();
+      case 'memory':
+        memory[m['workspace_id'] as String] = (m['entries'] as List)
             .cast<Map<String, dynamic>>();
         notifyListeners();
       case 'workspaces':

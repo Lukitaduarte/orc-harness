@@ -90,6 +90,9 @@ pub struct SessionManager {
     cfg: ManagerConfig,
     pub secrets: std::sync::Arc<SecretStore>,
     accounts: HashMap<String, Account>,
+    /// MCP servers every session of an account gets (its workspace's
+    /// memory provider), set by the daemon.
+    extra_mcp: HashMap<String, BTreeMap<String, serde_json::Value>>,
     sessions: BTreeMap<String, Managed>,
     next: u32,
 }
@@ -109,9 +112,15 @@ impl SessionManager {
             cfg,
             secrets,
             accounts: accounts.into_iter().map(|a| (a.id.clone(), a)).collect(),
+            extra_mcp: HashMap::new(),
             sessions: BTreeMap::new(),
             next: 0,
         }
+    }
+
+    /// Servers added to new and restarted sessions of each account.
+    pub fn set_extra_mcp(&mut self, extra: HashMap<String, BTreeMap<String, serde_json::Value>>) {
+        self.extra_mcp = extra;
     }
 
     pub fn add_account(&mut self, account: Account) {
@@ -373,6 +382,9 @@ impl SessionManager {
         });
         write_json(&dir.join("settings.json"), &settings)?;
         let mut servers = profile.mcp_servers.clone();
+        for (name, config) in self.extra_mcp.get(&account.id).into_iter().flatten() {
+            servers.entry(name.clone()).or_insert_with(|| config.clone());
+        }
         if let Some(orc) = &self.cfg.orc_mcp {
             // The harness tools; the session id ties every call to it.
             servers.insert(

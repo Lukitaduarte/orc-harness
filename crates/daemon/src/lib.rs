@@ -10,6 +10,7 @@ pub mod plans;
 pub mod projects;
 pub mod learn;
 pub mod manager;
+pub mod memory;
 pub mod quota;
 pub mod remote;
 pub mod secrets;
