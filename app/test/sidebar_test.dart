@@ -29,11 +29,11 @@ void main() {
       expect(find.byIcon(LucideIcons.plus), findsNWidgets(4));
       expect(find.text('✻'), findsOneWidget);
       expect(find.text('Claude'), findsNothing);
-    // ✻ name … : the mark first, the menu at the far end.
-    final mark = tester.getCenter(find.text('✻')).dx;
-    final name = tester.getCenter(find.text('work')).dx;
-    final menu = tester.getCenter(find.byIcon(LucideIcons.ellipsis)).dx;
-    expect(mark < name && name < menu, isTrue);
+      // ✻ name … : the mark first, the menu at the far end.
+      final mark = tester.getCenter(find.text('✻')).dx;
+      final name = tester.getCenter(find.text('work')).dx;
+      final menu = tester.getCenter(find.byIcon(LucideIcons.ellipsis)).dx;
+      expect(mark < name && name < menu, isTrue);
 
       // Right click on the session, confirm.
       await tester.tap(find.text('app'), buttons: kSecondaryButton);

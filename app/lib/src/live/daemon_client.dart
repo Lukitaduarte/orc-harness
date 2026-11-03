@@ -211,6 +211,12 @@ class DaemonClient extends ChangeNotifier {
   void browseFolders(String? path, {bool hidden = false}) =>
       send({'type': 'browse_folders', 'path': path, 'hidden': hidden});
 
+  /// A one-time ticket for pairing another device (shown as a QR), and
+  /// when it was issued (valid 10 minutes).
+  (String, DateTime)? pairingTicket;
+
+  void requestPairingTicket() => send({'type': 'new_pairing_ticket'});
+
   /// Paired devices (orc_protocol::DeviceInfo JSON), and which is this one.
   List<Map<String, dynamic>> devices = [];
   String? thisDevice;
@@ -621,6 +627,9 @@ class DaemonClient extends ChangeNotifier {
               (f['name'] as String, f['repo'] as bool),
           ],
         );
+        notifyListeners();
+      case 'pairing_ticket':
+        pairingTicket = (m['ticket'] as String, DateTime.now());
         notifyListeners();
       case 'devices':
         devices = (m['devices'] as List).cast<Map<String, dynamic>>();

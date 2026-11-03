@@ -242,6 +242,11 @@ impl Remote {
                         ClientMessage::McpCall { .. } => {
                             vec![DaemonMessage::Error { message: "McpCall só pelo socket local".into() }]
                         }
+                        // A paired device may bring another one (it already
+                        // controls everything; the ticket works once, 10 min).
+                        ClientMessage::NewPairingTicket => {
+                            vec![DaemonMessage::PairingTicket { ticket: remote.new_ticket().await.encode() }]
+                        }
                         // The asking device knows which one it is.
                         ClientMessage::ListDevices => {
                             vec![DaemonMessage::Devices { devices: remote.device_list(Some(&me_reader)) }]

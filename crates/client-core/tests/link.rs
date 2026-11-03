@@ -175,6 +175,14 @@ async fn a_revoked_device_is_dropped_and_refused() {
     let phone_id = devices.iter().find(|d| d.name == "iPhone").unwrap().id.clone();
     assert!(devices.iter().all(|d| d.connected));
 
+    // A paired device shows a ticket for the next one (the QR in the app).
+    conn.send(serde_json::json!({ "type": "new_pairing_ticket" }).to_string()).await.unwrap();
+    let ticket = wait(&rx, |m| match m {
+        DaemonMessage::PairingTicket { ticket } => Some(ticket),
+        _ => None,
+    });
+    assert!(pair(&ticket, "iPad").await.is_ok());
+
     // Revoked: its connection drops now, and it cannot come back.
     assert!(daemon.handle(DaemonClientMessage::RevokeDevice { id: phone_id }).is_empty());
     closed_rx.recv_timeout(Duration::from_secs(10)).expect("revoked device stayed connected");

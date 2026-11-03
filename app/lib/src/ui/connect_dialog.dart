@@ -1,6 +1,8 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
@@ -47,6 +49,55 @@ class _ConnectState extends State<_Connect> {
     _ticket.addListener(() => setState(() {}));
     final d = widget.store.daemon;
     if (d != null && d.status == LinkStatus.connected) d.listDevices();
+  }
+
+  /// A QR for the next device: scan it with the phone's app (Escanear o
+  /// QR) or paste the text. One use, 10 minutes.
+  List<Widget> _pairAnother(DaemonClient d) {
+    final t = d.pairingTicket;
+    final fresh =
+        t != null &&
+        DateTime.now().difference(t.$2) < const Duration(minutes: 10);
+    return [
+      const Gap(16),
+      const Text('Parear outro aparelho').small().medium(),
+      const Gap(6),
+      if (!fresh)
+        OutlineButton(
+          leading: const Icon(LucideIcons.qrCode, size: 14),
+          onPressed: d.requestPairingTicket,
+          child: const Text('Mostrar QR de pareamento'),
+        )
+      else ...[
+        Center(
+          child: Container(
+            color: Colors.white,
+            padding: const EdgeInsets.all(10),
+            child: QrImageView(
+              data: t.$1,
+              size: 240,
+              errorCorrectionLevel: QrErrorCorrectLevel.L,
+            ),
+          ),
+        ),
+        const Gap(6),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'No celular: Conectar daemon → Escanear o QR. Vale uma vez, por 10 minutos.',
+              ),
+            ),
+            GhostButton(
+              size: ButtonSize.small,
+              leading: const Icon(LucideIcons.copy, size: 12),
+              onPressed: () => Clipboard.setData(ClipboardData(text: t.$1)),
+              child: const Text('Copiar'),
+            ),
+          ],
+        ),
+      ],
+    ];
   }
 
   /// Paired apps; revoking one drops it now and it must pair again.
@@ -113,6 +164,7 @@ class _ConnectState extends State<_Connect> {
               d.error!,
             ).xSmall().medium(color: Theme.of(context).colorScheme.destructive),
           ],
+          if (d.status == LinkStatus.connected) ..._pairAnother(d),
           if (d.devices.isNotEmpty) ..._devices(d),
           const Gap(16),
           const Text(

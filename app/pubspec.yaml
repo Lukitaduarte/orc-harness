@@ -15,6 +15,7 @@ dependencies:
   orc_bridge:
     path: rust_builder
   path_provider: ^2.1.6
+  qr_flutter: 4.1.0
   re_editor: ^0.10.0
   re_highlight: ^0.0.3
   shadcn_flutter: ^0.0.53
