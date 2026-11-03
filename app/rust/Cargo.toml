@@ -18,3 +18,9 @@ tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "i
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
+
+
+# libc 0.2.190+ hides net/route.h constants on iOS, which netwatch and
+# netdev (via iroh) still use there. Remove when iroh's deps are updated.
+[target.'cfg(target_os = "ios")'.dependencies]
+libc = "=0.2.189"

@@ -7,6 +7,7 @@ import 'analytics_view.dart';
 import 'catalog_view.dart';
 import 'command_palette.dart';
 import 'kanban.dart';
+import 'mobile_shell.dart';
 import 'panes.dart';
 import 'plan_view.dart';
 import 'search_dialog.dart';
@@ -20,6 +21,8 @@ class WorkspaceScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Phones get their own layout.
+    if (MediaQuery.sizeOf(context).width < 700) return MobileShell(store);
     return ListenableBuilder(
       listenable: store,
       builder: (context, _) {

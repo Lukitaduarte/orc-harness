@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_rust_bridge: 2.13.0
+  mobile_scanner: ^7.5.0
   orc_bridge:
     path: rust_builder
   path_provider: ^2.1.6

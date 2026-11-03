@@ -118,7 +118,16 @@ fn main() -> std::io::Result<()> {
             match serde_json::from_str::<DaemonMessage>(&line) {
                 Ok(DaemonMessage::PairingTicket { ticket }) => {
                     println!("{ticket}");
-                    eprintln!("Cole no app em Configurações → Conectar daemon. Vale 10 minutos, uma vez.");
+                    // The phone scans it; the text above is for pasting.
+                    if let Ok(code) = qrcode::QrCode::with_error_correction_level(&ticket, qrcode::EcLevel::L) {
+                        let qr = code
+                            .render::<qrcode::render::unicode::Dense1x2>()
+                            .dark_color(qrcode::render::unicode::Dense1x2::Light)
+                            .light_color(qrcode::render::unicode::Dense1x2::Dark)
+                            .build();
+                        eprintln!("{qr}");
+                    }
+                    eprintln!("Cole no app em Conectar daemon, ou escaneie o QR no celular. Vale 10 minutos, uma vez.");
                     Ok(())
                 }
                 Ok(DaemonMessage::Error { message }) => Err(std::io::Error::other(message)),

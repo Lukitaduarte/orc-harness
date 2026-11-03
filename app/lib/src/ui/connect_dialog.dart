@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
@@ -11,7 +14,7 @@ Future<void> showConnectDialog(BuildContext context, HarnessStore store) {
       builder: (context) {
         final theme = Theme.of(context);
         return ConstrainedBox(
-          constraints: const BoxConstraints.tightFor(width: 520),
+          constraints: const BoxConstraints(maxWidth: 520),
           child: ModalBackdrop(
             borderRadius: theme.borderRadiusXl,
             child: OutlinedContainer(
@@ -82,6 +85,19 @@ class _ConnectState extends State<_Connect> {
             'No Mac onde o orcd roda: `orcd serve` e, em outro terminal, `orcd pair`. '
             'Cole aqui o ticket (vale 10 minutos, uma vez).',
           ).xSmall().muted(),
+          if (Platform.isIOS || Platform.isAndroid) ...[
+            const Gap(8),
+            OutlineButton(
+              leading: const Icon(LucideIcons.scanQrCode, size: 16),
+              onPressed: () async {
+                final code = await Navigator.of(context).push<String>(
+                  MaterialPageRoute(builder: (_) => const _ScanTicket()),
+                );
+                if (code != null) _ticket.text = code;
+              },
+              child: const Text('Escanear o QR do `orcd pair`'),
+            ),
+          ],
           const Gap(8),
           TextField(
             controller: _ticket,
@@ -122,4 +138,51 @@ class _ConnectState extends State<_Connect> {
       ),
     );
   }
+}
+
+/// Camera view that returns the first pairing ticket it reads.
+class _ScanTicket extends StatefulWidget {
+  const _ScanTicket();
+
+  @override
+  State<_ScanTicket> createState() => _ScanTicketState();
+}
+
+class _ScanTicketState extends State<_ScanTicket> {
+  bool _done = false;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    child: SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              GhostButton(
+                density: ButtonDensity.icon,
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Icon(LucideIcons.x, size: 18),
+              ),
+              const Text('Aponte para o QR do orcd pair').small(),
+            ],
+          ),
+          Expanded(
+            child: MobileScanner(
+              onDetect: (capture) {
+                final code = capture.barcodes
+                    .map((b) => b.rawValue)
+                    .whereType<String>()
+                    .where((v) => v.startsWith('orc1'))
+                    .firstOrNull;
+                if (code == null || _done) return;
+                _done = true;
+                Navigator.of(context).pop(code);
+              },
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }

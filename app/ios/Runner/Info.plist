@@ -45,5 +45,9 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Para ler o QR de pareamento do orcd.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Para conectar ao orcd no seu Mac pela rede local.</string>
 </dict>
 </plist>
