@@ -50,6 +50,11 @@ class _NewPlanFormState extends State<_NewPlanForm> {
   final _description = TextEditingController();
   final _markdown = TextEditingController();
 
+  /// Live: the daemon repository the plan is for.
+  late String? _repo =
+      widget.store.daemon?.projects.firstOrNull?['id'] as String?;
+  bool get _live => widget.store.isLive;
+
   @override
   void initState() {
     super.initState();
@@ -65,27 +70,46 @@ class _NewPlanFormState extends State<_NewPlanForm> {
     super.dispose();
   }
 
+  List<String> get _linkList => _links.text
+      .split(RegExp(r'\s+'))
+      .where((l) => l.startsWith('http'))
+      .toList();
+
   void _create() {
+    if (_live) {
+      final title = RegExp(
+        r'^# (.+)$',
+        multiLine: true,
+      ).firstMatch(_markdown.text)?.group(1);
+      widget.store.createLivePlan(
+        repoId: _repo!,
+        name: _importing ? (title ?? 'Plano importado') : _name.text.trim(),
+        description: _description.text.trim(),
+        links: _linkList,
+        template: _importing ? null : _template,
+        markdown: _importing ? _markdown.text : null,
+      );
+      closeOverlay(context);
+      return;
+    }
     if (_importing) {
       widget.store.importPlan(_markdown.text);
     } else {
-      final links = _links.text
-          .split(RegExp(r'\s+'))
-          .where((l) => l.startsWith('http'))
-          .toList();
       widget.store.createPlan(
         _name.text.trim(),
         _description.text.trim(),
-        links,
+        _linkList,
         _template,
       );
     }
     closeOverlay(context);
   }
 
-  bool get _ready => _importing
-      ? _markdown.text.contains('## ')
-      : _name.text.trim().isNotEmpty;
+  bool get _ready =>
+      (!_live || _repo != null) &&
+      (_importing
+          ? _markdown.text.contains('## ')
+          : _name.text.trim().isNotEmpty);
 
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
@@ -103,6 +127,7 @@ class _NewPlanFormState extends State<_NewPlanForm> {
           ],
         ),
         const Gap(16),
+        if (_live) ..._repoFields(),
         if (_importing) ..._importFields() else ..._templateFields(),
         const Gap(20),
         Row(
@@ -123,6 +148,43 @@ class _NewPlanFormState extends State<_NewPlanForm> {
       ],
     ),
   );
+
+  /// Live plans belong to a repository: its planning session reads the
+  /// code there and its cards run in worktrees of it.
+  List<Widget> _repoFields() {
+    final repos = widget.store.daemon!.projects;
+    return [
+      const Text('Repositório').small().medium(),
+      const Gap(6),
+      if (repos.isEmpty)
+        const Text(
+          'Adicione um repositório na barra lateral (Este Mac) primeiro.',
+        ).xSmall().muted()
+      else
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final r in repos)
+              r['id'] == _repo
+                  ? SecondaryButton(
+                      size: ButtonSize.small,
+                      leading: const Icon(LucideIcons.gitBranch, size: 12),
+                      onPressed: () {},
+                      child: Text(r['name'] as String),
+                    )
+                  : GhostButton(
+                      size: ButtonSize.small,
+                      leading: const Icon(LucideIcons.gitBranch, size: 12),
+                      onPressed: () =>
+                          setState(() => _repo = r['id'] as String),
+                      child: Text(r['name'] as String),
+                    ),
+          ],
+        ),
+      const Gap(14),
+    ];
+  }
 
   Widget _modeButton(String label, bool importing) => importing == _importing
       ? SecondaryButton(onPressed: () {}, child: Text(label))

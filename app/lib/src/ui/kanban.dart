@@ -1,3 +1,4 @@
+import 'package:url_launcher/url_launcher.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
@@ -219,6 +220,7 @@ class _CardTile extends StatelessWidget {
 
   List<Widget> _actions() {
     final c = card;
+    if (store.isLiveProject(project)) return _liveActions(c);
     final row = switch (column) {
       KanbanColumn.blocked => null,
       KanbanColumn.ready => [
@@ -254,6 +256,57 @@ class _CardTile extends StatelessWidget {
         const Icon(LucideIcons.check, size: 12),
         const Gap(4),
         Text('PR #${c.pr} mergeado').xSmall().muted(),
+      ],
+    };
+    return row == null ? const [] : [const Gap(10), Row(children: row)];
+  }
+
+  /// Live cards: the daemon starts them and GitHub moves them.
+  List<Widget> _liveActions(TaskCard c) {
+    final hasSession = store.sessions.any((s) => s.id == c.sessionId);
+    final pr = c.prUrl == null
+        ? null
+        : OutlineButton(
+            size: ButtonSize.small,
+            leading: const Icon(LucideIcons.gitPullRequest, size: 12),
+            onPressed: () => launchUrl(Uri.parse(c.prUrl!)),
+            child: Text('PR #${c.pr}'),
+          );
+    final row = switch (column) {
+      KanbanColumn.blocked => null,
+      KanbanColumn.ready when c.halt != null => [
+        Expanded(
+          child: Text(
+            c.halt!,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ).xSmall().muted(),
+        ),
+        const Gap(4),
+        OutlineButton(
+          size: ButtonSize.small,
+          leading: const Icon(LucideIcons.rotateCcw, size: 12),
+          onPressed: () => store.retryCard(project, c),
+          child: const Text('Tentar de novo'),
+        ),
+      ],
+      KanbanColumn.ready => [
+        const Text('Na fila: começa quando houver vaga').xSmall().muted(),
+      ],
+      KanbanColumn.running || KanbanColumn.review => [
+        if (hasSession)
+          OutlineButton(
+            size: ButtonSize.small,
+            onPressed: () => store.showSession(c.sessionId!),
+            child: const Text('Abrir sessão'),
+          ),
+        if (hasSession && pr != null) const Gap(4),
+        ?pr,
+      ],
+      KanbanColumn.done => [
+        const Icon(LucideIcons.check, size: 12),
+        const Gap(4),
+        if (pr != null) pr else const Text('mergeado').xSmall().muted(),
       ],
     };
     return row == null ? const [] : [const Gap(10), Row(children: row)];

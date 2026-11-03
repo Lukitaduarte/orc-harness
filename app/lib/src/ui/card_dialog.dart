@@ -201,7 +201,16 @@ class _CardDetails extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              if (column == KanbanColumn.ready)
+              if (column == KanbanColumn.ready && c.halt != null)
+                PrimaryButton(
+                  leading: const Icon(LucideIcons.rotateCcw, size: 14),
+                  onPressed: () {
+                    store.retryCard(project, c);
+                    closeOverlay(context);
+                  },
+                  child: const Text('Tentar de novo'),
+                ),
+              if (column == KanbanColumn.ready && !store.isLiveProject(project))
                 PrimaryButton(
                   leading: const Icon(LucideIcons.play, size: 14),
                   onPressed: store.canRun(project)
@@ -209,7 +218,9 @@ class _CardDetails extends StatelessWidget {
                       : null,
                   child: const Text('Executar'),
                 ),
-              if (c.sessionId != null && column == KanbanColumn.running)
+              if (c.sessionId != null &&
+                  column == KanbanColumn.running &&
+                  store.sessions.any((s) => s.id == c.sessionId))
                 OutlineButton(
                   onPressed: () {
                     closeOverlay(context);

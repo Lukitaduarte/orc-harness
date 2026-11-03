@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'live/daemon_client.dart';
+import 'live/live_plans.dart';
 
 import 'mock_data.dart' as mock;
 import 'model.dart';
@@ -131,6 +132,7 @@ class HarnessStore extends ChangeNotifier {
         )..draftItems = Set.of(before?.draftItems ?? const {}),
       );
     }
+    _syncLivePlans(d);
     // Panes showing a session that ended become empty.
     final ids = d.sessions.map((s) => s.id).toSet();
     _layouts[liveWorkspace.id] = _clearMissing(
@@ -145,6 +147,75 @@ class HarnessStore extends ChangeNotifier {
       }
     }
     notifyListeners();
+  }
+
+  /// Live plans by id, with the canonical text of the document they were
+  /// built from: an unchanged document (our own save echoed back) keeps
+  /// its objects.
+  final _livePlans = <String, (String, Project)>{};
+
+  void _syncLivePlans(DaemonClient d) {
+    projects.removeWhere((p) => p.workspaceId == liveWorkspace.id);
+    final ids = <String>{};
+    for (final doc in d.plans) {
+      final id = doc['id'] as String;
+      ids.add(id);
+      final p = _adoptDoc(doc);
+      final run = d.planRuns[id];
+      if (run != null) applyRun(p, run);
+      projects.add(p);
+    }
+    _livePlans.removeWhere((id, _) => !ids.contains(id));
+    if (openProjectId != null && !projects.any((p) => p.id == openProjectId)) {
+      openProjectId = null;
+    }
+  }
+
+  Project _adoptDoc(Map<String, dynamic> doc) {
+    final id = doc['id'] as String;
+    final key = canonical(doc);
+    final known = _livePlans[id];
+    if (known != null && known.$1 == key) return known.$2;
+    final repoName =
+        daemon!.projects
+            .where((r) => r['id'] == doc['project_id'])
+            .map((r) => r['name'] as String)
+            .firstOrNull ??
+        '${doc['project_id']}';
+    final p = projectFromDoc(
+      doc,
+      workspaceId: liveWorkspace.id,
+      repoName: repoName,
+    );
+    _livePlans[id] = (key, p);
+    return p;
+  }
+
+  /// The daemon document of a live plan, if [plan] is one.
+  Map<String, dynamic>? _liveDoc(Plan plan) {
+    final p = projects
+        .where((p) => p.plan == plan && p.workspaceId == liveWorkspace.id)
+        .firstOrNull;
+    if (p == null) return null;
+    return daemon!.plans.where((d) => d['id'] == p.id).firstOrNull;
+  }
+
+  /// Sends a live plan's review state to the daemon; its echo is
+  /// recognized and keeps the objects on screen.
+  void _persist(Plan plan) {
+    final doc = _liveDoc(plan);
+    if (doc == null) return;
+    final p = _livePlans[doc['id']]!.$2;
+    final saved = {...doc, 'state': planState(p)};
+    _livePlans[p.id] = (canonical(saved), p);
+    daemon!.savePlan(saved);
+  }
+
+  bool isLiveProject(Project p) => p.workspaceId == liveWorkspace.id;
+
+  /// Live: puts a failed or stopped card back in line.
+  void retryCard(Project p, TaskCard c) {
+    if (isLiveProject(p)) daemon!.retryCard(p.id, c.number);
   }
 
   static LayoutNode _clearMissing(LayoutNode n, Set<String> ids) => switch (n) {
@@ -277,7 +348,7 @@ class HarnessStore extends ChangeNotifier {
       projects.where((p) => p.workspaceId == workspaceId).toList();
   Project? get openProject => openProjectId == null
       ? null
-      : projects.firstWhere((p) => p.id == openProjectId);
+      : projects.where((p) => p.id == openProjectId).firstOrNull;
 
   /// The workspace account with the most room left in its 5h window.
   Account get freestAccount => workspaceAccounts.reduce(
@@ -504,17 +575,25 @@ class HarnessStore extends ChangeNotifier {
         Comment('Você', body, DateTime.now()),
       ]),
     );
+    _persist(plan);
     notifyListeners();
   }
+
+  Plan? _planOf(CommentThread t) => projects
+      .map((p) => p.plan)
+      .where((pl) => pl?.threads.contains(t) ?? false)
+      .firstOrNull;
 
   void reply(CommentThread t, String body) {
     t.messages.add(Comment('Você', body, DateTime.now()));
     t.resolved = false;
+    if (_planOf(t) case final plan?) _persist(plan);
     notifyListeners();
   }
 
   void setResolved(CommentThread t, bool resolved) {
     t.resolved = resolved;
+    if (_planOf(t) case final plan?) _persist(plan);
     notifyListeners();
   }
 
@@ -525,6 +604,11 @@ class HarnessStore extends ChangeNotifier {
     section
       ..approvedDigest = section.digest
       ..approvedAt = DateTime.now();
+    final plan = projects
+        .map((p) => p.plan)
+        .where((pl) => pl?.sections.contains(section) ?? false)
+        .firstOrNull;
+    if (plan != null) _persist(plan);
     notifyListeners();
   }
 
@@ -535,6 +619,19 @@ class HarnessStore extends ChangeNotifier {
   void requestPlanReview(Plan plan) {
     final pending = plan.threads.where((t) => t.awaitingAgent).toList();
     if (pending.isEmpty || plan.reviewing) return;
+    final doc = _liveDoc(plan);
+    if (doc != null) {
+      // The planning session answers through save_plan; the daemon's
+      // busy flag drives "reviewing".
+      daemon!.askPlanner(
+        doc['id'] as String,
+        _liveAccount,
+        reviewRequest(plan),
+      );
+      plan.reviewing = true;
+      notifyListeners();
+      return;
+    }
     plan.reviewing = true;
     notifyListeners();
     _later(const Duration(milliseconds: 1500), () {
@@ -590,8 +687,70 @@ class HarnessStore extends ChangeNotifier {
       p.cards.first.notes.addAll(carried.map((c) => Comment('Claude', c, now)));
     }
     plan.startedAt = now;
-    runReady(p);
+    if (isLiveProject(p)) {
+      // The daemon starts the ready cards in worktrees and moves them with
+      // their PRs.
+      _persist(plan);
+      daemon!.startPlan(p.id, _liveAccount, cardSpecs(p));
+    } else {
+      runReady(p);
+    }
     notifyListeners();
+  }
+
+  /// The account live plans run on: the one with the most 5h room.
+  String get _liveAccount {
+    final live = accounts.where((a) => a.workspaceId == liveWorkspace.id);
+    return live
+        .reduce(
+          (a, b) => a.fiveHour.usedPercent <= b.fiveHour.usedPercent ? a : b,
+        )
+        .id;
+  }
+
+  /// Live: a plan in [repoId] (a daemon repository), from a template
+  /// drafted by a real planning session, or from pasted markdown.
+  Project createLivePlan({
+    required String repoId,
+    required String name,
+    String description = '',
+    List<String> links = const [],
+    PlanTemplate? template,
+    String? markdown,
+  }) {
+    final d = daemon!;
+    final repoName =
+        d.projects
+            .where((r) => r['id'] == repoId)
+            .map((r) => r['name'] as String)
+            .firstOrNull ??
+        repoId;
+    final slug = foldAccents(
+      name,
+    ).replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-+|-+$'), '');
+    final id =
+        '${slug.isEmpty ? 'plano' : slug}-${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}';
+    final doc = <String, dynamic>{
+      'id': id,
+      'project_id': repoId,
+      'name': name,
+      'markdown':
+          markdown ??
+          newPlanMarkdown(template!, name, description, repoName, links),
+      'state': <String, Object?>{},
+      'planner': null,
+      'revision': 0,
+      // Drafting starts right away: show it before the daemon confirms.
+      'busy': markdown == null,
+    };
+    d.plans = [...d.plans, doc];
+    d.savePlan(doc);
+    if (markdown == null) {
+      d.askPlanner(id, _liveAccount, draftRequest(name, description, links));
+    }
+    _syncLivePlans(d);
+    openProjectView(id);
+    return openProject!;
   }
 
   /// "Novo plano" from a template: the planning session reads the sources
@@ -774,11 +933,19 @@ class HarnessStore extends ChangeNotifier {
 
   void addCardNote(TaskCard c, String body) {
     c.notes.add(Comment('Você', body, DateTime.now()));
+    final plan = projects
+        .map((p) => p.plan)
+        .where((pl) => pl?.proposedCards.contains(c) ?? false)
+        .firstOrNull;
+    if (plan != null) _persist(plan);
     notifyListeners();
   }
 
-  List<TaskCard> readyCards(Project p) =>
-      p.cards.where((c) => p.columnOf(c) == KanbanColumn.ready).toList();
+  /// Cards you can start by hand. Live plans have none: the daemon starts
+  /// them as dependencies merge and slots free up.
+  List<TaskCard> readyCards(Project p) => isLiveProject(p)
+      ? const []
+      : p.cards.where((c) => p.columnOf(c) == KanbanColumn.ready).toList();
 
   int runningCount(Project p) =>
       p.cards.where((c) => c.state == CardState.running).length;
@@ -903,7 +1070,9 @@ class HarnessStore extends ChangeNotifier {
     super.dispose();
   }
 
-  String _nextId(String prefix) => '$prefix-${++_ids}';
+  /// Unique across app restarts too: live plans keep thread ids.
+  String _nextId(String prefix) =>
+      '$prefix-${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}${++_ids}';
 
   static LayoutLeaf _firstLeaf(LayoutNode n) => switch (n) {
     LayoutLeaf() => n,

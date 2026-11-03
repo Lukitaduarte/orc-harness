@@ -82,6 +82,15 @@ class _PlanViewState extends State<PlanView> {
                   ? 'em execução desde ${_time(plan.startedAt!)}'
                   : '${plan.approvedCount}/$total seções aprovadas',
             ).xSmall().muted(),
+            const Spacer(),
+            if (plan.plannerSession case final id?
+                when store.sessions.any((s) => s.id == id))
+              GhostButton(
+                size: ButtonSize.small,
+                leading: const Icon(LucideIcons.terminal, size: 12),
+                onPressed: () => store.showSession(id),
+                child: const Text('Sessão de planejamento'),
+              ),
           ],
         ),
         const Gap(6),

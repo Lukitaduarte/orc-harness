@@ -202,6 +202,11 @@ class TaskCard {
   CardState state;
   String? sessionId;
   int? pr;
+  String? prUrl;
+
+  /// Why a live card is not moving (did not start, or its session ended
+  /// without a PR); it can be retried.
+  String? halt;
   final String description;
 
   /// Acceptance criteria; the card is done when all hold.
@@ -585,6 +590,9 @@ class Plan {
   /// True while the agent is still reading the sources (new plans).
   bool drafting = false;
   DateTime? startedAt;
+
+  /// Live: the Claude session writing this plan, while it lives.
+  String? plannerSession;
 
   PlanSection section(String id) => sections.firstWhere((s) => s.id == id);
 

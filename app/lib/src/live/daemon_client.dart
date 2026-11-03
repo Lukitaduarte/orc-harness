@@ -117,6 +117,35 @@ class DaemonClient extends ChangeNotifier {
   /// Local repositories the daemon makes worktrees from.
   List<Map<String, dynamic>> projects = [];
 
+  /// Plans (orc_protocol::PlanDoc JSON) and, per started plan, its cards
+  /// (orc_protocol::CardRun JSON).
+  List<Map<String, dynamic>> plans = [];
+  final planRuns = <String, List<Map<String, dynamic>>>{};
+
+  void savePlan(Map<String, Object?> doc) =>
+      send({'type': 'save_plan', 'plan': doc});
+
+  void startPlan(
+    String planId,
+    String accountId,
+    List<Map<String, Object?>> cards,
+  ) => send({
+    'type': 'start_plan',
+    'plan_id': planId,
+    'account_id': accountId,
+    'cards': cards,
+  });
+
+  void retryCard(String planId, int number) =>
+      send({'type': 'retry_card', 'plan_id': planId, 'number': number});
+
+  void askPlanner(String planId, String accountId, String request) => send({
+    'type': 'ask_planner',
+    'plan_id': planId,
+    'account_id': accountId,
+    'request': request,
+  });
+
   /// Last diff per session: (base branch, files).
   final diffs = <String, (String, List<Map<String, dynamic>>)>{};
 
@@ -344,6 +373,13 @@ class DaemonClient extends ChangeNotifier {
         notifyListeners();
       case 'projects':
         projects = (m['projects'] as List).cast<Map<String, dynamic>>();
+        notifyListeners();
+      case 'plans':
+        plans = (m['plans'] as List).cast<Map<String, dynamic>>();
+        notifyListeners();
+      case 'plan_run':
+        planRuns[m['plan_id'] as String] = (m['cards'] as List)
+            .cast<Map<String, dynamic>>();
         notifyListeners();
       case 'diff':
         diffs[m['session_id'] as String] = (

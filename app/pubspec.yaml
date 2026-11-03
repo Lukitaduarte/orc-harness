@@ -14,6 +14,7 @@ dependencies:
     path: rust_builder
   path_provider: ^2.1.6
   shadcn_flutter: ^0.0.53
+  url_launcher: ^6.3.2
   yaml: ^3.1.4
 
 dev_dependencies:
