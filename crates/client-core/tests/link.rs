@@ -22,9 +22,15 @@ async fn start_daemon(dir: &std::path::Path) -> (Daemon, Remote) {
             socket: dir.join("orcd.sock"),
             otlp_metrics: None,
         },
-        vec![Account { id: "work-main".into(), config_dir: None }],
+        vec![Account { id: "work-main".into(), config_dir: None, gh_config_dir: None }],
         std::sync::Arc::new(orc_daemon::secrets::SecretStore::memory()),
-    ), orc_daemon::catalog::Catalog::load(dir).unwrap(), orc_daemon::usage::UsageStore::load(dir.join("usage.jsonl")));
+    ), orc_daemon::catalog::Catalog::load(dir).unwrap(), orc_daemon::usage::UsageStore::load(dir.join("usage.jsonl")),
+        orc_daemon::projects::Projects::load(dir.join("projects.json")),
+        orc_daemon::server::GitPaths {
+            worktrees: dir.join("worktrees"),
+            hooks: dir.join("hooks"),
+            commit_check: "/usr/bin/true".into(),
+        });
     let key = orc_link::load_or_create_key(&dir.join("daemon.key")).unwrap();
     let endpoint = orc_link::endpoint(key, &[orc_link::ALPN_PAIR, orc_link::ALPN_MAIN])
         .await

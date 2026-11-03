@@ -10,7 +10,8 @@ use orc_daemon::config;
 use orc_daemon::manager::{ManagerConfig, SessionManager};
 use orc_daemon::remote::{Devices, Remote};
 use orc_daemon::secrets::{self, SecretStore};
-use orc_daemon::server::Daemon;
+use orc_daemon::projects::Projects;
+use orc_daemon::server::{Daemon, GitPaths};
 use orc_daemon::usage::UsageStore;
 use orc_protocol::DaemonMessage;
 use orc_daemon::session::{Session, SessionSpec};
@@ -59,6 +60,12 @@ fn main() -> std::io::Result<()> {
                 manager,
                 Catalog::load(&home)?,
                 UsageStore::load(home.join("usage.jsonl")),
+                Projects::load(home.join("projects.json")),
+                GitPaths {
+                    worktrees: home.join("worktrees"),
+                    hooks: home.join("hooks"),
+                    commit_check: bin_dir.join("orc-commit-check"),
+                },
             );
             runtime.block_on(async move {
                 tokio::spawn(daemon.clone().serve_otlp(otlp));

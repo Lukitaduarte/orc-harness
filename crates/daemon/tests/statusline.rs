@@ -47,9 +47,15 @@ fn daemon(dir: &std::path::Path, socket: &std::path::Path) -> Daemon {
             socket: socket.to_path_buf(),
             otlp_metrics: None,
         },
-        vec![Account { id: "work-main".into(), config_dir: None }],
+        vec![Account { id: "work-main".into(), config_dir: None, gh_config_dir: None }],
         std::sync::Arc::new(orc_daemon::secrets::SecretStore::memory()),
-    ), orc_daemon::catalog::Catalog::load(dir).unwrap(), orc_daemon::usage::UsageStore::load(dir.join("usage.jsonl")))
+    ), orc_daemon::catalog::Catalog::load(dir).unwrap(), orc_daemon::usage::UsageStore::load(dir.join("usage.jsonl")),
+        orc_daemon::projects::Projects::load(dir.join("projects.json")),
+        orc_daemon::server::GitPaths {
+            worktrees: dir.join("worktrees"),
+            hooks: dir.join("hooks"),
+            commit_check: env!("CARGO_BIN_EXE_orc-commit-check").into(),
+        })
 }
 
 #[tokio::test]

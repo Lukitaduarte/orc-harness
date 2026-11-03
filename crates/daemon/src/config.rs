@@ -2,7 +2,8 @@
 //!
 //! ```json
 //! { "claude": "claude",
-//!   "accounts": [ { "id": "trabalho", "config_dir": "~/.claude-trabalho" },
+//!   "accounts": [ { "id": "trabalho", "config_dir": "~/.claude-trabalho",
+//!                   "gh_config_dir": "~/.config/gh-trabalho" },
 //!                 { "id": "pessoal" } ] }
 //! ```
 //! An account without `config_dir` uses Claude Code's default folder.
@@ -37,7 +38,7 @@ fn expand(path: &str) -> PathBuf {
 pub fn load(path: &Path) -> std::io::Result<Config> {
     let default = || Config {
         claude: "claude".into(),
-        accounts: vec![Account { id: "default".into(), config_dir: None }],
+        accounts: vec![Account { id: "default".into(), config_dir: None, gh_config_dir: None }],
     };
     let Ok(raw) = std::fs::read(path) else {
         return Ok(default());
@@ -51,6 +52,7 @@ pub fn load(path: &Path) -> std::io::Result<Config> {
                     Some(Account {
                         id: a["id"].as_str()?.to_string(),
                         config_dir: a["config_dir"].as_str().map(expand),
+                        gh_config_dir: a["gh_config_dir"].as_str().map(expand),
                     })
                 })
                 .collect()

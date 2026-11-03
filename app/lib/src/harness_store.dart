@@ -103,13 +103,18 @@ class HarnessStore extends ChangeNotifier {
       if (before == null) added = l.id;
       final cwdName =
           l.cwd.split('/').where((p) => p.isNotEmpty).lastOrNull ?? l.id;
+      // A worktree session is named by its project and shows its branch.
+      final projectName = d.projects
+          .where((p) => p['id'] == l.projectId)
+          .map((p) => p['name'] as String)
+          .firstOrNull;
       sessions.add(
         Session(
           id: l.id,
           workspaceId: liveWorkspace.id,
           accountId: l.accountId,
-          name: cwdName,
-          branch: l.cwd,
+          name: projectName ?? cwdName,
+          branch: l.branch ?? l.cwd,
           model: l.model ?? 'padrão',
           state: switch (l.state) {
             'running' => SessionState.running,
@@ -356,6 +361,9 @@ class HarnessStore extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  /// The next session the daemon reports goes into the focused pane.
+  void prepareLiveAttach() => _attachNextLive = true;
 
   void newSession() {
     if (workspaceId == liveWorkspace.id) {

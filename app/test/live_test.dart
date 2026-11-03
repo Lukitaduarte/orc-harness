@@ -125,4 +125,34 @@ void main() {
     store.dispose();
     d.dispose();
   });
+
+  test('worktree sessions, diffs, PRs and search from the daemon', () {
+    final d = DaemonClient();
+    final store = HarnessStore(daemon: d);
+    d.handle('{"type":"hello","accounts":["work"]}');
+    d.handle(
+      '{"type":"projects","projects":[{"id":"web","name":"Plataforma Web","repo":"/r","base_branch":"main"}]}',
+    );
+    d.handle(
+      '{"type":"sessions","sessions":[{"id":"s1","account_id":"work","cwd":"/w/web/feat__1","state":"idle","model":null,"claude_session_id":"u","project_id":"web","branch":"feat/1-login"}]}',
+    );
+    store.selectWorkspace('live');
+    final s = store.session('s1');
+    expect((s.name, s.branch), ('Plataforma Web', 'feat/1-login'));
+
+    d.handle(
+      '{"type":"diff","session_id":"s1","base":"main","files":[{"path":"a.rs","status":"M","patch":"+x"}]}',
+    );
+    expect(d.diffs['s1']!.$1, 'main');
+    expect(d.diffs['s1']!.$2.single['path'], 'a.rs');
+    d.handle('{"type":"pr","session_id":"s1","pr":null}');
+    expect(d.prs.containsKey('s1'), isTrue);
+    expect(d.prs['s1'], isNull);
+    d.handle(
+      '{"type":"search_results","query":"login","hits":[{"path":"a.rs","line":3,"text":"fn login()"}],"truncated":false}',
+    );
+    expect(d.search!.$2.single['line'], 3);
+    store.dispose();
+    d.dispose();
+  });
 }

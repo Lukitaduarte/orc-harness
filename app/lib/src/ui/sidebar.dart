@@ -4,6 +4,7 @@ import '../harness_store.dart';
 import '../model.dart';
 import 'connect_dialog.dart';
 import 'format.dart';
+import 'repos.dart';
 import 'new_plan_dialog.dart';
 
 /// Narrow rail with one avatar per workspace, like Slack or Discord.
@@ -133,6 +134,11 @@ class Sidebar extends StatelessWidget {
           child: const Text('Nova sessão').small(),
         ),
         const Gap(16),
+        if (store.isLive) ...[
+          const _SectionLabel('Repositórios'),
+          RepoSection(store),
+          const Gap(16),
+        ],
         const _SectionLabel('Projetos'),
         for (final p in store.workspaceProjects)
           _ProjectRow(

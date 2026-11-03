@@ -8,6 +8,7 @@ import 'command_palette.dart';
 import 'kanban.dart';
 import 'panes.dart';
 import 'plan_view.dart';
+import 'search_dialog.dart';
 import 'profile_panel.dart';
 import 'sidebar.dart';
 
@@ -33,6 +34,12 @@ class WorkspaceScreen extends StatelessWidget {
                 openCommandPalette(context, store),
             const SingleActivator(LogicalKeyboardKey.keyK, control: true): () =>
                 openCommandPalette(context, store),
+            const SingleActivator(
+              LogicalKeyboardKey.keyF,
+              meta: true,
+              shift: true,
+            ): () =>
+                showSearchDialog(context, store),
           },
           child: Focus(
             autofocus: true,

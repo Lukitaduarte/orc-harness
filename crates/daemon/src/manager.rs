@@ -25,6 +25,9 @@ pub struct Account {
     pub id: String,
     /// `None` uses Claude Code's default config folder.
     pub config_dir: Option<PathBuf>,
+    /// The GitHub CLI login for this account (`GH_CONFIG_DIR`); `None`
+    /// uses gh's default.
+    pub gh_config_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -78,6 +81,14 @@ impl SessionManager {
         }
     }
 
+    pub fn account(&self, id: &str) -> Option<&Account> {
+        self.accounts.get(id)
+    }
+
+    pub fn summary(&self, id: &str) -> Option<SessionSummary> {
+        self.sessions.get(id).map(|m| m.summary.clone())
+    }
+
     pub fn account_ids(&self) -> Vec<String> {
         let mut ids: Vec<_> = self.accounts.keys().cloned().collect();
         ids.sort();
@@ -88,6 +99,19 @@ impl SessionManager {
         &mut self,
         account_id: &str,
         cwd: Option<PathBuf>,
+        profile: Profile,
+        cols: u16,
+        rows: u16,
+    ) -> std::io::Result<SessionSummary> {
+        self.create_in(account_id, cwd, None, profile, cols, rows)
+    }
+
+    /// Like `create`, for a session in a project worktree on `branch`.
+    pub fn create_in(
+        &mut self,
+        account_id: &str,
+        cwd: Option<PathBuf>,
+        project: Option<(String, String)>,
         profile: Profile,
         cols: u16,
         rows: u16,
@@ -110,6 +134,8 @@ impl SessionManager {
             state: SessionState::Starting,
             model: profile.model.clone(),
             claude_session_id: uuid::Uuid::new_v4().to_string(),
+            project_id: project.as_ref().map(|p| p.0.clone()),
+            branch: project.map(|p| p.1),
         };
         let spec = self.prepare(&summary, &account, &profile, cols, rows, false)?;
         let session = Session::spawn(&spec)?;
@@ -287,6 +313,12 @@ impl SessionManager {
             // Claude Code's default folder: never the daemon's inherited one.
             None => env_remove.push("CLAUDE_CONFIG_DIR".into()),
         }
+        match &account.gh_config_dir {
+            Some(dir) => {
+                env.insert("GH_CONFIG_DIR".into(), dir.display().to_string());
+            }
+            None => env_remove.push("GH_CONFIG_DIR".into()),
+        }
 
         Ok(SessionSpec {
             program: self.cfg.claude.clone(),
@@ -341,8 +373,8 @@ mod tests {
                 otlp_metrics: Some("http://127.0.0.1:4318/v1/metrics".into()),
             },
             vec![
-                Account { id: "work-main".into(), config_dir: Some("/cfg/work".into()) },
-                Account { id: "personal".into(), config_dir: None },
+                Account { id: "work-main".into(), config_dir: Some("/cfg/work".into()), gh_config_dir: None },
+                Account { id: "personal".into(), config_dir: None, gh_config_dir: None },
             ],
             std::sync::Arc::new(secrets),
         )

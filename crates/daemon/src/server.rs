@@ -14,10 +14,20 @@ use tokio::net::UnixListener;
 use tokio::sync::broadcast;
 
 use crate::catalog::{Catalog, mcp_env, test_mcp};
+use crate::git;
 use crate::manager::SessionManager;
+use crate::projects::Projects;
 use crate::quota::QuotaStore;
 use crate::usage::{UsageStore, day_of, parse_otlp};
 use crate::remote::Remote;
+
+/// Where worktrees and the commit hook live, and the hook's checker.
+#[derive(Clone, Debug)]
+pub struct GitPaths {
+    pub worktrees: PathBuf,
+    pub hooks: PathBuf,
+    pub commit_check: PathBuf,
+}
 
 #[derive(Clone)]
 pub struct Daemon {
@@ -25,6 +35,8 @@ pub struct Daemon {
     pub sessions: Arc<Mutex<SessionManager>>,
     pub catalog: Arc<Mutex<Catalog>>,
     pub usage: Arc<Mutex<UsageStore>>,
+    pub projects: Arc<Mutex<Projects>>,
+    pub git: GitPaths,
     /// Everything clients should see; each connection subscribes.
     pub events: broadcast::Sender<DaemonMessage>,
     /// Set once iroh is up; mints pairing tickets for `orcd pair`.
@@ -32,12 +44,20 @@ pub struct Daemon {
 }
 
 impl Daemon {
-    pub fn new(sessions: SessionManager, catalog: Catalog, usage: UsageStore) -> Self {
+    pub fn new(
+        sessions: SessionManager,
+        catalog: Catalog,
+        usage: UsageStore,
+        projects: Projects,
+        git: GitPaths,
+    ) -> Self {
         Self {
             quotas: Arc::default(),
             sessions: Arc::new(Mutex::new(sessions)),
             catalog: Arc::new(Mutex::new(catalog)),
             usage: Arc::new(Mutex::new(usage)),
+            projects: Arc::new(Mutex::new(projects)),
+            git,
             events: broadcast::channel(1024).0,
             remote: Arc::default(),
         }
@@ -95,6 +115,7 @@ impl Daemon {
             DaemonMessage::Hello { accounts: sessions.account_ids() },
             DaemonMessage::Sessions { sessions: sessions.list() },
             catalog,
+            DaemonMessage::Projects { projects: self.projects.lock().unwrap().list() },
         ];
         let usage = self.usage.lock().unwrap();
         for s in sessions.list() {
@@ -111,6 +132,13 @@ impl Daemon {
             }
         }
         out
+    }
+
+    /// A project session's folder and its project's base branch.
+    fn session_base(&self, session_id: &str) -> Option<(PathBuf, String)> {
+        let s = self.sessions.lock().unwrap().summary(session_id)?;
+        let base = self.projects.lock().unwrap().get(s.project_id.as_deref()?)?.base_branch.clone();
+        Some((PathBuf::from(s.cwd), base))
     }
 
     fn catalog_message(&self) -> DaemonMessage {
@@ -234,6 +262,86 @@ impl Daemon {
                     .unwrap_or(0);
                 let since = day_of(now.saturating_sub(u128::from(days) * 86_400 * 1_000_000_000));
                 return vec![DaemonMessage::UsageReport { rows: self.usage.lock().unwrap().report(&since) }];
+            }
+            ClientMessage::AddProject { name, repo, base_branch } => {
+                let mut projects = self.projects.lock().unwrap();
+                if let Err(e) = projects.add(&name, &repo, &base_branch) {
+                    return error(e);
+                }
+                emit(DaemonMessage::Projects { projects: projects.list() });
+            }
+            ClientMessage::RemoveProject { id } => {
+                let mut projects = self.projects.lock().unwrap();
+                if let Err(e) = projects.remove(&id) {
+                    return error(e);
+                }
+                emit(DaemonMessage::Projects { projects: projects.list() });
+            }
+            ClientMessage::CreateWorktreeSession { project_id, branch, account_id, profile, cols, rows } => {
+                let Some(project) = self.projects.lock().unwrap().get(&project_id).cloned() else {
+                    return vec![DaemonMessage::Error { message: format!("projeto desconhecido: {project_id}") }];
+                };
+                let repo = PathBuf::from(&project.repo);
+                let path = git::worktree_path(&self.git.worktrees, &project.id, &branch);
+                if let Err(e) = git::worktree_add(&repo, &path, &branch, &project.base_branch)
+                    .and_then(|_| git::enable_commit_check(&repo, &path, &self.git.hooks, &self.git.commit_check))
+                {
+                    return error(e);
+                }
+                let mut sessions = self.sessions.lock().unwrap();
+                if let Err(e) = sessions.create_in(&account_id, Some(path), Some((project.id, branch)), profile, cols, rows) {
+                    return error(e);
+                }
+                emit(DaemonMessage::Sessions { sessions: sessions.list() });
+            }
+            ClientMessage::Diff { session_id } => {
+                let Some((cwd, base)) = self.session_base(&session_id) else {
+                    return vec![DaemonMessage::Error { message: "a sessão não está num projeto".into() }];
+                };
+                return match git::diff(&cwd, &base) {
+                    Ok(files) => vec![DaemonMessage::Diff { session_id, base, files }],
+                    Err(e) => error(e),
+                };
+            }
+            ClientMessage::Search { project_id, session_id, query, regex } => {
+                let root = match (&session_id, &project_id) {
+                    (Some(s), _) => self.sessions.lock().unwrap().summary(s).map(|s| PathBuf::from(s.cwd)),
+                    (None, Some(p)) => self.projects.lock().unwrap().get(p).map(|p| PathBuf::from(&p.repo)),
+                    _ => None,
+                };
+                let Some(root) = root else {
+                    return vec![DaemonMessage::Error { message: "nada para buscar".into() }];
+                };
+                return match git::search(&root, &query, regex, 500) {
+                    Ok((hits, truncated)) => vec![DaemonMessage::SearchResults { query, hits, truncated }],
+                    Err(e) => vec![DaemonMessage::Error { message: e }],
+                };
+            }
+            ClientMessage::PrStatus { session_id } => {
+                let sessions = self.sessions.lock().unwrap();
+                let Some(s) = sessions.summary(&session_id) else { return Vec::new() };
+                let (Some(branch), gh_dir) = (s.branch.clone(), sessions.account(&s.account_id).and_then(|a| a.gh_config_dir.clone())) else {
+                    return vec![DaemonMessage::Error { message: "a sessão não tem branch".into() }];
+                };
+                let events = self.events.clone();
+                // gh goes to the network: off the async runtime.
+                std::thread::spawn(move || {
+                    let mut cmd = std::process::Command::new("gh");
+                    cmd.current_dir(&s.cwd).args([
+                        "pr", "view", &branch, "--json",
+                        "number,title,state,url,isDraft,reviewDecision,statusCheckRollup",
+                    ]);
+                    match &gh_dir {
+                        Some(dir) => { cmd.env("GH_CONFIG_DIR", dir); }
+                        None => { cmd.env_remove("GH_CONFIG_DIR"); }
+                    }
+                    let pr = cmd
+                        .output()
+                        .ok()
+                        .filter(|o| o.status.success())
+                        .and_then(|o| serde_json::from_slice(&o.stdout).ok());
+                    let _ = events.send(DaemonMessage::Pr { session_id, pr });
+                });
             }
             ClientMessage::ListSessions => {
                 return vec![DaemonMessage::Sessions {

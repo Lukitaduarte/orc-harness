@@ -4,6 +4,7 @@ import '../harness_store.dart';
 import '../model.dart';
 import 'format.dart';
 import 'new_plan_dialog.dart';
+import 'search_dialog.dart';
 import 'template_editor.dart';
 
 class _Cmd {
@@ -140,6 +141,12 @@ List<_Cmd> _commands(BuildContext context, HarnessStore store) {
       'Novo template de plan mode',
       LucideIcons.filePlus,
       () => showTemplateEditor(context, store),
+    ),
+    _Cmd(
+      'Código',
+      'Buscar no código (⌘⇧F)',
+      LucideIcons.search,
+      () => showSearchDialog(context, store),
     ),
     _Cmd(
       'Uso',

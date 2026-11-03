@@ -13,7 +13,15 @@ enum LinkStatus { disconnected, connecting, connected }
 
 /// One session as the daemon reports it (orc_protocol::SessionSummary).
 class LiveSession {
-  const LiveSession(this.id, this.accountId, this.cwd, this.state, this.model);
+  const LiveSession(
+    this.id,
+    this.accountId,
+    this.cwd,
+    this.state,
+    this.model, {
+    this.projectId,
+    this.branch,
+  });
 
   final String id;
   final String accountId;
@@ -29,9 +37,23 @@ class LiveSession {
     j['cwd'] as String,
     j['state'] as String,
     j['model'] as String?,
+    projectId: j['project_id'] as String?,
+    branch: j['branch'] as String?,
   );
 
-  LiveSession withState(String s) => LiveSession(id, accountId, cwd, s, model);
+  /// Set when the session runs in a project worktree.
+  final String? projectId;
+  final String? branch;
+
+  LiveSession withState(String s) => LiveSession(
+    id,
+    accountId,
+    cwd,
+    s,
+    model,
+    projectId: projectId,
+    branch: branch,
+  );
 }
 
 class LiveQuota {
@@ -74,6 +96,57 @@ class DaemonClient extends ChangeNotifier {
   /// The daemon's catalog (orc_protocol::CatalogEntry JSON) and templates.
   List<Map<String, dynamic>> catalog = [];
   List<Map<String, dynamic>> templates = [];
+
+  /// Local repositories the daemon makes worktrees from.
+  List<Map<String, dynamic>> projects = [];
+
+  /// Last diff per session: (base branch, files).
+  final diffs = <String, (String, List<Map<String, dynamic>>)>{};
+
+  /// Last PR status per session (gh pr view JSON), null when no PR.
+  final prs = <String, Map<String, dynamic>?>{};
+
+  /// Last search: (query, hits, truncated).
+  (String, List<Map<String, dynamic>>, bool)? search;
+
+  void addProject(String name, String repo, String base) => send({
+    'type': 'add_project',
+    'name': name,
+    'repo': repo,
+    'base_branch': base,
+  });
+
+  void createWorktreeSession(
+    String projectId,
+    String branch,
+    String accountId,
+  ) => send({
+    'type': 'create_worktree_session',
+    'project_id': projectId,
+    'branch': branch,
+    'account_id': accountId,
+    'profile': <String, Object?>{},
+    'cols': 100,
+    'rows': 30,
+  });
+
+  void requestDiff(String sessionId) {
+    send({'type': 'diff', 'session_id': sessionId});
+    send({'type': 'pr_status', 'session_id': sessionId});
+  }
+
+  void runSearch(
+    String query, {
+    String? sessionId,
+    String? projectId,
+    bool regex = false,
+  }) => send({
+    'type': 'search',
+    'session_id': sessionId,
+    'project_id': projectId,
+    'query': query,
+    'regex': regex,
+  });
 
   /// Running totals per session: (tokens, cost in USD).
   final usage = <String, (int, double)>{};
@@ -234,6 +307,25 @@ class DaemonClient extends ChangeNotifier {
               );
             }(),
         ];
+        notifyListeners();
+      case 'projects':
+        projects = (m['projects'] as List).cast<Map<String, dynamic>>();
+        notifyListeners();
+      case 'diff':
+        diffs[m['session_id'] as String] = (
+          m['base'] as String,
+          (m['files'] as List).cast<Map<String, dynamic>>(),
+        );
+        notifyListeners();
+      case 'pr':
+        prs[m['session_id'] as String] = m['pr'] as Map<String, dynamic>?;
+        notifyListeners();
+      case 'search_results':
+        search = (
+          m['query'] as String,
+          (m['hits'] as List).cast<Map<String, dynamic>>(),
+          m['truncated'] as bool,
+        );
         notifyListeners();
       case 'mcp_test':
         mcpTests[m['id'] as String] = (

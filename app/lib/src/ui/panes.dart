@@ -4,6 +4,7 @@ import '../harness_store.dart';
 import '../model.dart';
 import '../live/grid.dart';
 import '../live/live_terminal.dart';
+import 'diff_dialog.dart';
 import 'format.dart';
 
 /// Renders the split tree. Each split is a resizable panel; each leaf a pane.
@@ -118,6 +119,20 @@ class _Pane extends StatelessWidget {
           ] else
             const Text('Pane vazio').small().muted(),
           const Spacer(),
+          // A worktree session: its changes and PR.
+          if (s != null &&
+              s.live &&
+              (store.daemon?.sessions.any(
+                    (l) => l.id == s.id && l.projectId != null,
+                  ) ??
+                  false))
+            Builder(
+              builder: (context) => _iconButton(
+                LucideIcons.gitCompare,
+                'Mudanças e PR',
+                () => showDiffDialog(context, store, s.id),
+              ),
+            ),
           _iconButton(
             LucideIcons.columns2,
             'Dividir lado a lado',

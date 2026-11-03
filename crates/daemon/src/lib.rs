@@ -2,6 +2,8 @@
 
 pub mod catalog;
 pub mod config;
+pub mod git;
+pub mod projects;
 pub mod manager;
 pub mod quota;
 pub mod remote;

@@ -288,6 +288,32 @@ pub struct UsageRow {
     pub usage: Usage,
 }
 
+/// A local repository the daemon creates worktrees from.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProjectInfo {
+    pub id: String,
+    pub name: String,
+    /// Path of the main clone.
+    pub repo: String,
+    pub base_branch: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DiffFile {
+    pub path: String,
+    /// A, M, D, R… as git reports it; `?` for untracked.
+    pub status: String,
+    /// Unified diff of the file; empty for untracked files.
+    pub patch: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SearchHit {
+    pub path: String,
+    pub line: u32,
+    pub text: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionSummary {
     pub id: String,
@@ -297,6 +323,11 @@ pub struct SessionSummary {
     pub model: Option<String>,
     /// Claude Code's own session id, used for `--resume`.
     pub claude_session_id: String,
+    /// Set when the session runs in a project worktree.
+    #[serde(default)]
+    pub project_id: Option<String>,
+    #[serde(default)]
+    pub branch: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -337,6 +368,24 @@ pub enum ClientMessage {
     RemoveTemplate { id: String },
     /// Usage per day, account and model for the last `days` days.
     UsageReport { days: u32 },
+    AddProject { name: String, repo: String, base_branch: String },
+    RemoveProject { id: String },
+    /// A worktree on `branch` (created from the base if new) and a session
+    /// in it, with conventional commits enforced.
+    CreateWorktreeSession {
+        project_id: String,
+        branch: String,
+        account_id: String,
+        profile: Profile,
+        cols: u16,
+        rows: u16,
+    },
+    /// Changes of the session's worktree against its base branch.
+    Diff { session_id: String },
+    /// Text search (regex when `regex`) in a project or session folder.
+    Search { project_id: Option<String>, session_id: Option<String>, query: String, regex: bool },
+    /// The GitHub PR of the session's branch, through `gh`.
+    PrStatus { session_id: String },
     /// Keystrokes or pasted text for a session's terminal.
     Input { session_id: String, data: String },
     Resize { session_id: String, cols: u16, rows: u16 },
@@ -365,6 +414,11 @@ pub enum DaemonMessage {
     /// A session's running totals, sent as metrics arrive.
     SessionUsage { session_id: String, usage: Usage },
     UsageReport { rows: Vec<UsageRow> },
+    Projects { projects: Vec<ProjectInfo> },
+    Diff { session_id: String, base: String, files: Vec<DiffFile> },
+    SearchResults { query: String, hits: Vec<SearchHit>, truncated: bool },
+    /// `gh pr view` JSON (number, state, url, checks, review), or `none`.
+    Pr { session_id: String, pr: Option<serde_json::Value> },
 }
 
 #[cfg(test)]
