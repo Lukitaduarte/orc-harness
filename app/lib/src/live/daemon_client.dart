@@ -127,6 +127,19 @@ class DaemonClient extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Things worth telling you when you are not looking: (title, body).
+  /// Set by the app (system notifications); only changes, never replays.
+  void Function(String title, String body)? onAlert;
+
+  /// A session as you know it: its branch, else its folder's name.
+  String sessionLabel(String id) {
+    final s = sessions.where((s) => s.id == id).firstOrNull;
+    if (s == null) return id;
+    return s.branch ??
+        s.cwd.split('/').where((p) => p.isNotEmpty).lastOrNull ??
+        id;
+  }
+
   /// Workspaces (orc_protocol::WorkspaceInfo JSON); empty until reported.
   List<Map<String, dynamic>> workspaces = [];
 
@@ -384,6 +397,16 @@ class DaemonClient extends ChangeNotifier {
         }
         notifyListeners();
       case 'session_state':
+        final before = sessions
+            .where((s) => s.id == m['session_id'])
+            .firstOrNull
+            ?.state;
+        if (m['state'] == 'waiting_input' && before != 'waiting_input') {
+          onAlert?.call(
+            'Esperando você',
+            '${sessionLabel(m['session_id'] as String)} precisa de uma resposta.',
+          );
+        }
         sessions = [
           for (final s in sessions)
             s.id == m['session_id'] ? s.withState(m['state'] as String) : s,
@@ -453,6 +476,10 @@ class DaemonClient extends ChangeNotifier {
         ];
         notifyListeners();
       case 'env_request':
+        onAlert?.call(
+          'Um agente pede uma env',
+          '${sessionLabel(m['session_id'] as String)} quer gravar ${m['name']}. Aprove ou recuse no app.',
+        );
         envRequests = [
           ...envRequests,
           (m['id'] as String, m['session_id'] as String, m['name'] as String),
@@ -479,8 +506,38 @@ class DaemonClient extends ChangeNotifier {
         plans = (m['plans'] as List).cast<Map<String, dynamic>>();
         notifyListeners();
       case 'plan_run':
-        planRuns[m['plan_id'] as String] = (m['cards'] as List)
-            .cast<Map<String, dynamic>>();
+        final id = m['plan_id'] as String;
+        final cards = (m['cards'] as List).cast<Map<String, dynamic>>();
+        final previous = {
+          for (final c in planRuns[id] ?? const <Map<String, dynamic>>[])
+            c['number']: c['state'],
+        };
+        // The first report (on connect) only sets the scene.
+        if (planRuns.containsKey(id)) {
+          final plan = plans.where((p) => p['id'] == id).firstOrNull;
+          final name = plan?['name'] ?? id;
+          for (final c in cards) {
+            final state = c['state'];
+            if (state == previous[c['number']]) continue;
+            final msg = switch (state) {
+              'review' => (
+                'PR aberto',
+                '$name · card #${c['number']} está em review.',
+              ),
+              'done' => (
+                'Card mergeado',
+                '$name · card #${c['number']} foi feito.',
+              ),
+              'failed' || 'stopped' => (
+                'Card parou',
+                '$name · card #${c['number']}: ${c['note'] ?? state}.',
+              ),
+              _ => null,
+            };
+            if (msg != null) onAlert?.call(msg.$1, msg.$2);
+          }
+        }
+        planRuns[id] = cards;
         notifyListeners();
       case 'dir_entries':
         dirs[(m['session_id'] as String, m['path'] as String)] =
