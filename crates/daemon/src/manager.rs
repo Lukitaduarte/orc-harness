@@ -344,10 +344,12 @@ impl SessionManager {
             ] {
                 env.insert(k.into(), v.into());
             }
-            env.insert(
-                "OTEL_RESOURCE_ATTRIBUTES".into(),
-                format!("orc.session={},orc.account={}", s.id, account.id),
-            );
+            // Project and branch (a plan's card) label the usage too.
+            let mut attrs = format!("orc.session={},orc.account={}", s.id, account.id);
+            if let (Some(project), Some(branch)) = (&s.project_id, &s.branch) {
+                attrs.push_str(&format!(",orc.project={project},orc.branch={branch}"));
+            }
+            env.insert("OTEL_RESOURCE_ATTRIBUTES".into(), attrs);
         }
         let mut env_remove = Vec::new();
         match &account.config_dir {

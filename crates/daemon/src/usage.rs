@@ -23,12 +23,19 @@ pub struct Point {
     /// input, output, cacheRead, cacheCreation or cost.
     pub kind: String,
     pub value: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
 }
+
+/// Day, account, model, project, branch.
+type DayKey = (String, String, String, Option<String>, Option<String>);
 
 pub struct UsageStore {
     log: PathBuf,
     by_session: HashMap<String, Usage>,
-    by_day: BTreeMap<(String, String, String), Usage>,
+    by_day: BTreeMap<DayKey, Usage>,
 }
 
 fn add(u: &mut Usage, kind: &str, v: f64) {
@@ -57,7 +64,7 @@ impl UsageStore {
 
     fn apply(&mut self, p: &Point) {
         add(self.by_session.entry(p.session_id.clone()).or_default(), &p.kind, p.value);
-        let key = (p.day.clone(), p.account_id.clone(), p.model.clone());
+        let key = (p.day.clone(), p.account_id.clone(), p.model.clone(), p.project.clone(), p.branch.clone());
         add(self.by_day.entry(key).or_default(), &p.kind, p.value);
     }
 
@@ -91,11 +98,13 @@ impl UsageStore {
     pub fn report(&self, since_day: &str) -> Vec<UsageRow> {
         self.by_day
             .iter()
-            .filter(|((day, _, _), _)| day.as_str() >= since_day)
-            .map(|((day, account, model), usage)| UsageRow {
+            .filter(|((day, ..), _)| day.as_str() >= since_day)
+            .map(|((day, account, model, project, branch), usage)| UsageRow {
                 day: day.clone(),
                 account_id: account.clone(),
                 model: model.clone(),
+                project_id: project.clone(),
+                branch: branch.clone(),
                 usage: *usage,
             })
             .collect()
@@ -163,6 +172,8 @@ pub fn parse_otlp(body: &Value) -> Vec<Point> {
                         model: get("model").unwrap_or("?").into(),
                         kind: kind.into(),
                         value,
+                        project: get("orc.project").map(String::from),
+                        branch: get("orc.branch").map(String::from),
                     });
                 }
             }
@@ -226,6 +237,23 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!((rows[0].day.as_str(), rows[0].model.as_str()), ("2026-11-02", "claude-opus-5-5"));
         assert!(again.report("2026-11-03").is_empty());
+    }
+
+    #[test]
+    fn project_sessions_are_labeled_by_branch() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut body = export("s2", "output", "claude_code.token.usage", json!(30.0));
+        let attrs = body["resourceMetrics"][0]["resource"]["attributes"].as_array_mut().unwrap();
+        attrs.push(json!({ "key": "orc.project", "value": { "stringValue": "web" } }));
+        attrs.push(json!({ "key": "orc.branch", "value": { "stringValue": "feat/1-login" } }));
+        let mut store = UsageStore::load(dir.path().join("u.jsonl"));
+        store.record(&parse_otlp(&body));
+        store.record(&parse_otlp(&export("s1", "output", "claude_code.token.usage", json!(5.0))));
+        let again = UsageStore::load(dir.path().join("u.jsonl"));
+        let rows = again.report("2026-01-01");
+        let labeled: Vec<_> = rows.iter().map(|r| (r.project_id.as_deref(), r.branch.as_deref(), r.usage.output)).collect();
+        assert!(labeled.contains(&(Some("web"), Some("feat/1-login"), 30)), "{labeled:?}");
+        assert!(labeled.contains(&(None, None, 5)), "{labeled:?}");
     }
 
     #[test]

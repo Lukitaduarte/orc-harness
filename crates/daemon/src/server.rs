@@ -56,6 +56,9 @@ pub struct Daemon {
     /// Workspace browsers, and the address each open one is at.
     pub browsers: Arc<Browsers>,
     browser_urls: Arc<Mutex<HashMap<String, String>>>,
+    /// Browser actions run one at a time, in arrival order (a click must
+    /// reach the page before the typing that follows it).
+    browser_queue: Arc<OnceLock<tokio::sync::mpsc::UnboundedSender<(String, BrowserAction)>>>,
     pub language_servers: crate::ide::LanguageServers,
 }
 
@@ -85,6 +88,7 @@ impl Daemon {
             remote: Arc::default(),
             browsers: Arc::new(Browsers::new(PathBuf::new(), None)),
             browser_urls: Arc::default(),
+            browser_queue: Arc::default(),
             language_servers: Default::default(),
         }
     }
@@ -672,12 +676,19 @@ impl Daemon {
                 let Ok(rt) = tokio::runtime::Handle::try_current() else {
                     return vec![DaemonMessage::Error { message: "navegador indisponível aqui".into() }];
                 };
-                let d = self.clone();
-                rt.spawn(async move {
-                    if let Err(message) = d.browser_action(&profile, action).await {
-                        let _ = d.events.send(DaemonMessage::Error { message });
-                    }
+                let queue = self.browser_queue.get_or_init(|| {
+                    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<(String, BrowserAction)>();
+                    let d = self.clone();
+                    rt.spawn(async move {
+                        while let Some((profile, action)) = rx.recv().await {
+                            if let Err(message) = d.browser_action(&profile, action).await {
+                                let _ = d.events.send(DaemonMessage::Error { message });
+                            }
+                        }
+                    });
+                    tx
                 });
+                let _ = queue.send((profile, action));
             }
             ClientMessage::StopSession { session_id } => {
                 self.language_servers.stop(&session_id);

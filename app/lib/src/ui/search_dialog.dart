@@ -1,6 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../live/lsp_client.dart';
 
 /// ⌘⇧F: text search in the focused session's folder, or the first
 /// repository. The daemon walks the files (gitignore honored).
@@ -38,6 +39,10 @@ class _SearchState extends State<_Search> {
   final _query = TextEditingController();
   bool _regex = false;
 
+  /// Symbols (classes, functions…) from the language server instead of text.
+  bool _symbols = false;
+  List<Map<String, dynamic>>? _symbolHits;
+
   @override
   void dispose() {
     _query.dispose();
@@ -57,10 +62,55 @@ class _SearchState extends State<_Search> {
     return (null, null, 'nada aberto');
   }
 
+  /// The session's main language: TypeScript with a package.json, else Dart.
+  String _language(String session) {
+    final root = widget.store.daemon!.dirs[(session, '')] ?? const [];
+    return root.any((e) => e['name'] == 'package.json') &&
+            !root.any((e) => e['name'] == 'pubspec.yaml')
+        ? 'typescript'
+        : 'dart';
+  }
+
+  Future<void> _runSymbols(String session, String q) async {
+    final lsp = widget.store.daemon!.lsp(session, _language(session));
+    await lsp.start();
+    final r = await lsp.request('workspace/symbol', {'query': q});
+    // Only the session's own files (servers also list SDK symbols); macOS
+    // may report /tmp-style paths under /private.
+    final root = Uri.directory(lsp.rootPath).toString();
+    final privateRoot = root.replaceFirst('file:///', 'file:///private/');
+    String? local(Object? uri) {
+      final u = '$uri';
+      if (u.startsWith(root)) return u.substring(root.length);
+      if (u.startsWith(privateRoot)) return u.substring(privateRoot.length);
+      return null;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _symbolHits = [
+        for (final s in (r is List ? r : const []).cast<Map<String, dynamic>>())
+          if (local(s['location']?['uri']) case final path?)
+            {
+              'name': s['name'],
+              'kind': symbolKind(s['kind'] as int? ?? 0),
+              'path': path,
+              'line':
+                  ((s['location']?['range']?['start']?['line'] as int?) ?? 0) +
+                  1,
+            },
+      ];
+    });
+  }
+
   void _run() {
     final q = _query.text.trim();
     final (session, project, _) = _scope();
     if (q.isEmpty || (session == null && project == null)) return;
+    if (_symbols) {
+      if (session != null) _runSymbols(session, q);
+      return;
+    }
     widget.store.daemon?.runSearch(
       q,
       sessionId: session,
@@ -110,6 +160,17 @@ class _SearchState extends State<_Search> {
                           child: const Text('.*'),
                         ),
                   const Gap(4),
+                  if (_scope().$1 != null)
+                    _symbols
+                        ? SecondaryButton(
+                            onPressed: () => setState(() => _symbols = false),
+                            child: const Text('Símbolos'),
+                          )
+                        : GhostButton(
+                            onPressed: () => setState(() => _symbols = true),
+                            child: const Text('Símbolos'),
+                          ),
+                  const Gap(4),
                   PrimaryButton(onPressed: _run, child: const Text('Buscar')),
                 ],
               ),
@@ -126,27 +187,49 @@ class _SearchState extends State<_Search> {
               child: ListView(
                 padding: const EdgeInsets.all(14),
                 children: [
-                  for (final h in result?.$2 ?? const <Map<String, dynamic>>[])
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(
-                            width: 260,
-                            child: Text(
+                  if (_symbols)
+                    for (final h
+                        in _symbolHits ?? const <Map<String, dynamic>>[])
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 90,
+                              child: Text('${h['kind']}').xSmall().muted(),
+                            ),
+                            Expanded(
+                              child: Text('${h['name']}').mono().xSmall(),
+                            ),
+                            Text(
                               '${h['path']}:${h['line']}',
-                              overflow: TextOverflow.ellipsis,
                             ).mono().xSmall().muted(),
-                          ),
-                          Expanded(
-                            child: Text(
-                              (h['text'] as String).trim(),
-                            ).mono().xSmall(),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
+                  if (!_symbols)
+                    for (final h
+                        in result?.$2 ?? const <Map<String, dynamic>>[])
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 260,
+                              child: Text(
+                                '${h['path']}:${h['line']}',
+                                overflow: TextOverflow.ellipsis,
+                              ).mono().xSmall().muted(),
+                            ),
+                            Expanded(
+                              child: Text(
+                                (h['text'] as String).trim(),
+                              ).mono().xSmall(),
+                            ),
+                          ],
+                        ),
+                      ),
                 ],
               ),
             ),

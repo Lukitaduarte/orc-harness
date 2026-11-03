@@ -644,8 +644,24 @@ class UsageRow {
     this.accountId,
     this.model,
     this.tokens,
-    this.costUsd,
-  );
+    this.costUsd, {
+    this.input = 0,
+    this.output = 0,
+    this.cacheRead = 0,
+    this.cacheCreation = 0,
+    this.projectId,
+    this.branch,
+  });
+
+  /// Tokens by type (they add up to [tokens]).
+  final int input;
+  final int output;
+  final int cacheRead;
+  final int cacheCreation;
+
+  /// Set for sessions in a project worktree; a branch is a plan's card.
+  final String? projectId;
+  final String? branch;
 
   /// YYYY-MM-DD, UTC.
   final String day;

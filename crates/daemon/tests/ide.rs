@@ -86,6 +86,11 @@ async fn files_and_the_dart_language_server() {
     let items = done["result"]["items"].as_array().or(done["result"].as_array()).unwrap().clone();
     assert!(items.iter().any(|i| i["label"].as_str().is_some_and(|l| l.starts_with("print"))), "{}", items.len());
 
+    // Symbol search across the folder.
+    lsp(json!({ "jsonrpc": "2.0", "id": 3, "method": "workspace/symbol", "params": { "query": "main" } }));
+    let symbols = wait(&|m| m["id"] == 3).await;
+    assert!(symbols["result"].as_array().unwrap().iter().any(|s| s["name"].as_str().is_some_and(|n| n.starts_with("main"))), "{symbols}");
+
     // Stopping the session stops its language server.
     daemon.handle(ClientMessage::StopSession { session_id: sid });
 }

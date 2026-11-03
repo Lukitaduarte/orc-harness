@@ -312,6 +312,11 @@ pub struct UsageRow {
     pub day: String,
     pub account_id: String,
     pub model: String,
+    /// Set for sessions in a project worktree (a branch is a plan's card).
+    #[serde(default)]
+    pub project_id: Option<String>,
+    #[serde(default)]
+    pub branch: Option<String>,
     pub usage: Usage,
 }
 

@@ -128,6 +128,22 @@ class LspClient extends ChangeNotifier {
   }
 }
 
+/// LSP SymbolKind as a word.
+String symbolKind(int k) => switch (k) {
+  5 => 'classe',
+  6 => 'método',
+  7 || 8 => 'campo',
+  9 => 'construtor',
+  10 => 'enum',
+  11 => 'interface',
+  12 => 'função',
+  13 => 'variável',
+  14 => 'constante',
+  22 => 'valor de enum',
+  23 => 'struct',
+  _ => 'símbolo',
+};
+
 /// The language a file is edited as, by extension (null: plain text).
 String? languageOf(String path) => switch (path.split('.').last) {
   'dart' => 'dart',

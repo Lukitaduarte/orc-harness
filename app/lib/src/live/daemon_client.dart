@@ -422,6 +422,12 @@ class DaemonClient extends ChangeNotifier {
                     (u['cache_read'] as int) +
                     (u['cache_creation'] as int),
                 (u['cost_usd'] as num).toDouble(),
+                input: u['input'] as int,
+                output: u['output'] as int,
+                cacheRead: u['cache_read'] as int,
+                cacheCreation: u['cache_creation'] as int,
+                projectId: r['project_id'] as String?,
+                branch: r['branch'] as String?,
               );
             }(),
         ];

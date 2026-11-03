@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
@@ -49,6 +51,23 @@ class _AnalyticsViewState extends State<AnalyticsView> {
     }
     final breakdown = byPair.entries.toList()
       ..sort((a, b) => b.value.$2.compareTo(a.value.$2));
+    // Where the money went: each branch of a project is a plan's card.
+    final byBranch = <(String?, String?), (int, double)>{};
+    for (final r in rows) {
+      final k = (r.projectId, r.branch);
+      final v = byBranch[k] ?? (0, 0.0);
+      byBranch[k] = (v.$1 + r.tokens, v.$2 + r.costUsd);
+    }
+    final branches = byBranch.entries.toList()
+      ..sort((a, b) => b.value.$2.compareTo(a.value.$2));
+    final types = (
+      rows.fold(0, (a, r) => a + r.input),
+      rows.fold(0, (a, r) => a + r.output),
+      rows.fold(0, (a, r) => a + r.cacheRead),
+      rows.fold(0, (a, r) => a + r.cacheCreation),
+    );
+    final prompt = types.$1 + types.$3 + types.$4;
+    final cacheHit = prompt == 0 ? null : types.$3 / prompt;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -92,7 +111,29 @@ class _AnalyticsViewState extends State<AnalyticsView> {
             _Stat('Tokens', formatTokens(totalTokens)),
             const Gap(12),
             _Stat('Média por dia', formatUsd(totalCost / _days)),
+            const Gap(12),
+            _Stat(
+              'Lido do cache',
+              cacheHit == null ? '—' : '${(cacheHit * 100).round()}%',
+            ),
           ],
+        ),
+        const Gap(16),
+        OutlinedContainer(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Tokens por tipo').semiBold(),
+              const Gap(12),
+              _TokenTypes([
+                ('Entrada', types.$1),
+                ('Saída', types.$2),
+                ('Lido do cache', types.$3),
+                ('Escrito no cache', types.$4),
+              ]),
+            ],
+          ),
         ),
         const Gap(16),
         OutlinedContainer(
@@ -143,6 +184,26 @@ class _AnalyticsViewState extends State<AnalyticsView> {
                     formatTokens(e.value.$1),
                     formatUsd(e.value.$2),
                   ]),
+            ],
+          ),
+        ),
+        const Gap(16),
+        OutlinedContainer(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Por projeto e branch (cards)').semiBold(),
+              const Gap(10),
+              _row(['Projeto', 'Branch', 'Tokens', 'Custo'], head: true),
+              const Divider(),
+              for (final e in branches)
+                _row([
+                  e.key.$1 ?? 'sessões soltas',
+                  e.key.$2 ?? '—',
+                  formatTokens(e.value.$1),
+                  formatUsd(e.value.$2),
+                ]),
             ],
           ),
         ),
@@ -411,4 +472,95 @@ class _BarsPainter extends CustomPainter {
   @override
   bool shouldRepaint(_BarsPainter old) =>
       old.values != values || old.hover != hover || old.bar != bar;
+}
+
+/// Share of each token type as one segmented bar, labeled in a legend with
+/// the numbers (identity never by color alone). Colors: the dataviz
+/// reference palette, validated for both modes.
+class _TokenTypes extends StatelessWidget {
+  const _TokenTypes(this.parts);
+
+  final List<(String, int)> parts;
+
+  static const _light = [
+    Color(0xFF2A78D6),
+    Color(0xFFEB6834),
+    Color(0xFF1BAF7A),
+    Color(0xFFEDA100),
+  ];
+  static const _dark = [
+    Color(0xFF3987E5),
+    Color(0xFFD95926),
+    Color(0xFF199E70),
+    Color(0xFFC98500),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final colors = scheme.brightness == Brightness.dark ? _dark : _light;
+    final total = parts.fold(0, (a, p) => a + p.$2);
+    if (total == 0) {
+      return const Text('Nenhum token no período.').small().muted();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: 12,
+          child: Row(
+            children: [
+              for (final (i, p) in parts.indexed)
+                if (p.$2 > 0)
+                  Expanded(
+                    flex: math.max(1, (p.$2 * 1000 / total).round()),
+                    child: Padding(
+                      // 2px surface gap between segments.
+                      padding: EdgeInsets.only(
+                        right: i == parts.length - 1 ? 0 : 2,
+                      ),
+                      child: Tooltip(
+                        tooltip: (context) => TooltipContainer(
+                          child: Text('${p.$1}: ${formatTokens(p.$2)}'),
+                        ),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: colors[i],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+            ],
+          ),
+        ),
+        const Gap(10),
+        Wrap(
+          spacing: 16,
+          runSpacing: 6,
+          children: [
+            for (final (i, p) in parts.indexed)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: colors[i],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const Gap(6),
+                  Text(
+                    '${p.$1} · ${formatTokens(p.$2)} · ${(p.$2 * 100 / total).toStringAsFixed(p.$2 * 100 / total < 1 ? 1 : 0)}%',
+                  ).xSmall(),
+                ],
+              ),
+          ],
+        ),
+      ],
+    );
+  }
 }

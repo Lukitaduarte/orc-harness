@@ -69,7 +69,7 @@ async fn workspace_browser_streams_takes_input_and_keeps_cookies() {
         orc_daemon::plans::Plans::load(dir.join("plans")),
         GitPaths { worktrees: dir.join("worktrees"), hooks: dir.join("hooks"), commit_check: "/usr/bin/true".into() },
     )
-    .with_browsers(Browsers::new(dir.join("browsers"), Some(chrome)));
+    .with_browsers(Browsers::new(dir.join("browsers"), Some(chrome.clone())));
     let mut events = daemon.events.subscribe();
     let port = serve_page();
     let url = format!("http://127.0.0.1:{port}/");
@@ -85,13 +85,19 @@ async fn workspace_browser_streams_takes_input_and_keeps_cookies() {
     assert_eq!((w, h), (1280, 800));
     assert!(daemon.hello().iter().any(|m| matches!(m, DaemonMessage::BrowserState { open: true, .. })));
 
-    // Click the field, type, press a named key.
+    // Click the field, type, press a named key (once the page loaded).
+    let b = daemon.browsers.running("work").await.unwrap();
+    for _ in 0..100 {
+        if b.evaluate("document.readyState").await.unwrap() == "complete" {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
     for kind in ["mousePressed", "mouseReleased"] {
         browser(BrowserAction::Input { event: json!({ "kind": "mouse", "type": kind, "x": 50, "y": 25, "button": "left", "clickCount": 1 }) });
     }
     browser(BrowserAction::Input { event: json!({ "kind": "text", "text": "olá" }) });
     browser(BrowserAction::Input { event: json!({ "kind": "key", "key": "Backspace" }) });
-    let b = daemon.browsers.running("work").await.unwrap();
     let mut value = json!(null);
     for _ in 0..50 {
         value = b.evaluate("document.querySelector('#q').value").await.unwrap();
@@ -137,4 +143,30 @@ async fn workspace_browser_streams_takes_input_and_keeps_cookies() {
             break;
         }
     }
+    // A Chrome outliving this test would linger: close it.
+    drop(b);
+    daemon.browsers.close("work").await;
+
+    // An orcd that died leaves its Chrome on the profile: the next launch
+    // closes it and starts its own.
+    let lock_pid = || {
+        std::fs::read_link(dir.join("browsers/orphan/SingletonLock"))
+            .ok()
+            .and_then(|t| t.to_string_lossy().rsplit('-').next()?.parse::<u32>().ok())
+    };
+    let dead = Browsers::new(dir.join("browsers"), Some(chrome.clone()));
+    std::mem::forget(dead.get("orphan", |_| {}).await.unwrap());
+    std::mem::forget(dead);
+    let old = lock_pid().expect("Chrome holds the profile");
+    let fresh = Browsers::new(dir.join("browsers"), Some(chrome));
+    let (n, _) = fresh.get("orphan", |_| {}).await.unwrap();
+    assert_eq!(n.evaluate("1 + 1").await.unwrap(), 2);
+    assert_ne!(lock_pid(), Some(old));
+    // Gone, or a zombie of this test process (a real orphan's parent is
+    // dead, so it gets reaped).
+    let out = std::process::Command::new("ps").args(["-p", &old.to_string(), "-o", "stat="]).output().unwrap();
+    let stat = String::from_utf8_lossy(&out.stdout);
+    assert!(stat.trim().is_empty() || stat.starts_with('Z'), "the orphan Chrome was closed: {stat}");
+    drop(n);
+    fresh.close("orphan").await;
 }

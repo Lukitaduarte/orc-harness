@@ -595,7 +595,33 @@ List<UsageRow> seedUsage(DateTime now) {
       ('personal-main', 'claude-opus-5-5', 1.1),
     ]) {
       final cost = base * wave(account.length) * (weekend ? 0.25 : 1);
-      rows.add(UsageRow(day, account, model, (cost * 260000).round(), cost));
+      final tokens = (cost * 260000).round();
+      // Opus work goes to the plan's cards; the rest is loose sessions.
+      final card = account == 'work-main' && model.contains('opus')
+          ? [
+              'feat/3-get-users-com-cursor',
+              'feat/4-tabela-de-usuarios-com-paginacao',
+            ][d % 2]
+          : null;
+      rows.add(
+        UsageRow(
+          day,
+          account,
+          model,
+          tokens,
+          cost,
+          input: (tokens * 0.08).round(),
+          output: (tokens * 0.04).round(),
+          cacheRead: (tokens * 0.78).round(),
+          cacheCreation:
+              tokens -
+              (tokens * 0.08).round() -
+              (tokens * 0.04).round() -
+              (tokens * 0.78).round(),
+          projectId: card == null ? null : 'plataforma-web',
+          branch: card,
+        ),
+      );
     }
   }
   return rows;

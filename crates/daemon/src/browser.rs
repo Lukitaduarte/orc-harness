@@ -102,6 +102,8 @@ pub struct Browser {
     child: Mutex<Child>,
     /// `http://127.0.0.1:PORT`, for Playwright MCP's `--cdp-endpoint`.
     pub cdp_http: String,
+    /// The browser-level CDP endpoint (closing it gracefully).
+    browser_ws: String,
     page: Cdp,
     size: Mutex<(u32, u32)>,
 }
@@ -130,6 +132,7 @@ impl Browser {
         on_event: impl Fn(BrowserEvent) + Send + Sync + 'static,
     ) -> std::io::Result<Self> {
         std::fs::create_dir_all(profile_dir)?;
+        close_orphan(profile_dir).await;
         let port_file = profile_dir.join("DevToolsActivePort");
         let _ = std::fs::remove_file(&port_file);
         let child = Command::new(chrome)
@@ -148,10 +151,16 @@ impl Browser {
             .spawn()?;
         let child = Mutex::new(child);
         // Chrome writes its debugging port here once it listens.
+        // Line 1: the port; line 2: the browser target's path.
         let mut port = None;
         for _ in 0..200 {
-            if let Some(p) = std::fs::read_to_string(&port_file).ok().and_then(|s| s.lines().next()?.trim().parse::<u16>().ok()) {
-                port = Some(p);
+            let read = std::fs::read_to_string(&port_file).ok().and_then(|s| {
+                let mut lines = s.lines();
+                let p = lines.next()?.trim().parse::<u16>().ok()?;
+                Some((p, lines.next()?.trim().to_string()))
+            });
+            if let Some(found) = read {
+                port = Some(found);
                 break;
             }
             if let Ok(Some(status)) = child.lock().unwrap().try_wait() {
@@ -159,7 +168,7 @@ impl Browser {
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-        let port = port.ok_or_else(|| std::io::Error::other("o navegador não abriu a porta de depuração"))?;
+        let (port, browser_path) = port.ok_or_else(|| std::io::Error::other("o navegador não abriu a porta de depuração"))?;
         let targets = http_get_json(port, "/json/list").await?;
         let ws = targets
             .as_array()
@@ -183,10 +192,31 @@ impl Browser {
             _ => {}
         })
         .await?;
-        let b = Self { child, cdp_http: format!("http://127.0.0.1:{port}"), page, size: Mutex::new((1280, 800)) };
+        let b = Self {
+            child,
+            cdp_http: format!("http://127.0.0.1:{port}"),
+            browser_ws: format!("ws://127.0.0.1:{port}{browser_path}"),
+            page,
+            size: Mutex::new((1280, 800)),
+        };
         b.page.call("Page.enable", json!({})).await.map_err(std::io::Error::other)?;
         b.resize(1280, 800).await.map_err(std::io::Error::other)?;
         Ok(b)
+    }
+
+    /// Closes Chrome the way its own quit does, so cookies and the session
+    /// reach the profile (a TERM signal does not flush them), and waits
+    /// for it to exit. Drop kills it if it is still there.
+    pub async fn shutdown(&self) {
+        if let Ok(cdp) = Cdp::connect(&self.browser_ws, |_, _| {}).await {
+            let _ = cdp.call("Browser.close", json!({})).await;
+        }
+        for _ in 0..50 {
+            if !self.alive() {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
     }
 
     pub fn alive(&self) -> bool {
@@ -279,6 +309,28 @@ impl Browser {
         let r = self.page.call("Runtime.evaluate", json!({ "expression": expression, "returnByValue": true })).await?;
         Ok(r["result"]["value"].clone())
     }
+}
+
+/// A Chrome left on this profile by an orcd that died would make a new
+/// launch hand off to it and exit. Chrome's `SingletonLock` link names it
+/// (`host-pid`); it is asked to quit when its command line has this profile.
+async fn close_orphan(profile_dir: &Path) {
+    let Ok(target) = std::fs::read_link(profile_dir.join("SingletonLock")) else { return };
+    let Some(pid) = target.to_string_lossy().rsplit('-').next().and_then(|p| p.parse::<u32>().ok()) else { return };
+    let Ok(out) = Command::new("ps").args(["-p", &pid.to_string(), "-o", "command="]).output() else { return };
+    let cmd = String::from_utf8_lossy(&out.stdout);
+    if !cmd.contains(&format!("--user-data-dir={}", profile_dir.display())) {
+        return;
+    }
+    let _ = Command::new("kill").args(["-TERM", &pid.to_string()]).status();
+    for _ in 0..50 {
+        let alive = Command::new("kill").args(["-0", &pid.to_string()]).status().is_ok_and(|s| s.success());
+        if !alive {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let _ = Command::new("kill").args(["-KILL", &pid.to_string()]).status();
 }
 
 fn named_key(key: &str) -> Option<(&'static str, u32, &'static str)> {
@@ -395,6 +447,9 @@ impl Browsers {
     }
 
     pub async fn close(&self, profile: &str) {
-        self.open.lock().await.remove(profile);
+        let closed = self.open.lock().await.remove(profile);
+        if let Some(b) = closed {
+            b.shutdown().await;
+        }
     }
 }
