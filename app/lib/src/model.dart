@@ -628,3 +628,21 @@ class PlanTemplate {
   String description;
   String markdown;
 }
+
+/// One row of usage: a day, an account, a model (daemon's UsageRow).
+class UsageRow {
+  const UsageRow(
+    this.day,
+    this.accountId,
+    this.model,
+    this.tokens,
+    this.costUsd,
+  );
+
+  /// YYYY-MM-DD, UTC.
+  final String day;
+  final String accountId;
+  final String model;
+  final int tokens;
+  final double costUsd;
+}

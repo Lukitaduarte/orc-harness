@@ -11,8 +11,13 @@ String formatDuration(Duration d) {
   return '${d.inSeconds}s';
 }
 
-String formatTokens(int t) =>
-    t >= 1000 ? '${(t / 1000).toStringAsFixed(1).replaceAll('.', ',')}k' : '$t';
+String formatTokens(int t) {
+  String one(double v, String unit) =>
+      '${v.toStringAsFixed(1).replaceAll('.', ',')}$unit';
+  if (t >= 1000000) return one(t / 1000000, 'M');
+  if (t >= 1000) return one(t / 1000, 'k');
+  return '$t';
+}
 
 String formatUsd(double v) => '\$${v.toStringAsFixed(2)}';
 

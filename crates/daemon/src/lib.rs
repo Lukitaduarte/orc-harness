@@ -8,3 +8,4 @@ pub mod remote;
 pub mod secrets;
 pub mod server;
 pub mod session;
+pub mod usage;

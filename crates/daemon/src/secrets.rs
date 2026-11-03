@@ -13,6 +13,10 @@ pub enum SecretStore {
     Keychain { service: String },
     /// For tests; nothing leaves the process.
     Memory(Mutex<HashMap<String, String>>),
+    /// Development only (`ORC_SECRETS=file`): an owner-only JSON file.
+    /// Unsigned dev builds change on every compile, and the Keychain asks
+    /// again for each new binary; signed releases use the Keychain.
+    File(std::path::PathBuf, Mutex<HashMap<String, String>>),
 }
 
 impl SecretStore {
@@ -25,6 +29,20 @@ impl SecretStore {
         Self::Memory(Mutex::default())
     }
 
+    pub fn file(path: std::path::PathBuf) -> Self {
+        let map = std::fs::read(&path)
+            .ok()
+            .and_then(|raw| serde_json::from_slice(&raw).ok())
+            .unwrap_or_default();
+        Self::File(path, Mutex::new(map))
+    }
+
+    fn save_file(path: &std::path::Path, map: &HashMap<String, String>) -> std::io::Result<()> {
+        std::fs::write(path, serde_json::to_vec(map)?)?;
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+    }
+
     pub fn get(&self, name: &str) -> Option<String> {
         match self {
             #[cfg(target_os = "macos")]
@@ -33,7 +51,7 @@ impl SecretStore {
                     .ok()
                     .and_then(|b| String::from_utf8(b).ok())
             }
-            Self::Memory(m) => m.lock().unwrap().get(name).cloned(),
+            Self::Memory(m) | Self::File(_, m) => m.lock().unwrap().get(name).cloned(),
         }
     }
 
@@ -47,6 +65,11 @@ impl SecretStore {
             Self::Memory(m) => {
                 m.lock().unwrap().insert(name.into(), value.into());
                 Ok(())
+            }
+            Self::File(path, m) => {
+                let mut map = m.lock().unwrap();
+                map.insert(name.into(), value.into());
+                Self::save_file(path, &map)
             }
         }
     }
@@ -65,6 +88,11 @@ impl SecretStore {
             Self::Memory(m) => {
                 m.lock().unwrap().remove(name);
                 Ok(())
+            }
+            Self::File(path, m) => {
+                let mut map = m.lock().unwrap();
+                map.remove(name);
+                Self::save_file(path, &map)
             }
         }
     }
@@ -124,6 +152,16 @@ mod tests {
         assert!(!legacy.exists(), "the file must be gone once migrated");
         // Next start reads it from the store.
         assert_eq!(daemon_key(&store, &legacy).unwrap().public(), old.public());
+    }
+
+    #[test]
+    fn file_store_persists_owner_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("secrets.json");
+        SecretStore::file(path.clone()).set("env/A", "1").unwrap();
+        assert_eq!(SecretStore::file(path.clone()).get("env/A").as_deref(), Some("1"));
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
     }
 
     /// Touches the real login Keychain: `cargo test -p orc-daemon -- --ignored keychain`

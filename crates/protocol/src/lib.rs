@@ -262,6 +262,32 @@ pub struct PlanTemplateFile {
     pub markdown: String,
 }
 
+/// Token and cost totals, from Claude Code's OpenTelemetry metrics.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct Usage {
+    pub input: u64,
+    pub output: u64,
+    pub cache_read: u64,
+    pub cache_creation: u64,
+    pub cost_usd: f64,
+}
+
+impl Usage {
+    pub fn tokens(&self) -> u64 {
+        self.input + self.output + self.cache_read + self.cache_creation
+    }
+}
+
+/// One row of the usage report: a day, an account, a model.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UsageRow {
+    /// YYYY-MM-DD, UTC.
+    pub day: String,
+    pub account_id: String,
+    pub model: String,
+    pub usage: Usage,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionSummary {
     pub id: String,
@@ -309,6 +335,8 @@ pub enum ClientMessage {
     TestMcp { id: String },
     UpsertTemplate { template: PlanTemplateFile },
     RemoveTemplate { id: String },
+    /// Usage per day, account and model for the last `days` days.
+    UsageReport { days: u32 },
     /// Keystrokes or pasted text for a session's terminal.
     Input { session_id: String, data: String },
     Resize { session_id: String, cols: u16, rows: u16 },
@@ -334,6 +362,9 @@ pub enum DaemonMessage {
     Secret { name: String, stored: bool },
     Catalog { entries: Vec<CatalogEntry>, templates: Vec<PlanTemplateFile> },
     McpTest { id: String, ok: bool, tools: usize, error: Option<String> },
+    /// A session's running totals, sent as metrics arrive.
+    SessionUsage { session_id: String, usage: Usage },
+    UsageReport { rows: Vec<UsageRow> },
 }
 
 #[cfg(test)]

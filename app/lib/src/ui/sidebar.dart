@@ -51,6 +51,24 @@ class WorkspaceRail extends StatelessWidget {
           ],
           const Spacer(),
           Tooltip(
+            tooltip: (context) =>
+                const TooltipContainer(child: Text('Uso e custo')),
+            alignment: Alignment.centerLeft,
+            anchorAlignment: Alignment.centerRight,
+            child: store.analyticsOpen
+                ? SecondaryButton(
+                    density: ButtonDensity.icon,
+                    onPressed: store.openAnalytics,
+                    child: const Icon(LucideIcons.chartColumn, size: 18),
+                  )
+                : GhostButton(
+                    density: ButtonDensity.icon,
+                    onPressed: store.openAnalytics,
+                    child: const Icon(LucideIcons.chartColumn, size: 18),
+                  ),
+          ),
+          const Gap(4),
+          Tooltip(
             tooltip: (context) => const TooltipContainer(
               child: Text('Catálogo de skills, MCPs e envs'),
             ),

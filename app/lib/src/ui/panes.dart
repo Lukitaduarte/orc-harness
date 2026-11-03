@@ -149,7 +149,12 @@ class _Pane extends StatelessWidget {
             ).xSmall().muted(),
           ),
           const Gap(8),
-          Text('${s.fiveHourShare.round()}% da janela de 5h').xSmall().muted(),
+          // Live: tokens and cost from Claude Code's metrics.
+          Text(
+            s.live
+                ? '${formatTokens(s.tokens)} tokens · ${formatUsd(s.costUsd)}'
+                : '${s.fiveHourShare.round()}% da janela de 5h',
+          ).xSmall().muted(),
         ],
       ),
     );

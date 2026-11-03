@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import 'analytics_view.dart';
 import 'catalog_view.dart';
 import 'command_palette.dart';
 import 'kanban.dart';
@@ -24,7 +25,8 @@ class WorkspaceScreen extends StatelessWidget {
         final showProfile =
             store.profilePanelOpen &&
             store.openProject == null &&
-            !store.catalogOpen;
+            !store.catalogOpen &&
+            !store.analyticsOpen;
         return CallbackShortcuts(
           bindings: {
             const SingleActivator(LogicalKeyboardKey.keyK, meta: true): () =>
@@ -60,6 +62,9 @@ class WorkspaceScreen extends StatelessWidget {
                                 child: Padding(
                                   padding: const EdgeInsets.all(4),
                                   child: switch (store.openProject) {
+                                    _ when store.analyticsOpen => AnalyticsView(
+                                      store,
+                                    ),
                                     _ when store.catalogOpen => CatalogView(
                                       store,
                                     ),
@@ -147,6 +152,17 @@ class _Toolbar extends StatelessWidget {
               onPressed: () => store.setViewingPlan(true),
             ),
           ],
+        ],
+        if (store.analyticsOpen) ...[
+          const Gap(8),
+          GhostButton(
+            leading: const Icon(LucideIcons.arrowLeft, size: 14),
+            onPressed: () => store.openProjectView(null),
+            child: const Text('Sessões').small(),
+          ),
+          const Text('/').small().muted(),
+          const Gap(8),
+          const Text('Uso').small().semiBold(),
         ],
         if (store.catalogOpen) ...[
           const Gap(8),

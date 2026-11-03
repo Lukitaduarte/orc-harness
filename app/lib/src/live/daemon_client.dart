@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../rust/api/link.dart' as link;
+import '../model.dart';
 import 'grid.dart';
 
 enum LinkStatus { disconnected, connecting, connected }
@@ -73,6 +74,14 @@ class DaemonClient extends ChangeNotifier {
   /// The daemon's catalog (orc_protocol::CatalogEntry JSON) and templates.
   List<Map<String, dynamic>> catalog = [];
   List<Map<String, dynamic>> templates = [];
+
+  /// Running totals per session: (tokens, cost in USD).
+  final usage = <String, (int, double)>{};
+
+  /// The last usage report asked for (day, account, model rows).
+  List<UsageRow> usageRows = [];
+
+  void requestUsage(int days) => send({'type': 'usage_report', 'days': days});
 
   /// Last "Testar conexão" result per MCP id: (ok, tools, error).
   final mcpTests = <String, (bool, int, String?)>{};
@@ -197,6 +206,34 @@ class DaemonClient extends ChangeNotifier {
       case 'catalog':
         catalog = (m['entries'] as List).cast<Map<String, dynamic>>();
         templates = (m['templates'] as List).cast<Map<String, dynamic>>();
+        notifyListeners();
+      case 'session_usage':
+        final u = m['usage'] as Map<String, dynamic>;
+        usage[m['session_id'] as String] = (
+          (u['input'] as int) +
+              (u['output'] as int) +
+              (u['cache_read'] as int) +
+              (u['cache_creation'] as int),
+          (u['cost_usd'] as num).toDouble(),
+        );
+        notifyListeners();
+      case 'usage_report':
+        usageRows = [
+          for (final r in (m['rows'] as List).cast<Map<String, dynamic>>())
+            () {
+              final u = r['usage'] as Map<String, dynamic>;
+              return UsageRow(
+                r['day'] as String,
+                r['account_id'] as String,
+                r['model'] as String,
+                (u['input'] as int) +
+                    (u['output'] as int) +
+                    (u['cache_read'] as int) +
+                    (u['cache_creation'] as int),
+                (u['cost_usd'] as num).toDouble(),
+              );
+            }(),
+        ];
         notifyListeners();
       case 'mcp_test':
         mcpTests[m['id'] as String] = (

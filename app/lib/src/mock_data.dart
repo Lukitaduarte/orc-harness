@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'model.dart';
 import 'plan_markdown.dart';
 import 'plan_templates.dart';
@@ -570,4 +572,31 @@ Plan pushPlan(DateTime now) {
       ..approvedAt = ago(35);
   }
   return plan;
+}
+
+/// Demo usage for the mock workspaces: 30 days, per account and model.
+List<UsageRow> seedUsage(DateTime now) {
+  final rows = <UsageRow>[];
+  for (var d = 29; d >= 0; d--) {
+    final day = now
+        .toUtc()
+        .subtract(Duration(days: d))
+        .toIso8601String()
+        .substring(0, 10);
+    final weekday = now.subtract(Duration(days: d)).weekday;
+    final weekend = weekday >= 6;
+    // Deterministic wiggle so the demo looks like real days.
+    double wave(int k) =>
+        1 + 0.45 * math.sin((d + k) * 1.7) * math.cos(d * 0.6 + k);
+    for (final (account, model, base) in const [
+      ('work-main', 'claude-opus-5-5', 6.2),
+      ('work-main', 'claude-sonnet-5-5', 2.1),
+      ('work-alt', 'claude-sonnet-5-5', 1.4),
+      ('personal-main', 'claude-opus-5-5', 1.1),
+    ]) {
+      final cost = base * wave(account.length) * (weekend ? 0.25 : 1);
+      rows.add(UsageRow(day, account, model, (cost * 260000).round(), cost));
+    }
+  }
+  return rows;
 }

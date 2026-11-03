@@ -20,10 +20,11 @@ async fn start_daemon(dir: &std::path::Path) -> (Daemon, Remote) {
             hook: "/bin/true".into(),
             runtime_root: dir.join("sessions"),
             socket: dir.join("orcd.sock"),
+            otlp_metrics: None,
         },
         vec![Account { id: "work-main".into(), config_dir: None }],
         std::sync::Arc::new(orc_daemon::secrets::SecretStore::memory()),
-    ), orc_daemon::catalog::Catalog::load(dir).unwrap());
+    ), orc_daemon::catalog::Catalog::load(dir).unwrap(), orc_daemon::usage::UsageStore::load(dir.join("usage.jsonl")));
     let key = orc_link::load_or_create_key(&dir.join("daemon.key")).unwrap();
     let endpoint = orc_link::endpoint(key, &[orc_link::ALPN_PAIR, orc_link::ALPN_MAIN])
         .await
@@ -52,7 +53,12 @@ async fn pair_connect_create_and_see_the_terminal() {
     let dir = tempfile::tempdir().unwrap();
     let (_daemon, remote) = start_daemon(dir.path()).await;
 
-    let ticket = remote.new_ticket().await.encode();
+    let t = remote.new_ticket().await;
+    assert!(
+        t.addr.addrs.iter().any(|a| matches!(a, iroh::TransportAddr::Ip(ip) if ip.ip().is_loopback())),
+        "the ticket must carry loopback for same-machine clients"
+    );
+    let ticket = t.encode();
     let identity = pair(&ticket, "teste").await.expect("pairing failed");
     // The ticket works once.
     assert!(pair(&ticket, "intruso").await.is_err());
@@ -116,7 +122,8 @@ async fn unpaired_devices_are_refused() {
     // A well-formed identity whose key was never paired.
     let stranger = Identity {
         device_key: orc_link::key_to_hex(&iroh::SecretKey::generate()),
-        daemon: remote.endpoint.addr(),
+        // The address a real client has: the ticket's (with loopback).
+        daemon: remote.new_ticket().await.addr,
     };
     let (tx, rx) = mpsc::channel();
     let (closed_tx, closed_rx) = mpsc::channel();

@@ -37,6 +37,9 @@ pub struct ManagerConfig {
     pub runtime_root: PathBuf,
     /// The daemon's local socket, passed to the helpers.
     pub socket: PathBuf,
+    /// Where sessions send OpenTelemetry metrics (the daemon's local OTLP
+    /// endpoint); `None` turns telemetry off.
+    pub otlp_metrics: Option<String>,
 }
 
 struct Managed {
@@ -258,6 +261,24 @@ impl SessionManager {
         env.insert("ORC_SOCKET".into(), self.cfg.socket.display().to_string());
         env.insert("ORC_ACCOUNT".into(), account.id.clone());
         env.insert("ORC_SESSION".into(), s.id.clone());
+        if let Some(endpoint) = &self.cfg.otlp_metrics {
+            // Tokens and cost per session, from Claude Code's own metrics.
+            for (k, v) in [
+                ("CLAUDE_CODE_ENABLE_TELEMETRY", "1"),
+                ("OTEL_METRICS_EXPORTER", "otlp"),
+                ("OTEL_EXPORTER_OTLP_METRICS_PROTOCOL", "http/json"),
+                ("OTEL_EXPORTER_OTLP_PROTOCOL", "http/json"),
+                ("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", endpoint.as_str()),
+                ("OTEL_METRIC_EXPORT_INTERVAL", "10000"),
+                ("OTEL_LOGS_EXPORTER", "none"),
+            ] {
+                env.insert(k.into(), v.into());
+            }
+            env.insert(
+                "OTEL_RESOURCE_ATTRIBUTES".into(),
+                format!("orc.session={},orc.account={}", s.id, account.id),
+            );
+        }
         let mut env_remove = Vec::new();
         match &account.config_dir {
             Some(cfg_dir) => {
@@ -300,7 +321,7 @@ mod tests {
         let path = dir.join("fake-claude");
         fs::write(
             &path,
-            "#!/bin/sh\nfor a in \"$@\"; do echo \"arg:$a\"; done\necho \"env:$ORC_ACCOUNT:$ORC_SESSION:$CLAUDE_CONFIG_DIR:$GREETING\"\necho READY\nexec cat\n",
+            "#!/bin/sh\nfor a in \"$@\"; do echo \"arg:$a\"; done\necho \"env:$ORC_ACCOUNT:$ORC_SESSION:$CLAUDE_CONFIG_DIR:$GREETING\"\necho \"otel:$CLAUDE_CODE_ENABLE_TELEMETRY:$OTEL_RESOURCE_ATTRIBUTES\"\necho READY\nexec cat\n",
         )
         .unwrap();
         fs::set_permissions(&path, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
@@ -317,6 +338,7 @@ mod tests {
                 hook: "/opt/orc/orc-hook".into(),
                 runtime_root: dir.join("sessions"),
                 socket: dir.join("orcd.sock"),
+                otlp_metrics: Some("http://127.0.0.1:4318/v1/metrics".into()),
             },
             vec![
                 Account { id: "work-main".into(), config_dir: Some("/cfg/work".into()) },
@@ -356,6 +378,7 @@ mod tests {
             format!("arg:{}", s.claude_session_id),
             "arg:opus".into(),
             format!("env:work-main:{}:/cfg/work:oi", s.id),
+            format!("otel:1:orc.session={},orc.account=work-main", s.id),
         ] {
             assert!(lines.contains(&expected), "missing {expected} in {lines:?}");
         }

@@ -117,8 +117,8 @@ class HarnessStore extends ChangeNotifier {
             'starting' => SessionState.starting,
             _ => SessionState.idle,
           },
-          tokens: 0,
-          costUsd: 0,
+          tokens: d.usage[l.id]?.$1 ?? 0,
+          costUsd: d.usage[l.id]?.$2 ?? 0,
           fiveHourShare: 0,
           enabledItems: before?.appliedItems ?? const {},
           lines: const [],
@@ -234,6 +234,25 @@ class HarnessStore extends ChangeNotifier {
   /// The catalog screen replaces the panes while open.
   bool catalogOpen = false;
 
+  /// The analytics screen replaces the panes while open.
+  bool analyticsOpen = false;
+  late final List<UsageRow> _mockUsage = mock.seedUsage(now);
+
+  /// Usage rows of the current workspace's accounts.
+  List<UsageRow> get usageRows {
+    final ids = workspaceAccounts.map((a) => a.id).toSet();
+    final rows = isLive ? daemon!.usageRows : _mockUsage;
+    return rows.where((r) => ids.contains(r.accountId)).toList();
+  }
+
+  void openAnalytics() {
+    openProjectId = null;
+    catalogOpen = false;
+    analyticsOpen = true;
+    if (isLive) daemon!.requestUsage(30);
+    notifyListeners();
+  }
+
   /// For a project already executing: show its plan instead of the board.
   bool viewingPlan = false;
 
@@ -275,6 +294,7 @@ class HarnessStore extends ChangeNotifier {
     workspaceId = id;
     openProjectId = null;
     catalogOpen = false;
+    analyticsOpen = false;
     notifyListeners();
   }
 
@@ -291,9 +311,10 @@ class HarnessStore extends ChangeNotifier {
 
   /// Focuses the pane showing [sessionId], or shows it in the focused pane.
   void showSession(String sessionId) {
-    if (openProjectId != null || catalogOpen) {
+    if (openProjectId != null || catalogOpen || analyticsOpen) {
       openProjectId = null;
       catalogOpen = false;
+      analyticsOpen = false;
       notifyListeners();
     }
     final leaf = _leafShowing(layout, sessionId);
@@ -370,6 +391,7 @@ class HarnessStore extends ChangeNotifier {
   void openProjectView(String? projectId) {
     openProjectId = projectId;
     catalogOpen = false;
+    analyticsOpen = false;
     viewingPlan = false;
     notifyListeners();
   }
@@ -381,6 +403,7 @@ class HarnessStore extends ChangeNotifier {
 
   void openCatalog() {
     openProjectId = null;
+    analyticsOpen = false;
     catalogOpen = true;
     notifyListeners();
   }

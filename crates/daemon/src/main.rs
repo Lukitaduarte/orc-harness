@@ -11,6 +11,7 @@ use orc_daemon::manager::{ManagerConfig, SessionManager};
 use orc_daemon::remote::{Devices, Remote};
 use orc_daemon::secrets::{self, SecretStore};
 use orc_daemon::server::Daemon;
+use orc_daemon::usage::UsageStore;
 use orc_protocol::DaemonMessage;
 use orc_daemon::session::{Session, SessionSpec};
 
@@ -31,7 +32,17 @@ fn main() -> std::io::Result<()> {
             let cfg = config::load(&home.join("config.json"))?;
             // The helpers ship next to orcd.
             let bin_dir = std::env::current_exe()?.parent().map(PathBuf::from).unwrap_or_default();
-            let secrets = std::sync::Arc::new(SecretStore::keychain());
+            let secrets = std::sync::Arc::new(if std::env::var("ORC_SECRETS").as_deref() == Ok("file") {
+                eprintln!("orcd: segredos em arquivo (ORC_SECRETS=file), só para desenvolvimento");
+                SecretStore::file(home.join("secrets.json"))
+            } else {
+                SecretStore::keychain()
+            });
+            let runtime = tokio::runtime::Runtime::new()?;
+            // Sessions report tokens and cost here (127.0.0.1 only).
+            let otlp = runtime.block_on(tokio::net::TcpListener::bind("127.0.0.1:0"))?;
+            let otlp_url = format!("http://{}/v1/metrics", otlp.local_addr()?);
+            eprintln!("orcd: métricas OTLP em {otlp_url}");
             let manager = SessionManager::new(
                 ManagerConfig {
                     claude: cfg.claude,
@@ -39,12 +50,18 @@ fn main() -> std::io::Result<()> {
                     hook: bin_dir.join("orc-hook"),
                     runtime_root: home.join("sessions"),
                     socket: socket.clone(),
+                    otlp_metrics: Some(otlp_url),
                 },
                 cfg.accounts,
                 secrets.clone(),
             );
-            let daemon = Daemon::new(manager, Catalog::load(&home)?);
-            tokio::runtime::Runtime::new()?.block_on(async move {
+            let daemon = Daemon::new(
+                manager,
+                Catalog::load(&home)?,
+                UsageStore::load(home.join("usage.jsonl")),
+            );
+            runtime.block_on(async move {
+                tokio::spawn(daemon.clone().serve_otlp(otlp));
                 let key = secrets::daemon_key(&secrets, &home.join("daemon.key"))?;
                 let endpoint = orc_link::endpoint(key, &[orc_link::ALPN_PAIR, orc_link::ALPN_MAIN]).await?;
                 let remote = Remote::new(endpoint, Devices::load(home.join("devices.json")));

@@ -142,6 +142,12 @@ List<_Cmd> _commands(BuildContext context, HarnessStore store) {
       () => showTemplateEditor(context, store),
     ),
     _Cmd(
+      'Uso',
+      'Abrir uso e custo do workspace',
+      LucideIcons.chartColumn,
+      store.openAnalytics,
+    ),
+    _Cmd(
       'Catálogo',
       'Abrir catálogo de skills, MCPs e envs',
       LucideIcons.blocks,

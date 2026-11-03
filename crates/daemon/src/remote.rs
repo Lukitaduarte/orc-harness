@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use iroh::endpoint::Connection;
-use iroh::{Endpoint, EndpointId};
+use iroh::{Endpoint, EndpointId, TransportAddr};
 use orc_link::{ALPN_MAIN, ALPN_PAIR, PairRequest, PairResponse, Ticket, write_line};
 use orc_protocol::{ClientMessage, DaemonMessage};
 use serde::{Deserialize, Serialize};
@@ -95,9 +95,20 @@ impl Remote {
     pub async fn new_ticket(&self) -> Ticket {
         let deadline = Instant::now() + Duration::from_secs(5);
         let mut addr = self.endpoint.addr();
+        // (`addr` gains loopback entries below.)
         while addr.addrs.is_empty() && Instant::now() < deadline {
             tokio::time::sleep(Duration::from_millis(50)).await;
             addr = self.endpoint.addr();
+        }
+        // Loopback too: the app on this Mac then never crosses the macOS
+        // firewall, which blocks inbound UDP to unsigned binaries.
+        for socket in self.endpoint.bound_sockets() {
+            let ip: std::net::IpAddr = if socket.is_ipv4() {
+                std::net::Ipv4Addr::LOCALHOST.into()
+            } else {
+                std::net::Ipv6Addr::LOCALHOST.into()
+            };
+            addr.addrs.insert(TransportAddr::Ip(std::net::SocketAddr::new(ip, socket.port())));
         }
         let token = uuid::Uuid::new_v4().simple().to_string();
         *self.pairing.lock().unwrap() = Some((token.clone(), Instant::now() + PAIRING_TTL));

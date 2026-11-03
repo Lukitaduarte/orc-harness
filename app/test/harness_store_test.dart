@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orc_harness/src/harness_store.dart';
 import 'package:orc_harness/src/model.dart';
+import 'package:orc_harness/src/ui/format.dart';
 
 List<String> leafIds(LayoutNode n) => switch (n) {
   LayoutLeaf() => [n.id],
@@ -248,5 +249,11 @@ void main() {
       isFalse,
     );
     expect(store.catalog.contains(item), isFalse);
+  });
+
+  test('token counts read as k and M', () {
+    expect(formatTokens(950), '950');
+    expect(formatTokens(48200), '48,2k');
+    expect(formatTokens(28590500), '28,6M');
   });
 }

@@ -16,6 +16,7 @@ use tokio::sync::broadcast;
 use crate::catalog::{Catalog, mcp_env, test_mcp};
 use crate::manager::SessionManager;
 use crate::quota::QuotaStore;
+use crate::usage::{UsageStore, day_of, parse_otlp};
 use crate::remote::Remote;
 
 #[derive(Clone)]
@@ -23,6 +24,7 @@ pub struct Daemon {
     pub quotas: Arc<Mutex<QuotaStore>>,
     pub sessions: Arc<Mutex<SessionManager>>,
     pub catalog: Arc<Mutex<Catalog>>,
+    pub usage: Arc<Mutex<UsageStore>>,
     /// Everything clients should see; each connection subscribes.
     pub events: broadcast::Sender<DaemonMessage>,
     /// Set once iroh is up; mints pairing tickets for `orcd pair`.
@@ -30,11 +32,12 @@ pub struct Daemon {
 }
 
 impl Daemon {
-    pub fn new(sessions: SessionManager, catalog: Catalog) -> Self {
+    pub fn new(sessions: SessionManager, catalog: Catalog, usage: UsageStore) -> Self {
         Self {
             quotas: Arc::default(),
             sessions: Arc::new(Mutex::new(sessions)),
             catalog: Arc::new(Mutex::new(catalog)),
+            usage: Arc::new(Mutex::new(usage)),
             events: broadcast::channel(1024).0,
             remote: Arc::default(),
         }
@@ -93,6 +96,10 @@ impl Daemon {
             DaemonMessage::Sessions { sessions: sessions.list() },
             catalog,
         ];
+        let usage = self.usage.lock().unwrap();
+        for s in sessions.list() {
+            out.push(DaemonMessage::SessionUsage { usage: usage.session(&s.id), session_id: s.id });
+        }
         let quotas = self.quotas.lock().unwrap();
         for id in sessions.account_ids() {
             if let Some(q) = quotas.get(&id) {
@@ -220,6 +227,14 @@ impl Daemon {
                     });
                 });
             }
+            ClientMessage::UsageReport { days } => {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_nanos())
+                    .unwrap_or(0);
+                let since = day_of(now.saturating_sub(u128::from(days) * 86_400 * 1_000_000_000));
+                return vec![DaemonMessage::UsageReport { rows: self.usage.lock().unwrap().report(&since) }];
+            }
             ClientMessage::ListSessions => {
                 return vec![DaemonMessage::Sessions {
                     sessions: self.sessions.lock().unwrap().list(),
@@ -284,6 +299,23 @@ impl Daemon {
                 }
             });
         }
+    }
+}
+
+impl Daemon {
+    /// Local OTLP/HTTP-JSON metrics endpoint for the sessions' Claude Code.
+    /// Bound to 127.0.0.1 only.
+    pub async fn serve_otlp(self, listener: tokio::net::TcpListener) -> std::io::Result<()> {
+        use axum::{Json, Router, extract::State, routing::post};
+        async fn metrics(State(d): State<Daemon>, Json(body): Json<serde_json::Value>) -> Json<serde_json::Value> {
+            let changed = d.usage.lock().unwrap().record(&parse_otlp(&body));
+            for (session_id, usage) in changed {
+                let _ = d.events.send(DaemonMessage::SessionUsage { session_id, usage });
+            }
+            Json(serde_json::json!({}))
+        }
+        let app = Router::new().route("/v1/metrics", post(metrics)).with_state(self);
+        axum::serve(listener, app).await
     }
 }
 
