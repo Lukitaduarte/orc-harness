@@ -58,6 +58,11 @@ impl Catalog {
             .collect()
     }
 
+    /// The entries as stored.
+    pub fn list(&self) -> Vec<CatalogEntry> {
+        self.entries.clone()
+    }
+
     pub fn get(&self, id: &str) -> Option<&CatalogEntry> {
         self.entries.iter().find(|e| e.id == id)
     }

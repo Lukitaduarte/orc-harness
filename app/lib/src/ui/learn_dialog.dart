@@ -41,7 +41,7 @@ class _Learnings extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = project.learnings.reversed.toList();
+    final items = store.learningsOf(project).reversed.toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -73,9 +73,12 @@ class _Learnings extends StatelessWidget {
         Expanded(
           child: items.isEmpty
               ? Center(
-                  child: const Text(
-                    'Nenhum comentário novo nos cards.\n'
-                    'Comente no dialog de um card e rode o Learn de novo.',
+                  child: Text(
+                    project.live
+                        ? 'O Claude está lendo os comentários e as skills dos cards.\n'
+                              'As propostas aparecem aqui; nada muda sem o seu OK.'
+                        : 'Nenhum comentário novo nos cards.\n'
+                              'Comente no dialog de um card e rode o Learn de novo.',
                     textAlign: TextAlign.center,
                   ).small().muted(),
                 )
@@ -106,6 +109,23 @@ class _Learnings extends StatelessWidget {
           ),
           const Gap(8),
           Text(l.summary).small(),
+          if (l.replacement.isNotEmpty) ...[
+            const Gap(8),
+            if (l.old.isNotEmpty)
+              _passage(
+                context,
+                '−',
+                l.old,
+                Theme.of(context).colorScheme.destructive,
+              ),
+            _passage(context, '+', l.replacement, Colors.emerald),
+          ],
+          if (l.error != null) ...[
+            const Gap(6),
+            Text(
+              'Não aplicou: ${l.error}',
+            ).xSmall().medium(color: Theme.of(context).colorScheme.destructive),
+          ],
           const Gap(10),
           switch (l.accepted) {
             null => Row(
@@ -113,24 +133,40 @@ class _Learnings extends StatelessWidget {
               children: [
                 OutlineButton(
                   size: ButtonSize.small,
-                  onPressed: () => store.decideLearning(l, false),
+                  onPressed: () => store.decideLearning(project, l, false),
                   child: const Text('Descartar'),
                 ),
                 const Gap(8),
                 PrimaryButton(
                   size: ButtonSize.small,
-                  onPressed: () => store.decideLearning(l, true),
+                  onPressed: () => store.decideLearning(project, l, true),
                   child: const Text('Aplicar na skill'),
                 ),
               ],
             ),
             true => const Text(
-              'Aplicado · commit chore(skills) depois do seu OK no diff',
+              'Aplicado na skill',
             ).xSmall().medium(color: Colors.emerald),
             false => const Text('Descartado').xSmall().muted(),
           },
         ],
       ),
     ),
+  );
+
+  /// One side of the edit, marked − (removed) or + (added).
+  Widget _passage(
+    BuildContext context,
+    String mark,
+    String text,
+    Color color,
+  ) => Container(
+    margin: const EdgeInsets.only(bottom: 4),
+    padding: const EdgeInsets.all(8),
+    decoration: BoxDecoration(
+      border: Border(left: BorderSide(color: color, width: 3)),
+      color: Theme.of(context).colorScheme.muted,
+    ),
+    child: Text('$mark $text').mono().xSmall(),
   );
 }

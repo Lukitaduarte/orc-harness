@@ -140,6 +140,29 @@ class DaemonClient extends ChangeNotifier {
         id;
   }
 
+  /// Learn proposals by plan (orc_protocol::LearningItem JSON).
+  final learnings = <String, List<Map<String, dynamic>>>{};
+
+  void learn(
+    String planId,
+    String accountId,
+    List<String> notes,
+    List<String> skills,
+  ) => send({
+    'type': 'learn',
+    'plan_id': planId,
+    'account_id': accountId,
+    'notes': notes,
+    'skills': skills,
+  });
+
+  void decideLearning(String planId, String id, bool accept) => send({
+    'type': 'decide_learning',
+    'plan_id': planId,
+    'id': id,
+    'accept': accept,
+  });
+
   /// Workspaces (orc_protocol::WorkspaceInfo JSON); empty until reported.
   List<Map<String, dynamic>> workspaces = [];
 
@@ -498,6 +521,10 @@ class DaemonClient extends ChangeNotifier {
         notifyListeners();
       case 'projects':
         projects = (m['projects'] as List).cast<Map<String, dynamic>>();
+        notifyListeners();
+      case 'learnings':
+        learnings[m['plan_id'] as String] = (m['items'] as List)
+            .cast<Map<String, dynamic>>();
         notifyListeners();
       case 'workspaces':
         workspaces = (m['workspaces'] as List).cast<Map<String, dynamic>>();

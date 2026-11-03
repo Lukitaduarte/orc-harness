@@ -60,10 +60,12 @@ Project projectFromDoc(
     ..plannerSession = doc['planner'] as String?;
 
   final notes = (state['notes'] as Map?) ?? const {};
+  final learned = (state['learned'] as Map?) ?? const {};
   for (final c in plan.proposedCards) {
     c.notes.addAll([
       for (final n in (notes['${c.number}'] as List?) ?? const []) _comment(n),
     ]);
+    c.learnedNotes = learned['${c.number}'] as int? ?? 0;
   }
   return Project(
     id: doc['id'] as String,
@@ -102,6 +104,11 @@ Map<String, Object?> planState(Project p) {
     'notes': {
       for (final c in plan.proposedCards.where((c) => c.notes.isNotEmpty))
         '${c.number}': c.notes.map(_commentJson).toList(),
+    },
+    // Comments already sent to Learn, per card.
+    'learned': {
+      for (final c in plan.proposedCards.where((c) => c.learnedNotes > 0))
+        '${c.number}': c.learnedNotes,
     },
   };
 }

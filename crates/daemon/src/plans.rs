@@ -124,6 +124,8 @@ pub struct Plans {
     dir: PathBuf,
     pub docs: Vec<PlanDoc>,
     pub runs: Vec<Run>,
+    /// Learn sessions: session id → (plan id, skills it may change).
+    pub learners: std::collections::HashMap<String, (String, Vec<(String, PathBuf)>)>,
 }
 
 fn valid_id(id: &str) -> bool {
@@ -147,10 +149,10 @@ impl Plans {
             }
         }
         docs.sort_by(|a, b| a.id.cmp(&b.id));
-        Self { dir, docs, runs }
+        Self { dir, docs, runs, learners: Default::default() }
     }
 
-    fn folder(&self, id: &str) -> std::io::Result<PathBuf> {
+    pub fn folder(&self, id: &str) -> std::io::Result<PathBuf> {
         if !valid_id(id) {
             return Err(std::io::Error::other(format!("id de plano inválido: {id}")));
         }

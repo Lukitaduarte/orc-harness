@@ -284,6 +284,17 @@ impl Daemon {
             out.push(DaemonMessage::BrowserState { profile: profile.clone(), open: true, url: url.clone() });
         }
         out.extend(runs);
+        {
+            let plans = self.plans.lock().unwrap();
+            for doc in &plans.docs {
+                if let Ok(dir) = plans.folder(&doc.id) {
+                    let items = crate::learn::load(&dir);
+                    if !items.is_empty() {
+                        out.push(DaemonMessage::Learnings { plan_id: doc.id.clone(), items });
+                    }
+                }
+            }
+        }
         let usage = self.usage.lock().unwrap();
         for s in sessions.list() {
             out.push(DaemonMessage::SessionUsage { usage: usage.session(&s.id), session_id: s.id });
@@ -396,6 +407,35 @@ impl Daemon {
                 self.env_requests.lock().unwrap().insert(id.clone(), (me.id.clone(), name.clone(), value));
                 let _ = self.events.send(DaemonMessage::EnvRequest { id, session_id: me.id, name: name.clone() });
                 Ok(format!("pedido enviado ao usuário; {name} só é gravada se ele aprovar no app (a resposta chega no read_inbox)"))
+            }
+            "propose_learning" => {
+                let field = |k: &str| arg(k).unwrap_or_default();
+                let plans = self.plans.lock().unwrap();
+                let (plan_id, skills) = plans.learners.get(&me.id).cloned().ok_or("esta sessão não está fazendo Learn")?;
+                let skill = field("skill");
+                if !skills.iter().any(|(n, _)| *n == skill) {
+                    return Err(format!("skill {skill} não está entre as deste Learn"));
+                }
+                if field("file").is_empty() || field("new").is_empty() {
+                    return Err("falta `file` ou `new`".into());
+                }
+                let dir = plans.folder(&plan_id).map_err(|e| e.to_string())?;
+                let mut items = crate::learn::load(&dir);
+                items.push(orc_protocol::LearningItem {
+                    id: uuid::Uuid::new_v4().simple().to_string()[..12].to_string(),
+                    skill,
+                    file: field("file"),
+                    summary: field("summary"),
+                    old: field("old"),
+                    new: field("new"),
+                    source: field("source"),
+                    status: "pending".into(),
+                    error: None,
+                });
+                crate::learn::save(&dir, &items).map_err(|e| e.to_string())?;
+                let _ = self.events.send(DaemonMessage::Learnings { plan_id, items });
+                drop(plans);
+                Ok("proposta registrada; o usuário decide no app".into())
             }
             "save_plan" => {
                 let markdown = arg("markdown").ok_or("falta `markdown`")?;
@@ -629,6 +669,78 @@ impl Daemon {
         let doc = doc.clone();
         plans.save(doc).map_err(|e| e.to_string())?;
         let _ = self.events.send(DaemonMessage::Plans { plans: plans.docs.clone() });
+        Ok(())
+    }
+
+    /// Starts the Learn session for a plan: in its repository, told the
+    /// comments and the skills' text; it only proposes.
+    fn start_learner(&self, plan_id: &str, account_id: &str, notes: &[String], skills: &[String]) -> Result<(), String> {
+        if notes.is_empty() {
+            return Err("nenhum comentário novo para aprender".into());
+        }
+        let (name, project_id) = {
+            let plans = self.plans.lock().unwrap();
+            let doc = plans.docs.iter().find(|d| d.id == plan_id).ok_or("plano desconhecido")?;
+            (doc.name.clone(), doc.project_id.clone())
+        };
+        let catalog = self.catalog.lock().unwrap();
+        let found: Vec<(String, PathBuf)> = skills
+            .iter()
+            .filter_map(|s| {
+                let e = catalog.list().into_iter().find(|e| e.kind == "skill" && &e.name == s)?;
+                Some((e.name.clone(), crate::catalog::expand(e.path.as_deref()?)))
+            })
+            .collect();
+        drop(catalog);
+        if found.is_empty() {
+            return Err("nenhuma das skills dos cards está no catálogo".into());
+        }
+        let repo = self.projects.lock().unwrap().get(&project_id).map(|p| PathBuf::from(&p.repo)).ok_or("o projeto do plano foi removido")?;
+        let prompt = crate::learn::learner_prompt(&name, notes, &found);
+        let mut sessions = self.sessions.lock().unwrap();
+        let s = sessions
+            .create_with_prompt(account_id, Some(repo), None, Profile::default(), Some(prompt), 100, 30)
+            .map_err(|e| e.to_string())?;
+        let _ = self.events.send(DaemonMessage::Sessions { sessions: sessions.list() });
+        drop(sessions);
+        self.plans.lock().unwrap().learners.insert(s.id, (plan_id.into(), found));
+        Ok(())
+    }
+
+    /// Applies (in the skill's folder) or declines a proposed learning.
+    fn decide_learning(&self, plan_id: &str, id: &str, accept: bool) -> Result<(), String> {
+        let plans = self.plans.lock().unwrap();
+        let dir = plans.folder(plan_id).map_err(|e| e.to_string())?;
+        let mut items = crate::learn::load(&dir);
+        let item = items.iter_mut().find(|i| i.id == id).ok_or("aprendizado desconhecido")?;
+        if item.status != "pending" && item.status != "failed" {
+            return Err("já decidido".into());
+        }
+        if accept {
+            let skill_dir = self
+                .catalog
+                .lock()
+                .unwrap()
+                .list()
+                .into_iter()
+                .find(|e| e.kind == "skill" && e.name == item.skill)
+                .and_then(|e| e.path.map(|p| crate::catalog::expand(&p)))
+                .ok_or("a skill saiu do catálogo")?;
+            match crate::learn::apply(&skill_dir, item) {
+                Ok(()) => {
+                    item.status = "applied".into();
+                    item.error = None;
+                }
+                Err(e) => {
+                    item.status = "failed".into();
+                    item.error = Some(e.to_string());
+                }
+            }
+        } else {
+            item.status = "declined".into();
+        }
+        crate::learn::save(&dir, &items).map_err(|e| e.to_string())?;
+        let _ = self.events.send(DaemonMessage::Learnings { plan_id: plan_id.into(), items });
         Ok(())
     }
 
@@ -1012,6 +1124,18 @@ impl Daemon {
                     return error(e);
                 }
                 emit(DaemonMessage::Sessions { sessions: sessions.list() });
+            }
+            ClientMessage::Learn { plan_id, account_id, notes, skills } => {
+                return match self.start_learner(&plan_id, &account_id, &notes, &skills) {
+                    Ok(()) => Vec::new(),
+                    Err(message) => vec![DaemonMessage::Error { message }],
+                };
+            }
+            ClientMessage::DecideLearning { plan_id, id, accept } => {
+                return match self.decide_learning(&plan_id, &id, accept) {
+                    Ok(()) => Vec::new(),
+                    Err(message) => vec![DaemonMessage::Error { message }],
+                };
             }
             ClientMessage::RetryCard { plan_id, number } => {
                 let mut plans = self.plans.lock().unwrap();

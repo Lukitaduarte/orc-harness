@@ -628,12 +628,25 @@ class Learning {
     required this.file,
     required this.summary,
     required this.source,
+    this.id,
+    this.old = '',
+    this.replacement = '',
+    this.error,
   });
 
   final String skill;
   final String file;
   final String summary;
   final String source;
+
+  /// Live: the daemon's id, and the edit itself (old passage → new one;
+  /// an empty old appends).
+  final String? id;
+  final String old;
+  final String replacement;
+
+  /// Why applying failed (the passage changed meanwhile).
+  final String? error;
 
   /// null while waiting for your decision.
   bool? accepted;

@@ -7,6 +7,7 @@ pub mod git;
 pub mod ide;
 pub mod plans;
 pub mod projects;
+pub mod learn;
 pub mod manager;
 pub mod quota;
 pub mod remote;

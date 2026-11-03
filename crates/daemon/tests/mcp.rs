@@ -110,7 +110,7 @@ async fn sessions_talk_delegate_and_ask_for_envs() {
     .unwrap();
     assert_eq!(r[0]["result"]["serverInfo"]["name"], "orc-harness");
     let tools: Vec<&str> = r[1]["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
-    assert_eq!(tools, ["list_sessions", "send_message", "read_inbox", "delegate_task", "search_code", "save_plan", "request_env_change"]);
+    assert_eq!(tools, ["list_sessions", "send_message", "read_inbox", "delegate_task", "search_code", "save_plan", "propose_learning", "request_env_change"]);
     assert!(text(&r[2]).contains("(você)"));
     assert!(text(&r[3]).contains("entregue"));
     assert_eq!(r[4]["result"]["isError"], true);

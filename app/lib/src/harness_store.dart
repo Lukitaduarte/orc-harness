@@ -1069,6 +1069,28 @@ class HarnessStore extends ChangeNotifier {
   /// Learn: comments on the cards become proposed skill changes, applied
   /// only after your OK.
   void learn(Project p) {
+    if (p.live) {
+      // A Claude session reads the new comments and the cards' skills and
+      // proposes edits; they show up as the daemon reports them.
+      final notes = [
+        for (final c in p.cards)
+          for (final n in c.notes.skip(c.learnedNotes).where((n) => !n.byAgent))
+            'Card #${c.number} (${c.title}) · ${n.body}',
+      ];
+      final skills = {
+        for (final c in p.cards)
+          for (final t in c.tasks)
+            if (t.skill.isNotEmpty) t.skill,
+      }.toList();
+      if (notes.isEmpty) return;
+      daemon!.learn(p.id, _liveAccount, notes, skills);
+      for (final c in p.cards) {
+        c.learnedNotes = c.notes.length;
+      }
+      _persist(p.plan!);
+      notifyListeners();
+      return;
+    }
     for (final c in p.cards) {
       final fresh = c.notes.skip(c.learnedNotes).where((n) => !n.byAgent);
       for (final n in fresh) {
@@ -1090,7 +1112,34 @@ class HarnessStore extends ChangeNotifier {
       .map((c) => c.notes.skip(c.learnedNotes).where((n) => !n.byAgent).length)
       .fold(0, (a, b) => a + b);
 
-  void decideLearning(Learning l, bool accepted) {
+  /// Proposals of a project: the daemon's for live plans.
+  List<Learning> learningsOf(Project p) {
+    if (!p.live) return p.learnings;
+    return [
+      for (final i in daemon!.learnings[p.id] ?? const <Map<String, dynamic>>[])
+        Learning(
+            id: i['id'] as String,
+            skill: i['skill'] as String,
+            file: i['file'] as String,
+            summary: i['summary'] as String,
+            source: i['source'] as String,
+            old: i['old'] as String,
+            replacement: i['new'] as String,
+            error: i['error'] as String?,
+          )
+          ..accepted = switch (i['status']) {
+            'applied' => true,
+            'declined' => false,
+            _ => null,
+          },
+    ];
+  }
+
+  void decideLearning(Project p, Learning l, bool accepted) {
+    if (p.live && l.id != null) {
+      daemon!.decideLearning(p.id, l.id!, accepted);
+      return;
+    }
     l.accepted = accepted;
     notifyListeners();
   }

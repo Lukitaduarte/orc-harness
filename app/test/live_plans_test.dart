@@ -221,15 +221,95 @@ void main() {
   });
 
   test('a run shows each card\'s account and why a card waits', () {
-    plans([doc(state: {'startedAt': 1})]);
+    plans([
+      doc(state: {'startedAt': 1}),
+    ]);
     final p = store.workspaceProjects.single;
     applyRun(p, [
-      {'number': 1, 'state': 'running', 'session_id': 's1', 'branch': 'x', 'pr': null, 'pr_url': null, 'note': null, 'account_id': 'b'},
-      {'number': 2, 'state': 'todo', 'session_id': null, 'branch': 'y', 'pr': null, 'pr_url': null, 'note': 'aguardando cota: a 5h 95%', 'account_id': null},
+      {
+        'number': 1,
+        'state': 'running',
+        'session_id': 's1',
+        'branch': 'x',
+        'pr': null,
+        'pr_url': null,
+        'note': null,
+        'account_id': 'b',
+      },
+      {
+        'number': 2,
+        'state': 'todo',
+        'session_id': null,
+        'branch': 'y',
+        'pr': null,
+        'pr_url': null,
+        'note': 'aguardando cota: a 5h 95%',
+        'account_id': null,
+      },
     ]);
     expect(p.cards[0].accountId, 'b');
     expect(p.cards[1].waiting, startsWith('aguardando cota'));
     expect(p.cards[1].halt, isNull, reason: 'waiting is not a failure');
+  });
+
+  test('Learn sends the new comments once and shows the daemon proposals', () {
+    plans([
+      doc(state: {'startedAt': 1}),
+    ]);
+    final p = store.workspaceProjects.single;
+    store.addCardNote(p.cards.first, 'faltou golden test');
+    store.learn(p);
+    final learn = sent.lastWhere((m) => m['type'] == 'learn');
+    expect(learn['notes'], ['Card #1 (Registrar token) · faltou golden test']);
+    expect(learn['skills'], ['back']);
+    expect(store.unlearnedNotes(p), 0);
+    // Already sent comments are remembered in the plan's state.
+    final saved =
+        sent.lastWhere((m) => m['type'] == 'save_plan')['plan'] as Map;
+    expect((saved['state'] as Map)['learned'], {'1': 1});
+
+    d.handle(
+      jsonEncode({
+        'type': 'learnings',
+        'plan_id': 'push',
+        'items': [
+          {
+            'id': 'l1',
+            'skill': 'back',
+            'file': 'SKILL.md',
+            'summary': 'goldens',
+            'old': 'a',
+            'new': 'b',
+            'source': 'Card #1',
+            'status': 'pending',
+            'error': null,
+          },
+          {
+            'id': 'l2',
+            'skill': 'back',
+            'file': 'SKILL.md',
+            'summary': 'x',
+            'old': 'c',
+            'new': 'd',
+            'source': 'Card #1',
+            'status': 'failed',
+            'error': 'o trecho atual não está mais no arquivo',
+          },
+        ],
+      }),
+    );
+    final items = store.learningsOf(p);
+    expect(items.map((l) => (l.id, l.accepted, l.error != null)), [
+      ('l1', null, false),
+      ('l2', null, true),
+    ]);
+    store.decideLearning(p, items.first, true);
+    expect(sent.last, {
+      'type': 'decide_learning',
+      'plan_id': 'push',
+      'id': 'l1',
+      'accept': true,
+    });
   });
 
   test('canonical text ignores key order', () {

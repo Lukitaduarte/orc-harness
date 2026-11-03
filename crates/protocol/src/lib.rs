@@ -333,6 +333,24 @@ pub struct ProjectInfo {
     pub workspace_id: Option<String>,
 }
 
+/// A skill change proposed by Learn: replace `old` (empty: append) with
+/// `new` in `file` of skill `skill`. Applied only when you accept it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LearningItem {
+    pub id: String,
+    pub skill: String,
+    pub file: String,
+    pub summary: String,
+    pub old: String,
+    pub new: String,
+    /// Which comment it came from.
+    pub source: String,
+    /// pending, applied, declined or failed.
+    pub status: String,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
 /// A workspace: a name and the accounts in it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkspaceInfo {
@@ -520,6 +538,10 @@ pub enum ClientMessage {
     /// Opens a path of the session's folder in Xcode, Android Studio, Zed,
     /// VS Code or Finder.
     OpenExternal { session_id: String, path: String, app: String },
+    /// Learn: a session reads these card comments and the named catalog
+    /// skills and proposes edits (see LearningItem).
+    Learn { plan_id: String, account_id: String, notes: Vec<String>, skills: Vec<String> },
+    DecideLearning { plan_id: String, id: String, accept: bool },
     /// Puts a failed or stopped card back in line.
     RetryCard { plan_id: String, number: u32 },
     /// Keystrokes or pasted text for a session's terminal.
@@ -557,6 +579,7 @@ pub enum DaemonMessage {
     Pr { session_id: String, pr: Option<serde_json::Value> },
     Plans { plans: Vec<PlanDoc> },
     Workspaces { workspaces: Vec<WorkspaceInfo> },
+    Learnings { plan_id: String, items: Vec<LearningItem> },
     BrowserState { profile: String, open: bool, url: String },
     DirEntries { session_id: String, path: String, entries: Vec<DirEntry> },
     FileContent { session_id: String, path: String, text: String },
