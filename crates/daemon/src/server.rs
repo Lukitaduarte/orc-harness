@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
-use orc_protocol::{ClientMessage, DaemonMessage};
+use orc_protocol::{ClientMessage, DaemonMessage, ProjectInfo, Profile};
 use orc_protocol::GridSnapshot;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
@@ -16,6 +16,7 @@ use tokio::sync::broadcast;
 use crate::catalog::{Catalog, mcp_env, test_mcp};
 use crate::git;
 use crate::manager::SessionManager;
+use crate::plans::{self, Plans, Run};
 use crate::projects::Projects;
 use crate::quota::QuotaStore;
 use crate::usage::{UsageStore, day_of, parse_otlp};
@@ -42,6 +43,8 @@ pub struct Daemon {
     pub catalog: Arc<Mutex<Catalog>>,
     pub usage: Arc<Mutex<UsageStore>>,
     pub projects: Arc<Mutex<Projects>>,
+    /// Lock order: plans, then sessions or projects.
+    pub plans: Arc<Mutex<Plans>>,
     pub git: GitPaths,
     pub inbox: Arc<Mutex<Inbox>>,
     pub env_requests: Arc<Mutex<EnvRequests>>,
@@ -57,6 +60,7 @@ impl Daemon {
         catalog: Catalog,
         usage: UsageStore,
         projects: Projects,
+        plans: Plans,
         git: GitPaths,
     ) -> Self {
         Self {
@@ -65,6 +69,7 @@ impl Daemon {
             catalog: Arc::new(Mutex::new(catalog)),
             usage: Arc::new(Mutex::new(usage)),
             projects: Arc::new(Mutex::new(projects)),
+            plans: Arc::new(Mutex::new(plans)),
             git,
             inbox: Arc::default(),
             env_requests: Arc::default(),
@@ -120,13 +125,20 @@ impl Daemon {
     pub fn hello(&self) -> Vec<DaemonMessage> {
         // Takes the sessions lock itself: build it before holding that lock.
         let catalog = self.catalog_message();
+        let (plan_docs, runs) = {
+            let plans = self.plans.lock().unwrap();
+            let runs: Vec<_> = plans.runs.iter().map(run_message).collect();
+            (plans.docs.clone(), runs)
+        };
         let sessions = self.sessions.lock().unwrap();
         let mut out = vec![
             DaemonMessage::Hello { accounts: sessions.account_ids() },
             DaemonMessage::Sessions { sessions: sessions.list() },
             catalog,
             DaemonMessage::Projects { projects: self.projects.lock().unwrap().list() },
+            DaemonMessage::Plans { plans: plan_docs },
         ];
+        out.extend(runs);
         let usage = self.usage.lock().unwrap();
         for s in sessions.list() {
             out.push(DaemonMessage::SessionUsage { usage: usage.session(&s.id), session_id: s.id });
@@ -202,18 +214,15 @@ impl Daemon {
                 let (cwd, project) = match (arg("branch"), &me.project_id) {
                     (Some(branch), Some(pid)) => {
                         let project = self.projects.lock().unwrap().get(pid).cloned().ok_or("projeto sumiu")?;
-                        let repo = PathBuf::from(&project.repo);
-                        let path = git::worktree_path(&self.git.worktrees, &project.id, &branch);
-                        git::worktree_add(&repo, &path, &branch, &project.base_branch)
-                            .and_then(|_| git::enable_commit_check(&repo, &path, &self.git.hooks, &self.git.commit_check))
-                            .map_err(|e| e.to_string())?;
+                        let path = self.worktree(&project, &branch).map_err(|e| e.to_string())?;
                         (path, Some((project.id, branch)))
                     }
                     (Some(_), None) => return Err("branch só vale para sessões de projeto".into()),
                     (None, _) => (PathBuf::from(&me.cwd), me.project_id.clone().zip(me.branch.clone())),
                 };
                 let full = format!(
-                    "{prompt}\n\n(Você foi criado pela sessão {} via delegate_task do harness. Ao terminar,                      use a tool send_message para {} com o resultado.)",
+                    "{prompt}\n\n(Você foi criado pela sessão {} via delegate_task do harness. Ao terminar, \
+                     use a tool send_message para {} com o resultado.)",
                     me.id, me.id
                 );
                 let new = sessions
@@ -243,6 +252,32 @@ impl Daemon {
                 let _ = self.events.send(DaemonMessage::EnvRequest { id, session_id: me.id, name: name.clone() });
                 Ok(format!("pedido enviado ao usuário; {name} só é gravada se ele aprovar no app (a resposta chega no read_inbox)"))
             }
+            "save_plan" => {
+                let markdown = arg("markdown").ok_or("falta `markdown`")?;
+                let replies = args.get("replies").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+                let amendments: Vec<String> = args
+                    .get("amendments")
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .unwrap_or_default();
+                let mut plans = self.plans.lock().unwrap();
+                let Some(doc) = plans.docs.iter_mut().find(|d| d.planner.as_deref() == Some(me.id.as_str())) else {
+                    return Err("esta sessão não está planejando nenhum plano".into());
+                };
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+                let skipped = plans::apply_save(doc, &markdown, &replies, &amendments, now);
+                let doc = doc.clone();
+                plans.save(doc.clone()).map_err(|e| e.to_string())?;
+                let _ = self.events.send(DaemonMessage::Plans { plans: plans.docs.clone() });
+                let mut out = format!("plano salvo (revisão {}); o usuário revisa no app", doc.revision);
+                for s in skipped {
+                    out.push_str(&format!("\nignorado: {s}"));
+                }
+                Ok(out)
+            }
             other => Err(format!("tool desconhecida: {other}")),
         }
     }
@@ -252,6 +287,170 @@ impl Daemon {
         let s = self.sessions.lock().unwrap().summary(session_id)?;
         let base = self.projects.lock().unwrap().get(s.project_id.as_deref()?)?.base_branch.clone();
         Some((PathBuf::from(s.cwd), base))
+    }
+
+    /// The worktree of `branch` (created if needed), commit check on.
+    fn worktree(&self, project: &ProjectInfo, branch: &str) -> std::io::Result<PathBuf> {
+        let repo = PathBuf::from(&project.repo);
+        let path = git::worktree_path(&self.git.worktrees, &project.id, branch);
+        git::worktree_add(&repo, &path, branch, &project.base_branch)?;
+        git::enable_commit_check(&repo, &path, &self.git.hooks, &self.git.commit_check)?;
+        Ok(path)
+    }
+
+    /// Starts the run's cards whose dependencies are done, each in its own
+    /// worktree session told what to do. A card that cannot start fails
+    /// with the reason; the others go on.
+    fn start_ready(&self, run: &mut Run) {
+        let ready = run.ready_to_start();
+        if ready.is_empty() {
+            return;
+        }
+        let project = self.projects.lock().unwrap().get(&run.project_id).cloned();
+        for spec in ready {
+            let started = project
+                .as_ref()
+                .ok_or_else(|| std::io::Error::other("o projeto do plano foi removido"))
+                .and_then(|project| {
+                    let path = self.worktree(project, &spec.branch)?;
+                    let profile = Profile { model: spec.model.clone(), ..Profile::default() };
+                    self.sessions.lock().unwrap().create_with_prompt(
+                        &run.account_id,
+                        Some(path),
+                        Some((project.id.clone(), spec.branch.clone())),
+                        profile,
+                        Some(plans::card_prompt(&spec.prompt, &spec.branch)),
+                        100,
+                        30,
+                    )
+                });
+            let Some(card) = run.card_mut(spec.number) else { continue };
+            match started {
+                Ok(s) => {
+                    card.state = "running".into();
+                    card.session_id = Some(s.id);
+                }
+                Err(e) => {
+                    card.state = "failed".into();
+                    card.note = Some(e.to_string());
+                }
+            }
+        }
+        let _ = self.events.send(DaemonMessage::Sessions { sessions: self.sessions.lock().unwrap().list() });
+    }
+
+    /// Asks GitHub about every card with work out: an open PR moves it to
+    /// review, a merged one to done (freeing its dependents, started
+    /// here). A running card whose session ended without a PR stops.
+    pub fn poll_plans(&self) {
+        // Read what to ask, then ask without holding any lock (network).
+        let mut asks = Vec::new();
+        {
+            let plans = self.plans.lock().unwrap();
+            let sessions = self.sessions.lock().unwrap();
+            let projects = self.projects.lock().unwrap();
+            for run in plans.runs.iter().filter(|r| r.active()) {
+                let Some(project) = projects.get(&run.project_id) else { continue };
+                let gh = sessions.account(&run.account_id).and_then(|a| a.gh_config_dir.clone());
+                for c in run.cards.iter().filter(|c| c.state == "running" || c.state == "review") {
+                    let alive = c
+                        .session_id
+                        .as_deref()
+                        .and_then(|id| sessions.summary(id))
+                        .is_some_and(|s| s.state != orc_protocol::SessionState::Exited);
+                    asks.push((run.plan_id.clone(), c.number, c.branch.clone(), PathBuf::from(&project.repo), gh.clone(), alive));
+                }
+            }
+        }
+        let answers: Vec<_> = asks
+            .into_iter()
+            .map(|(plan, n, branch, repo, gh, alive)| {
+                let pr = gh_pr(&repo, &branch, gh.as_deref());
+                (plan, n, branch, pr, alive)
+            })
+            .collect();
+        let mut plans = self.plans.lock().unwrap();
+        let mut changed = Vec::new();
+        for (plan, n, branch, pr, alive) in answers {
+            let Some(run) = plans.run_mut(&plan) else { continue };
+            let moved = match &pr {
+                Some(pr) => run.apply_pr(&branch, pr),
+                None if !alive => {
+                    let card = run.card_mut(n).filter(|c| c.state == "running");
+                    card.map(|c| {
+                        c.state = "stopped".into();
+                        c.note = Some("a sessão terminou sem abrir PR".into());
+                    })
+                    .is_some()
+                }
+                None => false,
+            };
+            if moved && !changed.contains(&plan) {
+                changed.push(plan);
+            }
+        }
+        for plan in changed {
+            let Some(run) = plans.run_mut(&plan) else { continue };
+            self.start_ready(run);
+            let run = run.clone();
+            if let Err(e) = plans.save_run(&run) {
+                eprintln!("orcd: não salvei a execução de {plan}: {e}");
+            }
+            let _ = self.events.send(run_message(&run));
+        }
+    }
+
+    /// Sends `request` to the plan's planning session, or starts one in the
+    /// project's repository (it reads code, never commits) with the plan so
+    /// far and the request.
+    fn ask_planner(&self, plan_id: &str, account_id: &str, request: &str) -> Result<(), String> {
+        let mut plans = self.plans.lock().unwrap();
+        let doc = plans.docs.iter().find(|d| d.id == plan_id).cloned().ok_or("plano desconhecido")?;
+        let mut sessions = self.sessions.lock().unwrap();
+        let alive = doc
+            .planner
+            .as_deref()
+            .and_then(|id| sessions.summary(id))
+            .filter(|s| s.state != orc_protocol::SessionState::Exited);
+        let planner = match alive {
+            Some(s) => {
+                let session = sessions.session(&s.id).ok_or("sessão de planejamento sumiu")?;
+                // Bracketed paste keeps the request's lines together; Enter sends it.
+                session
+                    .write(format!("\x1b[200~{request}\x1b[201~").as_bytes())
+                    .map_err(|e| e.to_string())?;
+                std::thread::sleep(Duration::from_millis(150));
+                session.write(b"\r").map_err(|e| e.to_string())?;
+                s.id
+            }
+            None => {
+                let project = self.projects.lock().unwrap().get(&doc.project_id).cloned().ok_or("o projeto do plano foi removido")?;
+                let prompt = plans::planner_prompt(&doc, &project.repo, request);
+                let s = sessions
+                    .create_with_prompt(account_id, Some(PathBuf::from(&project.repo)), None, Profile::default(), Some(prompt), 100, 30)
+                    .map_err(|e| e.to_string())?;
+                let _ = self.events.send(DaemonMessage::Sessions { sessions: sessions.list() });
+                s.id
+            }
+        };
+        drop(sessions);
+        let doc = plans.doc_mut(plan_id).ok_or("plano desconhecido")?;
+        doc.planner = Some(planner);
+        doc.busy = true;
+        let doc = doc.clone();
+        plans.save(doc).map_err(|e| e.to_string())?;
+        let _ = self.events.send(DaemonMessage::Plans { plans: plans.docs.clone() });
+        Ok(())
+    }
+
+    /// Polls plans every `every`, off the async runtime.
+    pub async fn watch_plans(self, every: Duration) {
+        let mut tick = tokio::time::interval(every);
+        loop {
+            tick.tick().await;
+            let d = self.clone();
+            let _ = tokio::task::spawn_blocking(move || d.poll_plans()).await;
+        }
     }
 
     fn catalog_message(&self) -> DaemonMessage {
@@ -394,13 +593,10 @@ impl Daemon {
                 let Some(project) = self.projects.lock().unwrap().get(&project_id).cloned() else {
                     return vec![DaemonMessage::Error { message: format!("projeto desconhecido: {project_id}") }];
                 };
-                let repo = PathBuf::from(&project.repo);
-                let path = git::worktree_path(&self.git.worktrees, &project.id, &branch);
-                if let Err(e) = git::worktree_add(&repo, &path, &branch, &project.base_branch)
-                    .and_then(|_| git::enable_commit_check(&repo, &path, &self.git.hooks, &self.git.commit_check))
-                {
-                    return error(e);
-                }
+                let path = match self.worktree(&project, &branch) {
+                    Ok(p) => p,
+                    Err(e) => return error(e),
+                };
                 let mut sessions = self.sessions.lock().unwrap();
                 if let Err(e) = sessions.create_in(&account_id, Some(path), Some((project.id, branch)), profile, cols, rows) {
                     return error(e);
@@ -439,20 +635,7 @@ impl Daemon {
                 let events = self.events.clone();
                 // gh goes to the network: off the async runtime.
                 std::thread::spawn(move || {
-                    let mut cmd = std::process::Command::new("gh");
-                    cmd.current_dir(&s.cwd).args([
-                        "pr", "view", &branch, "--json",
-                        "number,title,state,url,isDraft,reviewDecision,statusCheckRollup",
-                    ]);
-                    match &gh_dir {
-                        Some(dir) => { cmd.env("GH_CONFIG_DIR", dir); }
-                        None => { cmd.env_remove("GH_CONFIG_DIR"); }
-                    }
-                    let pr = cmd
-                        .output()
-                        .ok()
-                        .filter(|o| o.status.success())
-                        .and_then(|o| serde_json::from_slice(&o.stdout).ok());
+                    let pr = gh_pr(std::path::Path::new(&s.cwd), &branch, gh_dir.as_deref());
                     let _ = events.send(DaemonMessage::Pr { session_id, pr });
                 });
             }
@@ -477,6 +660,72 @@ impl Daemon {
                 let verdict = if approve { "aprovou" } else { "recusou" };
                 self.deliver("harness", &session, &format!("O usuário {verdict} gravar {name}."));
                 emit(DaemonMessage::EnvRequestResolved { id, approved: approve });
+            }
+            ClientMessage::SavePlan { plan } => {
+                let mut plans = self.plans.lock().unwrap();
+                if let Err(e) = plans.save_from_app(plan) {
+                    return error(e);
+                }
+                emit(DaemonMessage::Plans { plans: plans.docs.clone() });
+            }
+            ClientMessage::RemovePlan { id } => {
+                let mut plans = self.plans.lock().unwrap();
+                if plans.runs.iter().any(|r| r.plan_id == id && r.active()) {
+                    return vec![DaemonMessage::Error { message: "o plano tem cards em execução".into() }];
+                }
+                if let Err(e) = plans.remove(&id) {
+                    return error(e);
+                }
+                emit(DaemonMessage::Plans { plans: plans.docs.clone() });
+            }
+            ClientMessage::StartPlan { plan_id, account_id, cards } => {
+                let mut plans = self.plans.lock().unwrap();
+                let Some(doc) = plans.docs.iter().find(|d| d.id == plan_id).cloned() else {
+                    return vec![DaemonMessage::Error { message: format!("plano desconhecido: {plan_id}") }];
+                };
+                if plans.runs.iter().any(|r| r.plan_id == plan_id && r.active()) {
+                    return vec![DaemonMessage::Error { message: "o plano já está em execução".into() }];
+                }
+                if self.sessions.lock().unwrap().account(&account_id).is_none() {
+                    return vec![DaemonMessage::Error { message: format!("conta desconhecida: {account_id}") }];
+                }
+                if let Err(message) = Run::validate(&cards) {
+                    return vec![DaemonMessage::Error { message }];
+                }
+                let mut run = Run::new(&plan_id, &doc.project_id, &account_id, cards);
+                self.start_ready(&mut run);
+                if let Err(e) = plans.save_run(&run) {
+                    return error(e);
+                }
+                emit(run_message(&run));
+                plans.runs.retain(|r| r.plan_id != plan_id);
+                plans.runs.push(run);
+            }
+            ClientMessage::AskPlanner { plan_id, account_id, request } => {
+                return match self.ask_planner(&plan_id, &account_id, &request) {
+                    Ok(()) => Vec::new(),
+                    Err(message) => vec![DaemonMessage::Error { message }],
+                };
+            }
+            ClientMessage::RetryCard { plan_id, number } => {
+                let mut plans = self.plans.lock().unwrap();
+                let Some(run) = plans.run_mut(&plan_id) else {
+                    return vec![DaemonMessage::Error { message: "o plano não está em execução".into() }];
+                };
+                match run.card_mut(number) {
+                    Some(c) if c.state == "failed" || c.state == "stopped" => {
+                        c.state = "todo".into();
+                        c.session_id = None;
+                        c.note = None;
+                    }
+                    _ => return vec![DaemonMessage::Error { message: "só cards com falha ou parados voltam".into() }],
+                }
+                self.start_ready(run);
+                let run = run.clone();
+                if let Err(e) = plans.save_run(&run) {
+                    return error(e);
+                }
+                emit(run_message(&run));
             }
             ClientMessage::ListSessions => {
                 return vec![DaemonMessage::Sessions {
@@ -565,6 +814,27 @@ impl Daemon {
         let app = Router::new().route("/v1/metrics", post(metrics)).with_state(self);
         axum::serve(listener, app).await
     }
+}
+
+fn run_message(run: &Run) -> DaemonMessage {
+    DaemonMessage::PlanRun { plan_id: run.plan_id.clone(), cards: run.cards.clone() }
+}
+
+/// `gh pr view` of `branch` (as the account in `gh_dir`), if there is a PR.
+fn gh_pr(cwd: &std::path::Path, branch: &str, gh_dir: Option<&std::path::Path>) -> Option<serde_json::Value> {
+    let mut cmd = std::process::Command::new("gh");
+    cmd.current_dir(cwd).args([
+        "pr", "view", branch, "--json",
+        "number,title,state,url,isDraft,reviewDecision,statusCheckRollup",
+    ]);
+    match gh_dir {
+        Some(dir) => cmd.env("GH_CONFIG_DIR", dir),
+        None => cmd.env_remove("GH_CONFIG_DIR"),
+    };
+    cmd.output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| serde_json::from_slice(&o.stdout).ok())
 }
 
 fn set_owner_only(path: &std::path::Path) -> std::io::Result<()> {

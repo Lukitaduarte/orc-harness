@@ -32,6 +32,13 @@ fn tools() -> Value {
           "description": "Busca texto (ou regex) nos arquivos da sessão, respeitando o .gitignore.",
           "inputSchema": s(json!({ "query": { "type": "string" },
                                    "regex": { "type": "boolean" } }), &["query"]) },
+        { "name": "save_plan",
+          "description": "Só para a sessão de planejamento: salva o plano completo (markdown) para o usuário revisar no app. Em revisões, responda os comentários em replies e registre pedidos sobre seções aprovadas em amendments.",
+          "inputSchema": s(json!({ "markdown": { "type": "string" },
+                                   "replies": { "type": "array", "items": { "type": "object", "properties": {
+                                       "thread": { "type": "string" }, "body": { "type": "string" }, "resolve": { "type": "boolean" } },
+                                       "required": ["thread", "body"] } },
+                                   "amendments": { "type": "array", "items": { "type": "string" } } }), &["markdown"]) },
         { "name": "request_env_change",
           "description": "Pede ao usuário para gravar o valor de uma env no Keychain do harness. Só acontece se ele aprovar no app.",
           "inputSchema": s(json!({ "name": { "type": "string" },

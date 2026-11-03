@@ -52,6 +52,7 @@ fn daemon(dir: &std::path::Path, socket: &std::path::Path) -> Daemon {
         std::sync::Arc::new(orc_daemon::secrets::SecretStore::memory()),
     ), orc_daemon::catalog::Catalog::load(dir).unwrap(), orc_daemon::usage::UsageStore::load(dir.join("usage.jsonl")),
         orc_daemon::projects::Projects::load(dir.join("projects.json")),
+        orc_daemon::plans::Plans::load(dir.join("plans")),
         orc_daemon::server::GitPaths {
             worktrees: dir.join("worktrees"),
             hooks: dir.join("hooks"),

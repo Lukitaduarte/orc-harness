@@ -70,6 +70,7 @@ async fn sessions_talk_delegate_and_ask_for_envs() {
         orc_daemon::catalog::Catalog::load(dir).unwrap(),
         orc_daemon::usage::UsageStore::load(dir.join("usage.jsonl")),
         orc_daemon::projects::Projects::load(dir.join("projects.json")),
+        orc_daemon::plans::Plans::load(dir.join("plans")),
         GitPaths { worktrees: dir.join("worktrees"), hooks: dir.join("hooks"), commit_check: "/usr/bin/true".into() },
     );
     let mut events = daemon.events.subscribe();
@@ -109,7 +110,7 @@ async fn sessions_talk_delegate_and_ask_for_envs() {
     .unwrap();
     assert_eq!(r[0]["result"]["serverInfo"]["name"], "orc-harness");
     let tools: Vec<&str> = r[1]["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
-    assert_eq!(tools, ["list_sessions", "send_message", "read_inbox", "delegate_task", "search_code", "request_env_change"]);
+    assert_eq!(tools, ["list_sessions", "send_message", "read_inbox", "delegate_task", "search_code", "save_plan", "request_env_change"]);
     assert!(text(&r[2]).contains("(você)"));
     assert!(text(&r[3]).contains("entregue"));
     assert_eq!(r[4]["result"]["isError"], true);

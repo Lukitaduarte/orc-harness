@@ -49,6 +49,7 @@ fn worktree_session_enforces_conventional_commits() {
         orc_daemon::catalog::Catalog::load(dir).unwrap(),
         orc_daemon::usage::UsageStore::load(dir.join("usage.jsonl")),
         orc_daemon::projects::Projects::load(dir.join("projects.json")),
+        orc_daemon::plans::Plans::load(dir.join("plans")),
         GitPaths {
             worktrees: dir.join("worktrees"),
             hooks: dir.join("hooks"),

@@ -10,6 +10,7 @@ use orc_daemon::config;
 use orc_daemon::manager::{ManagerConfig, SessionManager};
 use orc_daemon::remote::{Devices, Remote};
 use orc_daemon::secrets::{self, SecretStore};
+use orc_daemon::plans::Plans;
 use orc_daemon::projects::Projects;
 use orc_daemon::server::{Daemon, GitPaths};
 use orc_daemon::usage::UsageStore;
@@ -62,6 +63,7 @@ fn main() -> std::io::Result<()> {
                 Catalog::load(&home)?,
                 UsageStore::load(home.join("usage.jsonl")),
                 Projects::load(home.join("projects.json")),
+                Plans::load(home.join("plans")),
                 GitPaths {
                     worktrees: home.join("worktrees"),
                     hooks: home.join("hooks"),
@@ -79,6 +81,8 @@ fn main() -> std::io::Result<()> {
                 eprintln!("orcd: para parear um app, rode `orcd pair`");
                 tokio::spawn(remote.serve(daemon.clone()));
                 tokio::spawn(daemon.clone().stream_grids());
+                // Cards move with their PRs on GitHub.
+                tokio::spawn(daemon.clone().watch_plans(Duration::from_secs(60)));
                 daemon.serve(socket).await
             })
         }

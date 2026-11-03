@@ -314,6 +314,56 @@ pub struct SearchHit {
     pub text: String,
 }
 
+/// A plan kept by the daemon: the markdown plus the review state the app
+/// keeps (approvals, comments, amendments) as JSON. The planning session
+/// writes the markdown (and replies to comments) through `save_plan`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct PlanDoc {
+    pub id: String,
+    pub project_id: String,
+    pub name: String,
+    pub markdown: String,
+    #[serde(default)]
+    pub state: serde_json::Value,
+    /// The Claude session writing this plan, while it lives.
+    #[serde(default)]
+    pub planner: Option<String>,
+    /// Times the planning session saved the plan.
+    #[serde(default)]
+    pub revision: u32,
+    /// The planning session is working on a request.
+    #[serde(default)]
+    pub busy: bool,
+}
+
+/// A loop of an approved plan, as the daemon runs it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CardSpec {
+    pub number: u32,
+    pub title: String,
+    pub branch: String,
+    pub model: Option<String>,
+    #[serde(default)]
+    pub depends_on: Vec<u32>,
+    /// The full instruction the card's session starts with.
+    pub prompt: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CardRun {
+    pub number: u32,
+    /// todo, running, review, done; failed (did not start) or stopped
+    /// (session ended without a PR), both retried with `RetryCard`.
+    pub state: String,
+    pub session_id: Option<String>,
+    pub branch: String,
+    pub pr: Option<u64>,
+    pub pr_url: Option<String>,
+    /// Why the card is failed or stopped.
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionSummary {
     pub id: String,
@@ -391,6 +441,16 @@ pub enum ClientMessage {
     McpCall { session_id: String, tool: String, args: serde_json::Value },
     /// Your answer to an agent asking to store an env value.
     ResolveEnvRequest { id: String, approve: bool },
+    /// Saves a plan (new or updated) with its review state.
+    SavePlan { plan: PlanDoc },
+    RemovePlan { id: String },
+    /// Runs an approved plan's loops as worktree sessions on `account_id`.
+    StartPlan { plan_id: String, account_id: String, cards: Vec<CardSpec> },
+    /// Asks the plan's planning session (started if needed, in the project's
+    /// repository) to draft the plan or address comments.
+    AskPlanner { plan_id: String, account_id: String, request: String },
+    /// Puts a failed or stopped card back in line.
+    RetryCard { plan_id: String, number: u32 },
     /// Keystrokes or pasted text for a session's terminal.
     Input { session_id: String, data: String },
     Resize { session_id: String, cols: u16, rows: u16 },
@@ -424,6 +484,9 @@ pub enum DaemonMessage {
     SearchResults { query: String, hits: Vec<SearchHit>, truncated: bool },
     /// `gh pr view` JSON (number, state, url, checks, review), or `none`.
     Pr { session_id: String, pr: Option<serde_json::Value> },
+    Plans { plans: Vec<PlanDoc> },
+    /// Where each loop of a running plan is.
+    PlanRun { plan_id: String, cards: Vec<CardRun> },
     /// Reply to an `McpCall`: text for the agent.
     McpResult { text: String, is_error: bool },
     /// A message between sessions (`send_message`), for the app to show.

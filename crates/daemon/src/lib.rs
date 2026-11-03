@@ -3,6 +3,7 @@
 pub mod catalog;
 pub mod config;
 pub mod git;
+pub mod plans;
 pub mod projects;
 pub mod manager;
 pub mod quota;
