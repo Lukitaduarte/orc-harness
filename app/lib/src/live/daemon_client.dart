@@ -191,6 +191,18 @@ class DaemonClient extends ChangeNotifier {
     },
   });
 
+  /// Last commit/push/merge result per session: (action, ok, output).
+  final gitResults = <String, (String, bool, String)>{};
+
+  void gitCommit(String sessionId, String message) =>
+      send({'type': 'git_commit', 'session_id': sessionId, 'message': message});
+
+  void gitPush(String sessionId) =>
+      send({'type': 'git_push', 'session_id': sessionId});
+
+  void mergePr(String sessionId) =>
+      send({'type': 'merge_pr', 'session_id': sessionId});
+
   /// Paired devices (orc_protocol::DeviceInfo JSON), and which is this one.
   List<Map<String, dynamic>> devices = [];
   String? thisDevice;
@@ -578,6 +590,19 @@ class DaemonClient extends ChangeNotifier {
       case 'learnings':
         learnings[m['plan_id'] as String] = (m['items'] as List)
             .cast<Map<String, dynamic>>();
+        notifyListeners();
+      case 'git_result':
+        final sid = m['session_id'] as String;
+        gitResults[sid] = (
+          m['action'] as String,
+          m['ok'] as bool,
+          m['output'] as String,
+        );
+        // What changed: the files and the PR.
+        if (m['ok'] == true) {
+          requestDiff(sid);
+          send({'type': 'pr_status', 'session_id': sid});
+        }
         notifyListeners();
       case 'devices':
         devices = (m['devices'] as List).cast<Map<String, dynamic>>();

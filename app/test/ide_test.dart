@@ -56,6 +56,28 @@ void main() {
       });
 
       expect(plainInsert(r'print(${1:object})$0'), 'print(object)');
+      expect(
+        applyEdits('void main(){\nprint(1);}\n', [
+          {
+            'range': {
+              'start': {'line': 1, 'character': 0},
+              'end': {'line': 1, 'character': 0},
+            },
+            'newText': '  ',
+          },
+          {
+            'range': {
+              'start': {'line': 0, 'character': 11},
+              'end': {'line': 0, 'character': 11},
+            },
+            'newText': ' ',
+          },
+        ]),
+        'void main() {\n  print(1);}\n',
+      );
+      expect(lsp.relativeOf('file:///r/app/lib/a%20b.dart'), 'lib/a b.dart');
+      expect(lsp.relativeOf('file:///private/r/app/lib/a.dart'), 'lib/a.dart');
+      expect(lsp.relativeOf('file:///sdk/core.dart'), isNull);
       expect(languageOf('lib/main.dart'), 'dart');
       expect(languageOf('ios/Runner/AppDelegate.swift'), 'swift');
       expect(languageOf('README.md'), isNull);

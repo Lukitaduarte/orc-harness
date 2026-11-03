@@ -20,6 +20,16 @@ fn git(dir: &Path, args: &[&str]) -> std::io::Result<String> {
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+/// Stages everything and commits with `message` (the worktree's
+/// commit-msg hook enforces conventional commits).
+pub fn commit_all(dir: &Path, message: &str) -> std::io::Result<String> {
+    if message.trim().is_empty() {
+        return Err(std::io::Error::other("mensagem de commit vazia"));
+    }
+    git(dir, &["add", "-A"])?;
+    git(dir, &["commit", "-m", message])
+}
+
 /// Branch names the harness accepts: `type/slug` style, no tricks.
 pub fn valid_branch(name: &str) -> bool {
     !name.is_empty()

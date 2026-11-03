@@ -8,6 +8,18 @@ use orc_daemon::server::{Daemon, GitPaths};
 use orc_protocol::{ClientMessage, DaemonMessage, Profile};
 use serde_json::{Value, json};
 
+/// The next language-server message `pick` accepts.
+async fn wait(events: &mut tokio::sync::broadcast::Receiver<DaemonMessage>, pick: impl Fn(&Value) -> bool) -> Value {
+    loop {
+        let m = tokio::time::timeout(Duration::from_secs(60), events.recv()).await.expect("lsp timeout").unwrap();
+        if let DaemonMessage::Lsp { message, .. } = m
+            && pick(&message)
+        {
+            return message;
+        }
+    }
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn files_and_the_dart_language_server() {
     let home = tempfile::tempdir().unwrap();
@@ -64,32 +76,34 @@ async fn files_and_the_dart_language_server() {
     let root = format!("file://{}", repo.canonicalize().unwrap().display());
     lsp(json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize",
                 "params": { "processId": null, "rootUri": root, "capabilities": {} } }));
-    let mut wait = async |pick: &dyn Fn(&Value) -> bool| loop {
-        let m = tokio::time::timeout(Duration::from_secs(60), events.recv()).await.expect("lsp timeout").unwrap();
-        if let DaemonMessage::Lsp { message, .. } = m
-            && pick(&message)
-        {
-            return message;
-        }
-    };
-    let init = wait(&|m| m["id"] == 1).await;
+    let init = wait(&mut events, |m| m["id"] == 1).await;
     assert!(init["result"]["capabilities"]["completionProvider"].is_object());
     lsp(json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }));
     let text = std::fs::read_to_string(repo.join("lib/main.dart")).unwrap();
     lsp(json!({ "jsonrpc": "2.0", "method": "textDocument/didOpen",
                 "params": { "textDocument": { "uri": uri, "languageId": "dart", "version": 1, "text": text } } }));
-    let diags = wait(&|m| m["method"] == "textDocument/publishDiagnostics" && m["params"]["diagnostics"].as_array().is_some_and(|d| !d.is_empty())).await;
+    let diags = wait(&mut events, |m| m["method"] == "textDocument/publishDiagnostics" && m["params"]["diagnostics"].as_array().is_some_and(|d| !d.is_empty())).await;
     assert!(diags["params"]["diagnostics"].as_array().unwrap().iter().any(|d| d["range"]["start"]["line"] == 1));
     lsp(json!({ "jsonrpc": "2.0", "id": 2, "method": "textDocument/completion",
                 "params": { "textDocument": { "uri": uri }, "position": { "line": 2, "character": 5 } } }));
-    let done = wait(&|m| m["id"] == 2).await;
+    let done = wait(&mut events, |m| m["id"] == 2).await;
     let items = done["result"]["items"].as_array().or(done["result"].as_array()).unwrap().clone();
     assert!(items.iter().any(|i| i["label"].as_str().is_some_and(|l| l.starts_with("print"))), "{}", items.len());
 
     // Symbol search across the folder.
     lsp(json!({ "jsonrpc": "2.0", "id": 3, "method": "workspace/symbol", "params": { "query": "main" } }));
-    let symbols = wait(&|m| m["id"] == 3).await;
+    let symbols = wait(&mut events, |m| m["id"] == 3).await;
     assert!(symbols["result"].as_array().unwrap().iter().any(|s| s["name"].as_str().is_some_and(|n| n.starts_with("main"))), "{symbols}");
+
+    // Hover on `int`, and formatting of the badly spaced file.
+    lsp(json!({ "jsonrpc": "2.0", "id": 4, "method": "textDocument/hover",
+                "params": { "textDocument": { "uri": uri }, "position": { "line": 1, "character": 3 } } }));
+    let hover = wait(&mut events, |m| m["id"] == 4).await;
+    assert!(hover["result"]["contents"].to_string().contains("int"), "{hover}");
+    lsp(json!({ "jsonrpc": "2.0", "id": 5, "method": "textDocument/formatting",
+                "params": { "textDocument": { "uri": uri }, "options": { "tabSize": 2, "insertSpaces": true } } }));
+    let fmt = wait(&mut events, |m| m["id"] == 5).await;
+    assert!(fmt.get("result").is_some(), "{fmt}");
 
     // Stopping the session stops its language server.
     daemon.handle(ClientMessage::StopSession { session_id: sid });

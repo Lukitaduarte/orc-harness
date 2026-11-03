@@ -578,6 +578,11 @@ pub enum ClientMessage {
     Gate { session_id: String, tool: String, input: serde_json::Value },
     /// Your decision on an action waiting for OK (app only).
     ResolveApproval { id: String, approve: bool },
+    /// From the app, as you: in a project session's worktree.
+    GitCommit { session_id: String, message: String },
+    GitPush { session_id: String },
+    /// Squash-merges the branch's PR (gh, as the session's account).
+    MergePr { session_id: String },
     ListDevices,
     /// Unpairs a device and drops its connection.
     RevokeDevice { id: String },
@@ -622,6 +627,8 @@ pub enum DaemonMessage {
     Workspaces { workspaces: Vec<WorkspaceInfo> },
     Memory { workspace_id: String, entries: Vec<MemoryEntry> },
     Devices { devices: Vec<DeviceInfo> },
+    /// Result of a commit, push or merge.
+    GitResult { session_id: String, action: String, ok: bool, output: String },
     /// Reply to `Gate`.
     GateDecision { allow: bool, reason: String },
     /// A session wants to do something that needs your OK.

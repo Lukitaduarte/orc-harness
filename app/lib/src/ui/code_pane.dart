@@ -55,6 +55,9 @@ class _CodePaneState extends State<CodePane> {
   final _prompts = LspPrompts();
   Timer? _debounce;
 
+  /// What the server said about the symbol under the cursor (⌘I).
+  String? _info;
+
   DaemonClient get d => widget.daemon;
   String get sid => widget.sessionId;
   _OpenFile? get _file => _current < 0 ? null : _files[_current];
@@ -133,6 +136,66 @@ class _CodePaneState extends State<CodePane> {
     setState(() {});
   }
 
+  (String, LspClient)? _lspFor(_OpenFile f) {
+    final lang = languageOf(f.path);
+    return lang == null ? null : (lang, d.lsp(sid, lang));
+  }
+
+  /// F12: opens the definition of the symbol under the cursor.
+  Future<void> _definition() async {
+    final f = _file;
+    final l = f == null ? null : _lspFor(f);
+    if (f == null || l == null) return;
+    l.$2.change(f.path, f.controller.text);
+    final sel = f.controller.selection;
+    final found = await l.$2.definition(
+      f.path,
+      sel.extentIndex,
+      sel.extentOffset,
+    );
+    if (found.isEmpty) {
+      return setState(() => _info = 'Definição não encontrada.');
+    }
+    final (uri, line, character) = found.first;
+    final rel = l.$2.relativeOf(uri);
+    if (rel == null) {
+      return setState(
+        () => _info =
+            'Definido fora do projeto: ${Uri.parse(uri).path}:${line + 1}',
+      );
+    }
+    await _open(rel);
+    final target = _file;
+    if (target == null || target.path != rel) return;
+    target.controller.selection = CodeLineSelection.collapsed(
+      index: line,
+      offset: character,
+    );
+    target.controller.makeCursorCenterIfInvisible();
+  }
+
+  /// ⌘I: what the server knows about the symbol under the cursor.
+  Future<void> _hover() async {
+    final f = _file;
+    final l = f == null ? null : _lspFor(f);
+    if (f == null || l == null) return;
+    final sel = f.controller.selection;
+    final text = await l.$2.hover(f.path, sel.extentIndex, sel.extentOffset);
+    if (mounted) setState(() => _info = text ?? 'Nada sobre este símbolo.');
+  }
+
+  /// ⇧⌥F: formats the file with the language server.
+  Future<void> _format() async {
+    final f = _file;
+    final l = f == null ? null : _lspFor(f);
+    if (f == null || l == null) return;
+    l.$2.change(f.path, f.controller.text);
+    final formatted = await l.$2.format(f.path, f.controller.text);
+    if (formatted != null && formatted != f.controller.text) {
+      f.controller.text = formatted;
+    }
+  }
+
   void _close(int i) {
     // re_editor's cursor blink outlives a focused editor that goes away.
     FocusManager.instance.primaryFocus?.unfocus();
@@ -147,6 +210,10 @@ class _CodePaneState extends State<CodePane> {
     bindings: {
       const SingleActivator(LogicalKeyboardKey.keyS, meta: true): _save,
       const SingleActivator(LogicalKeyboardKey.keyS, control: true): _save,
+      const SingleActivator(LogicalKeyboardKey.f12): _definition,
+      const SingleActivator(LogicalKeyboardKey.keyI, meta: true): _hover,
+      const SingleActivator(LogicalKeyboardKey.keyF, shift: true, alt: true):
+          _format,
     },
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -250,6 +317,28 @@ class _CodePaneState extends State<CodePane> {
               ? const Center(child: Text('Escolha um arquivo à esquerda.'))
               : _editor(context, f),
         ),
+        if (_info != null)
+          Container(
+            constraints: const BoxConstraints(maxHeight: 140),
+            padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
+            color: Theme.of(context).colorScheme.muted,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Text(_info!).mono().xSmall(),
+                  ),
+                ),
+                GhostButton(
+                  density: ButtonDensity.icon,
+                  size: ButtonSize.small,
+                  onPressed: () => setState(() => _info = null),
+                  child: const Icon(LucideIcons.x, size: 12),
+                ),
+              ],
+            ),
+          ),
         if (f != null) _diagnostics(f),
       ],
     );
@@ -286,6 +375,17 @@ class _CodePaneState extends State<CodePane> {
     );
   }
 
+  Widget _langTool(IconData icon, String tip, VoidCallback onPressed) =>
+      Tooltip(
+        tooltip: (context) => TooltipContainer(child: Text(tip)),
+        child: GhostButton(
+          density: ButtonDensity.icon,
+          size: ButtonSize.small,
+          onPressed: onPressed,
+          child: Icon(icon, size: 13),
+        ),
+      );
+
   /// Opens the session's folder (or its iOS/Android project) elsewhere.
   Widget _openIn() {
     Widget item(String label, String path, String app) => GhostButton(
@@ -295,8 +395,18 @@ class _CodePaneState extends State<CodePane> {
     );
     final root = d.dirs[(sid, '')] ?? const [];
     bool has(String n) => root.any((e) => e['name'] == n);
+    final f = _file;
     return Row(
       children: [
+        if (f != null && languageOf(f.path) != null) ...[
+          _langTool(
+            LucideIcons.squareArrowOutUpRight,
+            'Ir para definição (F12)',
+            _definition,
+          ),
+          _langTool(LucideIcons.info, 'Sobre o símbolo (⌘I)', _hover),
+          _langTool(LucideIcons.wandSparkles, 'Formatar (⇧⌥F)', _format),
+        ],
         if (has('ios')) item('Xcode', 'ios/Runner.xcworkspace', 'xcode'),
         if (has('android')) item('Android Studio', 'android', 'android-studio'),
         item('Zed', '', 'zed'),

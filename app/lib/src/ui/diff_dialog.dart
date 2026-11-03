@@ -44,6 +44,73 @@ class _Diff extends StatefulWidget {
 
 class _DiffState extends State<_Diff> {
   int _selected = 0;
+  final _message = TextEditingController();
+
+  @override
+  void dispose() {
+    _message.dispose();
+    super.dispose();
+  }
+
+  /// Commit (conventional, the worktree hook checks), push, merge the PR.
+  Widget _actions(BuildContext context, Map<String, dynamic>? pr) {
+    final d = widget.store.daemon!;
+    final sid = widget.sessionId;
+    final result = d.gitResults[sid];
+    final open = pr != null && pr['state'] == 'OPEN';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _message,
+                  placeholder: const Text('feat(escopo): o que muda'),
+                  onSubmitted: (_) => d.gitCommit(sid, _message.text.trim()),
+                ),
+              ),
+              const Gap(6),
+              PrimaryButton(
+                size: ButtonSize.small,
+                onPressed: () => d.gitCommit(sid, _message.text.trim()),
+                child: const Text('Commit'),
+              ),
+              const Gap(4),
+              OutlineButton(
+                size: ButtonSize.small,
+                onPressed: () => d.gitPush(sid),
+                child: const Text('Push'),
+              ),
+              if (open) ...[
+                const Gap(4),
+                OutlineButton(
+                  size: ButtonSize.small,
+                  leading: const Icon(LucideIcons.gitMerge, size: 12),
+                  onPressed: () => d.mergePr(sid),
+                  child: const Text('Merge (squash)'),
+                ),
+              ],
+            ],
+          ),
+          if (result != null) ...[
+            const Gap(6),
+            Text(
+              '${result.$1}: ${result.$2 ? 'ok' : 'falhou'}${result.$3.isEmpty ? '' : ' · ${result.$3.split('\n').take(3).join(' ')}'}',
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ).xSmall().medium(
+              color: result.$2
+                  ? Colors.emerald
+                  : Theme.of(context).colorScheme.destructive,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -153,6 +220,8 @@ class _DiffState extends State<_Diff> {
             ],
           ),
         ),
+        const Divider(),
+        _actions(context, pr),
       ],
     );
   }

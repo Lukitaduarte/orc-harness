@@ -100,6 +100,70 @@ class LspClient extends ChangeNotifier {
     return items is List ? items.cast<Map<String, dynamic>>() : const [];
   }
 
+  Map<String, Object?> _at(String path, int line, int character) => {
+    'textDocument': {'uri': uriOf(path)},
+    'position': {'line': line, 'character': character},
+  };
+
+  /// Where the symbol at a position is defined: (uri, line, character).
+  Future<List<(String, int, int)>> definition(
+    String path,
+    int line,
+    int character,
+  ) async {
+    final r = await request(
+      'textDocument/definition',
+      _at(path, line, character),
+    );
+    final list = r is List ? r : (r == null ? const [] : [r]);
+    return [
+      for (final l in list.cast<Map>())
+        (
+          (l['uri'] ?? l['targetUri']) as String,
+          ((l['range'] ?? l['targetSelectionRange'])['start']['line'] as int),
+          ((l['range'] ?? l['targetSelectionRange'])['start']['character']
+              as int),
+        ),
+    ];
+  }
+
+  /// What the server says about the symbol at a position (plain text).
+  Future<String?> hover(String path, int line, int character) async {
+    final r = await request('textDocument/hover', _at(path, line, character));
+    if (r is! Map) return null;
+    final c = r['contents'];
+    final text = switch (c) {
+      String() => c,
+      Map() => '${c['value'] ?? ''}',
+      List() => c.map((x) => x is Map ? x['value'] : '$x').join('\n'),
+      _ => '',
+    };
+    return text.trim().isEmpty ? null : text.trim();
+  }
+
+  /// The whole file formatted, or null if the server has nothing to change.
+  Future<String?> format(String path, String text) async {
+    final r = await request('textDocument/formatting', {
+      'textDocument': {'uri': uriOf(path)},
+      'options': {'tabSize': 2, 'insertSpaces': true},
+    });
+    if (r is! List || r.isEmpty) return null;
+    return applyEdits(text, r.cast<Map<String, dynamic>>());
+  }
+
+  /// A file URI under the session's folder as a relative path, else null.
+  String? relativeOf(String uri) {
+    final root = Uri.directory(rootPath).toString();
+    final private = root.replaceFirst('file:///', 'file:///private/');
+    if (uri.startsWith(root)) {
+      return Uri.decodeComponent(uri.substring(root.length));
+    }
+    if (uri.startsWith(private)) {
+      return Uri.decodeComponent(uri.substring(private.length));
+    }
+    return null;
+  }
+
   /// A message from the server, through the daemon.
   void handle(Map<String, dynamic> m) {
     final id = m['id'];
@@ -126,6 +190,34 @@ class LspClient extends ChangeNotifier {
       _send({'jsonrpc': '2.0', 'id': id, 'result': result});
     }
   }
+}
+
+/// Applies LSP TextEdits (line/character, UTF-16 like Dart strings).
+String applyEdits(String text, List<Map<String, dynamic>> edits) {
+  final starts = <int>[0];
+  for (var i = 0; i < text.length; i++) {
+    if (text.codeUnitAt(i) == 10) starts.add(i + 1);
+  }
+  int offset(Map p) {
+    final line = p['line'] as int;
+    if (line >= starts.length) return text.length;
+    return (starts[line] + (p['character'] as int)).clamp(0, text.length);
+  }
+
+  final sorted = [...edits]
+    ..sort(
+      (a, b) =>
+          offset(b['range']['start']).compareTo(offset(a['range']['start'])),
+    );
+  var out = text;
+  for (final e in sorted) {
+    out = out.replaceRange(
+      offset(e['range']['start']),
+      offset(e['range']['end']),
+      e['newText'] as String,
+    );
+  }
+  return out;
 }
 
 /// LSP SymbolKind as a word.

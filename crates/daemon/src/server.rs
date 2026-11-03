@@ -866,6 +866,42 @@ impl Daemon {
         self.sessions.lock().unwrap().summary(session_id).map(|s| PathBuf::from(s.cwd))
     }
 
+    /// Push of a project session's branch, or squash-merge of its PR, as
+    /// the session's account; the result comes as an event.
+    fn git_remote(&self, session_id: String, merge: bool) -> Vec<DaemonMessage> {
+        let sessions = self.sessions.lock().unwrap();
+        let Some(s) = sessions.summary(&session_id) else { return no_session() };
+        let (Some(branch), gh_dir) = (s.branch.clone(), sessions.account(&s.account_id).and_then(|a| a.gh_config_dir.clone())) else {
+            return vec![DaemonMessage::Error { message: "a sessão não tem branch".into() }];
+        };
+        let events = self.events.clone();
+        // Network: off the async runtime; the result comes as an event.
+        std::thread::spawn(move || {
+            let mut cmd = if merge {
+                let mut c = std::process::Command::new("gh");
+                c.args(["pr", "merge", &branch, "--squash"]);
+                c
+            } else {
+                let mut c = std::process::Command::new("git");
+                c.args(["push", "-u", "origin", &branch]);
+                c
+            };
+            cmd.current_dir(&s.cwd);
+            // gh (and git's gh credential helper) as the session's account.
+            match &gh_dir {
+                Some(dir) => cmd.env("GH_CONFIG_DIR", dir),
+                None => cmd.env_remove("GH_CONFIG_DIR"),
+            };
+            let (ok, output) = match cmd.output() {
+                Ok(o) => (o.status.success(), format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr)).trim().to_string()),
+                Err(e) => (false, e.to_string()),
+            };
+            let action = if merge { "merge" } else { "push" }.to_string();
+            let _ = events.send(DaemonMessage::GitResult { session_id, action, ok, output });
+        });
+        Vec::new()
+    }
+
     fn catalog_message(&self) -> DaemonMessage {
         let secrets = self.sessions.lock().unwrap().secrets.clone();
         let catalog = self.catalog.lock().unwrap();
@@ -1144,6 +1180,18 @@ impl Daemon {
                     Err(e) => vec![DaemonMessage::Error { message: e }],
                 };
             }
+            ClientMessage::GitCommit { session_id, message } => {
+                let Some((cwd, _)) = self.session_base(&session_id) else {
+                    return vec![DaemonMessage::Error { message: "a sessão não está num projeto".into() }];
+                };
+                let (ok, output) = match git::commit_all(&cwd, &message) {
+                    Ok(out) => (true, out),
+                    Err(e) => (false, e.to_string()),
+                };
+                return vec![DaemonMessage::GitResult { session_id, action: "commit".into(), ok, output }];
+            }
+            ClientMessage::GitPush { session_id } => return self.git_remote(session_id, false),
+            ClientMessage::MergePr { session_id } => return self.git_remote(session_id, true),
             ClientMessage::PrStatus { session_id } => {
                 let sessions = self.sessions.lock().unwrap();
                 let Some(s) = sessions.summary(&session_id) else { return Vec::new() };

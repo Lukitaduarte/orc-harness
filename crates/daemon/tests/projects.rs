@@ -96,10 +96,34 @@ fn worktree_session_enforces_conventional_commits() {
 
     let found = daemon.handle(ClientMessage::Search {
         project_id: None,
-        session_id: Some(s.id),
+        session_id: Some(s.id.clone()),
         query: "login".into(),
         regex: false,
     });
     let [DaemonMessage::SearchResults { hits, .. }] = &found[..] else { panic!("{found:?}") };
     assert_eq!(hits[0].path, "login.rs");
+
+    // Commit and push from the app, through the same rules.
+    std::fs::write(wt.join("logout.rs"), "fn logout() {}\n").unwrap();
+    let commit = |m: &str| match &daemon.handle(ClientMessage::GitCommit { session_id: s.id.clone(), message: m.into() })[..] {
+        [DaemonMessage::GitResult { ok, output, .. }] => (*ok, output.clone()),
+        other => panic!("{other:?}"),
+    };
+    assert!(!commit("arrumei").0, "conventional commits still apply");
+    let (ok, out) = commit("feat(auth): logout");
+    assert!(ok, "{out}");
+    let remote = tempfile::tempdir().unwrap();
+    assert!(git(remote.path(), &["init", "-q", "--bare"]));
+    assert!(git(r, &["remote", "add", "origin", &remote.path().display().to_string()]));
+    let mut events = daemon.events.subscribe();
+    assert!(daemon.handle(ClientMessage::GitPush { session_id: s.id.clone() }).is_empty());
+    let (ok, out) = loop {
+        if let DaemonMessage::GitResult { action, ok, output, .. } = events.blocking_recv().unwrap()
+            && action == "push"
+        {
+            break (ok, output);
+        }
+    };
+    assert!(ok, "{out}");
+    assert!(git(remote.path(), &["rev-parse", "--verify", "refs/heads/feat/1-login"]));
 }
