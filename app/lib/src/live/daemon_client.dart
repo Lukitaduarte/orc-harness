@@ -83,6 +83,18 @@ class LiveGrid extends ChangeNotifier {
   }
 }
 
+/// A workspace browser as the daemon streams it. Panes listen to it
+/// directly, so frames never rebuild the rest of the app.
+class LiveBrowser extends ChangeNotifier {
+  bool open = false;
+  String url = '';
+
+  /// Last screen (JPEG) and the page size it shows, in CSS pixels.
+  Uint8List? frame;
+  int width = 0;
+  int height = 0;
+}
+
 /// The app's connection to orcd: pairing, connecting (with retry), and the
 /// live state it reports. Notifies on session, account and quota changes.
 class DaemonClient extends ChangeNotifier {
@@ -145,6 +157,16 @@ class DaemonClient extends ChangeNotifier {
     'account_id': accountId,
     'request': request,
   });
+
+  /// Workspace browsers by profile.
+  final browsers = <String, LiveBrowser>{};
+
+  LiveBrowser browserOf(String profile) =>
+      browsers.putIfAbsent(profile, LiveBrowser.new);
+
+  /// [action] is orc_protocol::BrowserAction JSON (`{'action': 'open', …}`).
+  void browser(String profile, Map<String, Object?> action) =>
+      send({'type': 'browser', 'profile': profile, 'action': action});
 
   /// Last diff per session: (base branch, files).
   final diffs = <String, (String, List<Map<String, dynamic>>)>{};
@@ -381,6 +403,18 @@ class DaemonClient extends ChangeNotifier {
         planRuns[m['plan_id'] as String] = (m['cards'] as List)
             .cast<Map<String, dynamic>>();
         notifyListeners();
+      case 'browser_state':
+        browserOf(m['profile'] as String)
+          ..open = m['open'] as bool
+          ..url = m['url'] as String
+          ..notifyListeners();
+        notifyListeners();
+      case 'browser_frame':
+        browserOf(m['profile'] as String)
+          ..frame = base64Decode(m['jpeg'] as String)
+          ..width = m['width'] as int
+          ..height = m['height'] as int
+          ..notifyListeners();
       case 'diff':
         diffs[m['session_id'] as String] = (
           m['base'] as String,

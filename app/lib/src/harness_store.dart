@@ -220,7 +220,9 @@ class HarnessStore extends ChangeNotifier {
 
   static LayoutNode _clearMissing(LayoutNode n, Set<String> ids) => switch (n) {
     LayoutLeaf() =>
-      n.sessionId == null || ids.contains(n.sessionId)
+      n.sessionId == null ||
+              ids.contains(n.sessionId) ||
+              isBrowserPane(n.sessionId)
           ? n
           : LayoutLeaf(n.id, null),
     LayoutSplit() => LayoutSplit(n.id, n.horizontal, [
@@ -245,6 +247,9 @@ class HarnessStore extends ChangeNotifier {
         for (final e in picked.where((e) => e['kind'] == 'env')) e['name'],
       ],
       'model': s.model == 'padrão' ? null : s.model,
+      'browser': s.draftItems.contains(workspaceBrowserItem)
+          ? s.workspaceId
+          : null,
     };
   }
 
@@ -270,6 +275,33 @@ class HarnessStore extends ChangeNotifier {
   /// Tool count or error of the last real MCP test.
   (bool, int, String?)? mcpResult(String id) =>
       isLive ? daemon!.mcpTests[id] : null;
+
+  /// Pane ids that show a workspace browser instead of a session.
+  static const browserPrefix = 'browser:';
+
+  static bool isBrowserPane(String? id) =>
+      id?.startsWith(browserPrefix) ?? false;
+
+  /// Shows the workspace's browser in [leafId], opening it if needed.
+  void openBrowser(String leafId) {
+    attach(leafId, '$browserPrefix$workspaceId');
+    daemon?.browser(workspaceId, {'action': 'open', 'url': null});
+  }
+
+  /// The catalog plus, live, this workspace's browser for the agent.
+  List<CatalogItem> get profileItems => [
+    ...catalog,
+    if (isLive)
+      const CatalogItem(
+        workspaceBrowserItem,
+        CatalogKind.mcp,
+        'browser',
+        'O navegador deste workspace (cookies e logins dele), pelo Playwright MCP',
+        detail: 'navegador do workspace',
+      ),
+  ];
+
+  static const workspaceBrowserItem = 'workspace-browser';
 
   List<CatalogItem> _liveCatalog() => [
     for (final e in daemon!.catalog)
@@ -357,7 +389,8 @@ class HarnessStore extends ChangeNotifier {
 
   Session? get focusedSession {
     final leaf = _findLeaf(layout, focusedLeafId);
-    return leaf?.sessionId == null ? null : session(leaf!.sessionId!);
+    final id = leaf?.sessionId;
+    return id == null || isBrowserPane(id) ? null : session(id);
   }
 
   /// Sessions of the current workspace not shown in any pane.

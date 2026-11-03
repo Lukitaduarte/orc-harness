@@ -90,7 +90,7 @@ class _Section extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = store.catalog.where((i) => i.kind == kind);
+    final items = store.profileItems.where((i) => i.kind == kind);
     final title = switch (kind) {
       CatalogKind.skill => 'Skills',
       CatalogKind.mcp => 'MCPs',

@@ -4,6 +4,7 @@ import '../harness_store.dart';
 import '../model.dart';
 import '../live/grid.dart';
 import '../live/live_terminal.dart';
+import 'browser_pane.dart';
 import 'diff_dialog.dart';
 import 'format.dart';
 
@@ -47,7 +48,10 @@ class _Pane extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final focused = leaf.id == store.focusedLeafId;
-    final session = leaf.sessionId == null
+    final browser = HarnessStore.isBrowserPane(leaf.sessionId)
+        ? leaf.sessionId!.substring(HarnessStore.browserPrefix.length)
+        : null;
+    final session = leaf.sessionId == null || browser != null
         ? null
         : store.session(leaf.sessionId!);
     return Listener(
@@ -58,10 +62,16 @@ class _Pane extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _header(context, session),
+            _header(context, session, browser: browser),
             const Divider(),
             Expanded(
-              child: session == null
+              child: browser != null && store.daemon != null
+                  ? BrowserPane(
+                      daemon: store.daemon!,
+                      profile: browser,
+                      focused: focused,
+                    )
+                  : session == null
                   ? _SessionPicker(store, leaf.id)
                   : session.live
                   ? _live(session, focused)
@@ -95,7 +105,11 @@ class _Pane extends StatelessWidget {
           );
   }
 
-  Widget _header(BuildContext context, Session? s) => SizedBox(
+  Widget _header(
+    BuildContext context,
+    Session? s, {
+    String? browser,
+  }) => SizedBox(
     height: 36,
     child: Padding(
       padding: const EdgeInsets.only(left: 10, right: 4),
@@ -116,6 +130,10 @@ class _Pane extends StatelessWidget {
             ),
             const Gap(8),
             SecondaryBadge(child: Text(s.model)),
+          ] else if (browser != null) ...[
+            const Icon(LucideIcons.globe, size: 14),
+            const Gap(8),
+            const Text('Navegador do workspace').small().semiBold(),
           ] else
             const Text('Pane vazio').small().muted(),
           const Spacer(),
@@ -254,6 +272,14 @@ class _SessionPicker extends StatelessWidget {
               onPressed: store.newSession,
               child: const Text('Nova sessão'),
             ),
+            if (store.isLive) ...[
+              const Gap(4),
+              OutlineButton(
+                leading: const Icon(LucideIcons.globe, size: 16),
+                onPressed: () => store.openBrowser(leafId),
+                child: const Text('Navegador do workspace'),
+              ),
+            ],
           ],
         ),
       ),
