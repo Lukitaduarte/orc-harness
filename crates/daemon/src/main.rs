@@ -156,8 +156,36 @@ fn main() -> std::io::Result<()> {
             }
             Ok(())
         }
+        Some("install") => {
+            // `--sign "Apple Development: …"` signs the copies (see
+            // `security find-identity -v -p codesigning`).
+            let sign = args.iter().position(|a| a == "--sign").and_then(|i| args.get(i + 1)).cloned();
+            let home = config::orc_home();
+            std::fs::create_dir_all(&home)?;
+            let plist = orc_daemon::service::install(&home, sign.as_deref())?;
+            eprintln!("orcd instalado: {} (sobe no login, volta se cair)", plist.display());
+            eprintln!("log em {}", home.join("orcd.log").display());
+            if sign.is_none() {
+                eprintln!("sem assinatura: o Keychain e o firewall vão perguntar de novo a cada atualização (use --sign)");
+            }
+            Ok(())
+        }
+        Some("uninstall") => {
+            orc_daemon::service::uninstall()?;
+            eprintln!("serviço removido (binários e dados em ~/.orc ficam)");
+            Ok(())
+        }
+        Some("status") => {
+            match orc_daemon::service::status()? {
+                Some(s) => println!("orcd: {s}"),
+                None => println!("orcd: não instalado como serviço"),
+            }
+            Ok(())
+        }
         _ => {
-            eprintln!("uso: orcd serve [--socket PATH] | orcd pair | orcd run -- PROGRAMA [ARGS]");
+            eprintln!(
+                "uso: orcd serve [--socket PATH] | orcd pair | orcd install [--sign IDENTIDADE] | orcd uninstall | orcd status | orcd run -- PROGRAMA [ARGS]"
+            );
             std::process::exit(2);
         }
     }

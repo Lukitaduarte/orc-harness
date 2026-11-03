@@ -12,6 +12,7 @@ pub mod quota;
 pub mod remote;
 pub mod secrets;
 pub mod server;
+pub mod service;
 pub mod session;
 pub mod usage;
 pub mod workspaces;
