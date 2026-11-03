@@ -355,6 +355,31 @@ mod tests {
         assert_eq!(c, b);
     }
 
+    /// The exact JSON the app parses (app/test/live_test.dart uses this
+    /// same string): if serialization changes, both tests must change.
+    pub const GRID_DIFF_JSON: &str = r#"{"type":"grid_diff","session_id":"s1","diff":{"cols":4,"rows":2,"lines":[[1,[{"text":"h","fg":{"kind":"indexed","index":1},"bg":{"kind":"default"},"flags":1},{"text":"i","fg":{"kind":"rgb","r":1,"g":2,"b":3},"bg":{"kind":"default"},"flags":0}]]],"cursor":{"row":1,"col":2,"visible":true}}}"#;
+
+    #[test]
+    fn grid_diff_json_is_what_the_app_expects() {
+        let cell = |text: &str, fg, flags| Cell { text: text.into(), fg, bg: TermColor::Default, flags };
+        let msg = DaemonMessage::GridDiff {
+            session_id: "s1".into(),
+            diff: GridDiff {
+                cols: 4,
+                rows: 2,
+                lines: vec![(
+                    1,
+                    vec![
+                        cell("h", TermColor::Indexed { index: 1 }, cell_flags::BOLD),
+                        cell("i", TermColor::Rgb { r: 1, g: 2, b: 3 }, 0),
+                    ],
+                )],
+                cursor: Cursor { row: 1, col: 2, visible: true },
+            },
+        };
+        assert_eq!(serde_json::to_string(&msg).unwrap(), GRID_DIFF_JSON);
+    }
+
     #[test]
     fn messages_have_a_type_tag() {
         let m = ClientMessage::Input { session_id: "s1".into(), data: "ls\r".into() };

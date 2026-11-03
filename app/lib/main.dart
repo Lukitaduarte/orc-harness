@@ -1,10 +1,15 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import 'src/harness_store.dart';
+import 'src/live/daemon_client.dart';
+import 'src/rust/frb_generated.dart';
 import 'src/ui/workspace_screen.dart';
 
-void main() {
-  runApp(OrcHarnessApp(HarnessStore()));
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await RustLib.init();
+  final daemon = DaemonClient()..start();
+  runApp(OrcHarnessApp(HarnessStore(daemon: daemon)));
 }
 
 class OrcHarnessApp extends StatelessWidget {

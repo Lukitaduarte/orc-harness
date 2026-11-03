@@ -13,19 +13,33 @@ Plano completo: https://claude.ai/artifact/69F6tkzkd1TZqcbXBABdaQ
 ## Estrutura
 
 ```
-app/              Flutter (desktop + mobile), shadcn_flutter
-crates/protocol/  tipos compartilhados: statusLine, quota, grid do terminal, mensagens
-crates/daemon/    orcd (sessões em PTY, terminal emulado, quota) e orc-statusline
+app/                Flutter (desktop + mobile), shadcn_flutter
+app/rust/           ponte Flutter ↔ Rust (flutter_rust_bridge), workspace próprio
+crates/protocol/    tipos compartilhados: statusLine, quota, sessões, grid, mensagens
+crates/link/        iroh: ticket de pareamento, chaves, endpoint sem relay público
+crates/daemon/      orcd (sessões, terminal emulado, quota, pareamento) + orc-statusline e orc-hook
+crates/client-core/ lado do app: parear e conectar
 ```
 
-## Fase atual: 1, núcleo
-
-A UI mockada da fase 0 está no app. O daemon já roda sessões em PTY com o terminal emulado
-(`alacritty_terminal`) e recebe a quota de 5h e 7d pelo statusLine. Próximo passo: transporte iroh
-e o app trocando o mock pelo daemon.
+## Rodando de verdade
 
 ```sh
-cd app && flutter run -d macos             # app (dados mockados)
-cargo test --workspace                     # daemon e protocolo
-cargo run -p orc-daemon --bin orcd -- run -- claude   # tela do Claude Code emulada
+cargo build -p orc-daemon                    # orcd, orc-statusline, orc-hook
+./target/debug/orcd serve                    # deixa rodando
+./target/debug/orcd pair                     # em outro terminal: imprime o ticket orc1…
+cd app && flutter run -d macos               # ⚙ → Conectar daemon → cole o ticket
+```
+
+Contas em `~/.orc/config.json` (sem o arquivo: uma conta `default` com a config padrão do Claude Code):
+
+```json
+{ "accounts": [ { "id": "trabalho", "config_dir": "~/.claude-trabalho" }, { "id": "pessoal" } ] }
+```
+
+## Testes
+
+```sh
+cargo test --workspace                       # daemon, protocolo, iroh ponta a ponta
+cd app && flutter test                       # app
+cargo test -p orc-daemon --test real_claude -- --ignored --nocapture   # claude real, sem prompt
 ```

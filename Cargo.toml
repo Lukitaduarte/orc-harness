@@ -1,6 +1,9 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+# app/rust (the Flutter bridge) is its own workspace: its dependencies must
+# not change the features the daemon and its tests are built with.
+exclude = ["app/rust"]
 
 [workspace.package]
 edition = "2024"

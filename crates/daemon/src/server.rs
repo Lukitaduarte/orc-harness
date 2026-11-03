@@ -196,7 +196,7 @@ impl Daemon {
                     let Ok(msg) = serde_json::from_str::<ClientMessage>(&line) else { continue };
                     let replies = match msg {
                         ClientMessage::NewPairingTicket => match daemon.remote.get() {
-                            Some(r) => vec![DaemonMessage::PairingTicket { ticket: r.new_ticket().encode() }],
+                            Some(r) => vec![DaemonMessage::PairingTicket { ticket: r.new_ticket().await.encode() }],
                             None => vec![DaemonMessage::Error { message: "iroh ainda não subiu".into() }],
                         },
                         other => daemon.handle(other),

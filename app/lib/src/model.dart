@@ -64,6 +64,7 @@ class Account {
     required this.fiveHour,
     required this.sevenDay,
     required this.readAt,
+    this.hasReading = true,
   });
 
   final String id;
@@ -75,6 +76,10 @@ class Account {
 
   /// When the last `rate_limits` reading arrived; shown when the account is idle.
   final DateTime readAt;
+
+  /// False until Claude Code reported rate limits for this account (they
+  /// come only for subscribers, after the first API response).
+  final bool hasReading;
 }
 
 enum SessionState { starting, running, waitingInput, idle }
@@ -102,6 +107,7 @@ class Session {
     required this.fiveHourShare,
     required Set<String> enabledItems,
     required this.lines,
+    this.live = false,
   }) : appliedItems = Set.of(enabledItems),
        draftItems = Set.of(enabledItems);
 
@@ -126,6 +132,9 @@ class Session {
   Set<String> draftItems;
 
   final List<TerminalLine> lines;
+
+  /// A real session in the daemon; its terminal is the live grid.
+  final bool live;
 
   bool get hasPendingChanges =>
       appliedItems.length != draftItems.length ||

@@ -51,7 +51,7 @@ async fn pair_connect_create_and_see_the_terminal() {
     let dir = tempfile::tempdir().unwrap();
     let (_daemon, remote) = start_daemon(dir.path()).await;
 
-    let ticket = remote.new_ticket().encode();
+    let ticket = remote.new_ticket().await.encode();
     let identity = pair(&ticket, "teste").await.expect("pairing failed");
     // The ticket works once.
     assert!(pair(&ticket, "intruso").await.is_err());

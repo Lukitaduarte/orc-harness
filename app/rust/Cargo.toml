@@ -1,0 +1,20 @@
+[package]
+name = "orc_bridge"
+version = "0.1.0"
+edition = "2024"
+license = "UNLICENSED"
+publish = false
+
+# Separate from the root workspace on purpose: see the root Cargo.toml.
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "staticlib", "lib"]
+
+[dependencies]
+flutter_rust_bridge = "=2.13.0"
+orc-client-core = { path = "../../crates/client-core" }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

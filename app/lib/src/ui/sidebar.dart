@@ -2,6 +2,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
 import '../model.dart';
+import 'connect_dialog.dart';
 import 'format.dart';
 import 'new_plan_dialog.dart';
 
@@ -70,7 +71,7 @@ class WorkspaceRail extends StatelessWidget {
           const Gap(4),
           GhostButton(
             density: ButtonDensity.icon,
-            onPressed: () {},
+            onPressed: () => showConnectDialog(context, store),
             child: const Icon(LucideIcons.settings, size: 18),
           ),
         ],
@@ -172,11 +173,17 @@ class _AccountCard extends StatelessWidget {
               ],
             ),
             const Gap(10),
-            QuotaMeter('5h', account.fiveHour, now),
-            const Gap(8),
-            QuotaMeter('7d', account.sevenDay, now),
+            if (!account.hasReading)
+              const Text(
+                'sem leitura ainda: a quota chega com a primeira resposta do Claude',
+              ).xSmall().muted()
+            else ...[
+              QuotaMeter('5h', account.fiveHour, now),
+              const Gap(8),
+              QuotaMeter('7d', account.sevenDay, now),
+            ],
             // Idle accounts keep their last reading instead of dropping to zero.
-            if (age.inMinutes >= 5) ...[
+            if (account.hasReading && age.inMinutes >= 5) ...[
               const Gap(6),
               Text('atualizado há ${formatDuration(age)}').xSmall().muted(),
             ],

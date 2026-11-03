@@ -2,6 +2,8 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
 import '../model.dart';
+import '../live/grid.dart';
+import '../live/live_terminal.dart';
 import 'format.dart';
 
 /// Renders the split tree. Each split is a resizable panel; each leaf a pane.
@@ -60,6 +62,8 @@ class _Pane extends StatelessWidget {
             Expanded(
               child: session == null
                   ? _SessionPicker(store, leaf.id)
+                  : session.live
+                  ? _live(session, focused)
                   : TerminalView(session),
             ),
             if (session != null) ...[
@@ -70,6 +74,24 @@ class _Pane extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// A real session: the daemon's grid, keys back as input.
+  Widget _live(Session s, bool focused) {
+    final d = store.daemon!;
+    final grid = d.grids[s.id];
+    Widget terminal(GridState? g) => LiveTerminal(
+      grid: g,
+      focused: focused,
+      onInput: (data) => d.input(s.id, data),
+      onResize: (cols, rows) => d.resize(s.id, cols, rows),
+    );
+    return grid == null
+        ? terminal(null)
+        : ListenableBuilder(
+            listenable: grid,
+            builder: (context, _) => terminal(grid.state),
+          );
   }
 
   Widget _header(BuildContext context, Session? s) => SizedBox(
@@ -120,7 +142,9 @@ class _Pane extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              '${acc.email} · ${formatTokens(s.tokens)} tokens · ${formatUsd(s.costUsd)}',
+              s.live
+                  ? '${acc.email} · ${s.branch}'
+                  : '${acc.email} · ${formatTokens(s.tokens)} tokens · ${formatUsd(s.costUsd)}',
               overflow: TextOverflow.ellipsis,
             ).xSmall().muted(),
           ),

@@ -1,6 +1,10 @@
 import 'dart:async';
 
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
+
+import 'live/daemon_client.dart';
 
 import 'mock_data.dart' as mock;
 import 'model.dart';
@@ -10,7 +14,8 @@ import 'plan_templates.dart';
 /// App state for phase 0, seeded with fake data. In phase 1 the seeds and the
 /// simulated restart give way to the daemon; the screens keep reading this.
 class HarnessStore extends ChangeNotifier {
-  HarnessStore() : now = DateTime.now() {
+  HarnessStore({this.daemon}) : now = DateTime.now() {
+    daemon?.addListener(_syncLive);
     accounts = mock.seedAccounts(now);
     sessions = mock.seedSessions();
     projects = mock.seedProjects(now);
@@ -44,7 +49,137 @@ class HarnessStore extends ChangeNotifier {
   /// remaining quota.
   static const maxRunningCards = 3;
 
-  List<Workspace> get workspaces => mock.workspaces;
+  /// The real daemon, when the app runs against one ("Este Mac").
+  final DaemonClient? daemon;
+
+  static const liveWorkspace = Workspace('live', 'Este Mac', 'EM');
+
+  List<Workspace> get workspaces => [
+    ...mock.workspaces,
+    if (daemon?.paired ?? false) liveWorkspace,
+  ];
+
+  bool _attachNextLive = false;
+
+  /// Mirrors the daemon's accounts and sessions into the "Este Mac"
+  /// workspace, keeping the pane layout and each session's profile picks.
+  void _syncLive() {
+    final d = daemon!;
+    _layouts.putIfAbsent(
+      liveWorkspace.id,
+      () => const LayoutLeaf('p-live', null),
+    );
+    _focusedLeaf.putIfAbsent(liveWorkspace.id, () => 'p-live');
+
+    accounts.removeWhere((a) => a.workspaceId == liveWorkspace.id);
+    for (final id in d.accounts) {
+      final q = d.quotas[id];
+      accounts.add(
+        Account(
+          id: id,
+          workspaceId: liveWorkspace.id,
+          email: id,
+          plan: 'Claude',
+          fiveHour: QuotaWindow(
+            usedPercent: q?.fiveHour ?? 0,
+            resetsAt: q?.fiveHourResetsAt ?? now,
+            burnPerHour: 0,
+          ),
+          sevenDay: QuotaWindow(
+            usedPercent: q?.sevenDay ?? 0,
+            resetsAt: q?.sevenDayResetsAt ?? now,
+            burnPerHour: 0,
+          ),
+          readAt: q?.readAt ?? now,
+          hasReading: q != null,
+        ),
+      );
+    }
+
+    final previous = {for (final s in sessions.where((s) => s.live)) s.id: s};
+    sessions.removeWhere((s) => s.live);
+    String? added;
+    for (final l in d.sessions) {
+      final before = previous[l.id];
+      if (before == null) added = l.id;
+      final cwdName =
+          l.cwd.split('/').where((p) => p.isNotEmpty).lastOrNull ?? l.id;
+      sessions.add(
+        Session(
+          id: l.id,
+          workspaceId: liveWorkspace.id,
+          accountId: l.accountId,
+          name: cwdName,
+          branch: l.cwd,
+          model: l.model ?? 'padrão',
+          state: switch (l.state) {
+            'running' => SessionState.running,
+            'waiting_input' => SessionState.waitingInput,
+            'starting' => SessionState.starting,
+            _ => SessionState.idle,
+          },
+          tokens: 0,
+          costUsd: 0,
+          fiveHourShare: 0,
+          enabledItems: before?.appliedItems ?? const {},
+          lines: const [],
+          live: true,
+        )..draftItems = Set.of(before?.draftItems ?? const {}),
+      );
+    }
+    // Panes showing a session that ended become empty.
+    final ids = d.sessions.map((s) => s.id).toSet();
+    _layouts[liveWorkspace.id] = _clearMissing(
+      _layouts[liveWorkspace.id]!,
+      ids,
+    );
+    if (_attachNextLive && added != null) {
+      _attachNextLive = false;
+      if (workspaceId == liveWorkspace.id) {
+        showSession(added);
+        return;
+      }
+    }
+    notifyListeners();
+  }
+
+  static LayoutNode _clearMissing(LayoutNode n, Set<String> ids) => switch (n) {
+    LayoutLeaf() =>
+      n.sessionId == null || ids.contains(n.sessionId)
+          ? n
+          : LayoutLeaf(n.id, null),
+    LayoutSplit() => LayoutSplit(n.id, n.horizontal, [
+      for (final c in n.children) _clearMissing(c, ids),
+    ]),
+  };
+
+  /// The profile the daemon runs a session with, from the catalog picks.
+  Map<String, Object?> _profileFor(Session s) {
+    final picked = catalog.where((i) => s.draftItems.contains(i.id));
+    String expand(String p) => p.startsWith('~/')
+        ? '${Platform.environment['HOME'] ?? ''}${p.substring(1)}'
+        : p;
+    Map<String, Object?> mcp(String detail) {
+      if (detail.startsWith('http')) return {'type': 'http', 'url': detail};
+      final parts = detail.split(RegExp(r'\s+'));
+      return {'command': parts.first, 'args': parts.skip(1).toList()};
+    }
+
+    return {
+      'skills': [
+        for (final i in picked.where((i) => i.kind == CatalogKind.skill))
+          expand(i.detail),
+      ],
+      'mcp_servers': {
+        for (final i in picked.where((i) => i.kind == CatalogKind.mcp))
+          i.name: mcp(i.detail),
+      },
+      // Env values live in the Keychain, which arrives with the daemon's
+      // secrets; until then no value is sent.
+      'env': <String, String>{},
+      'model': s.model == 'padrão' ? null : s.model,
+    };
+  }
 
   /// Global catalog, configured once and enabled per session.
   final List<CatalogItem> catalog = [...mock.catalog];
@@ -156,6 +291,13 @@ class HarnessStore extends ChangeNotifier {
   }
 
   void newSession() {
+    if (workspaceId == liveWorkspace.id) {
+      final d = daemon;
+      if (d == null || d.accounts.isEmpty) return;
+      _attachNextLive = true;
+      d.createSession(d.accounts.first);
+      return;
+    }
     final acc = workspaceAccounts.first;
     final id = _nextId('sessao');
     sessions.add(
@@ -535,6 +677,15 @@ class HarnessStore extends ChangeNotifier {
 
   /// Simulates the daemon restarting the process with `--resume`.
   void applyDraft(Session s) {
+    if (s.live) {
+      // The daemon restarts claude with --resume; state comes back via hooks.
+      daemon?.applyProfile(s.id, _profileFor(s));
+      s
+        ..appliedItems = Set.of(s.draftItems)
+        ..state = SessionState.starting;
+      notifyListeners();
+      return;
+    }
     final previous = s.state;
     s.state = SessionState.starting;
     s.appliedItems = Set.of(s.draftItems);
@@ -562,6 +713,7 @@ class HarnessStore extends ChangeNotifier {
 
   @override
   void dispose() {
+    daemon?.removeListener(_syncLive);
     _clock.cancel();
     for (final t in _pending) {
       t.cancel();

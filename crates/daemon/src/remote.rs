@@ -88,11 +88,20 @@ impl Remote {
         }
     }
 
-    /// A fresh one-time ticket; the previous one stops working.
-    pub fn new_ticket(&self) -> Ticket {
+    /// A fresh one-time ticket; the previous one stops working. Waits (up
+    /// to 5 s) until the endpoint knows its local addresses: right after
+    /// binding they may not be there yet, and a ticket without them is
+    /// useless with no relay.
+    pub async fn new_ticket(&self) -> Ticket {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut addr = self.endpoint.addr();
+        while addr.addrs.is_empty() && Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            addr = self.endpoint.addr();
+        }
         let token = uuid::Uuid::new_v4().simple().to_string();
         *self.pairing.lock().unwrap() = Some((token.clone(), Instant::now() + PAIRING_TTL));
-        Ticket { addr: self.endpoint.addr(), token }
+        Ticket { addr, token }
     }
 
     /// Takes the token if it matches and is still valid (single use).
@@ -133,7 +142,10 @@ impl Remote {
         };
         let ok = self.redeem(&req.token);
         if ok {
+            eprintln!("orcd: dispositivo pareado: {}", req.device_name);
             self.devices.lock().unwrap().add(conn.remote_id(), req.device_name)?;
+        } else {
+            eprintln!("orcd: pareamento recusado (token inválido ou expirado)");
         }
         let message = if ok { "pareado" } else { "token inválido ou expirado" };
         write_line(&mut send, &PairResponse { ok, message: message.into() }).await?;
@@ -143,10 +155,19 @@ impl Remote {
     }
 
     async fn main(&self, conn: &Connection, daemon: Daemon) -> std::io::Result<()> {
-        if !self.devices.lock().unwrap().contains(&conn.remote_id()) {
+        let name = self
+            .devices
+            .lock()
+            .unwrap()
+            .list()
+            .get(&conn.remote_id().to_string())
+            .map(|d| d.name.clone());
+        let Some(name) = name else {
+            eprintln!("orcd: conexão recusada de chave não pareada {}", conn.remote_id().fmt_short());
             conn.close(403u32.into(), b"dispositivo nao pareado");
             return Ok(());
-        }
+        };
+        eprintln!("orcd: {name} conectado");
         let (mut send, recv) = conn.accept_bi().await.map_err(std::io::Error::other)?;
         let mut events = daemon.events.subscribe();
         for m in daemon.hello() {
