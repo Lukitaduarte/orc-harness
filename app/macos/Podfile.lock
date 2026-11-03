@@ -1,5 +1,8 @@
 PODS:
   - FlutterMacOS (1.0.0)
+  - mobile_scanner (7.0.0):
+    - Flutter
+    - FlutterMacOS
   - orc_bridge (0.0.1):
     - FlutterMacOS
   - url_launcher_macos (0.0.1):
@@ -7,12 +10,15 @@ PODS:
 
 DEPENDENCIES:
   - FlutterMacOS (from `Flutter/ephemeral`)
+  - mobile_scanner (from `Flutter/ephemeral/.symlinks/plugins/mobile_scanner/darwin`)
   - orc_bridge (from `Flutter/ephemeral/.symlinks/plugins/orc_bridge/macos`)
   - url_launcher_macos (from `Flutter/ephemeral/.symlinks/plugins/url_launcher_macos/macos`)
 
 EXTERNAL SOURCES:
   FlutterMacOS:
     :path: Flutter/ephemeral
+  mobile_scanner:
+    :path: Flutter/ephemeral/.symlinks/plugins/mobile_scanner/darwin
   orc_bridge:
     :path: Flutter/ephemeral/.symlinks/plugins/orc_bridge/macos
   url_launcher_macos:
@@ -20,6 +26,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
+  mobile_scanner: 9157936403f5a0644ca3779a38ff8404c5434a93
   orc_bridge: 78f242d6b0af9c8ba4dd879aa1a02a5782d1d035
   url_launcher_macos: f87a979182d112f911de6820aefddaf56ee9fbfd
 

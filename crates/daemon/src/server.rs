@@ -56,6 +56,7 @@ pub struct Daemon {
     /// Workspace browsers, and the address each open one is at.
     pub browsers: Arc<Browsers>,
     browser_urls: Arc<Mutex<HashMap<String, String>>>,
+    pub language_servers: crate::ide::LanguageServers,
 }
 
 /// Playwright MCP, pinned, attached to a workspace browser.
@@ -84,6 +85,7 @@ impl Daemon {
             remote: Arc::default(),
             browsers: Arc::new(Browsers::new(PathBuf::new(), None)),
             browser_urls: Arc::default(),
+            language_servers: Default::default(),
         }
     }
 
@@ -570,6 +572,11 @@ impl Daemon {
         }
     }
 
+    /// The folder a session works in (the IDE's root).
+    fn session_root(&self, session_id: &str) -> Option<PathBuf> {
+        self.sessions.lock().unwrap().summary(session_id).map(|s| PathBuf::from(s.cwd))
+    }
+
     fn catalog_message(&self) -> DaemonMessage {
         let secrets = self.sessions.lock().unwrap().secrets.clone();
         let catalog = self.catalog.lock().unwrap();
@@ -616,6 +623,51 @@ impl Daemon {
                     Ok(())
                 });
             }
+            ClientMessage::ListDir { session_id, path } => {
+                let Some(root) = self.session_root(&session_id) else { return no_session() };
+                return match crate::ide::list_dir(&root, &path) {
+                    Ok(entries) => vec![DaemonMessage::DirEntries { session_id, path, entries }],
+                    Err(e) => error(e),
+                };
+            }
+            ClientMessage::ReadFile { session_id, path } => {
+                let Some(root) = self.session_root(&session_id) else { return no_session() };
+                return match crate::ide::read_file(&root, &path) {
+                    Ok(text) => vec![DaemonMessage::FileContent { session_id, path, text }],
+                    Err(e) => error(e),
+                };
+            }
+            ClientMessage::WriteFile { session_id, path, text } => {
+                let Some(root) = self.session_root(&session_id) else { return no_session() };
+                return match crate::ide::write_file(&root, &path, &text) {
+                    Ok(()) => vec![DaemonMessage::FileSaved { session_id, path }],
+                    Err(e) => error(e),
+                };
+            }
+            ClientMessage::Lsp { session_id, language, message } => {
+                let Some(root) = self.session_root(&session_id) else { return no_session() };
+                let events = self.events.clone();
+                let (sid, lang) = (session_id.clone(), language.clone());
+                let sent = self.language_servers.send(&session_id, &language, &root, &message, move |message| {
+                    let _ = events.send(DaemonMessage::Lsp { session_id: sid.clone(), language: lang.clone(), message });
+                });
+                if let Err(e) = sent {
+                    return error(e);
+                }
+            }
+            ClientMessage::OpenExternal { session_id, path, app } => {
+                let Some(root) = self.session_root(&session_id) else { return no_session() };
+                let Some(app) = crate::ide::external_app(&app) else {
+                    return vec![DaemonMessage::Error { message: format!("app desconhecido: {app}") }];
+                };
+                let target = match crate::ide::resolve(&root, &path) {
+                    Ok(p) => p,
+                    Err(e) => return error(e),
+                };
+                if let Err(e) = std::process::Command::new("open").arg("-a").arg(app).arg(target).status() {
+                    return error(e);
+                }
+            }
             ClientMessage::Browser { profile, action } => {
                 let Ok(rt) = tokio::runtime::Handle::try_current() else {
                     return vec![DaemonMessage::Error { message: "navegador indisponível aqui".into() }];
@@ -628,6 +680,7 @@ impl Daemon {
                 });
             }
             ClientMessage::StopSession { session_id } => {
+                self.language_servers.stop(&session_id);
                 let mut sessions = self.sessions.lock().unwrap();
                 sessions.stop(&session_id);
                 emit(DaemonMessage::Sessions { sessions: sessions.list() });
@@ -963,6 +1016,10 @@ impl Daemon {
 /// Trusting a folder covers the ones inside it.
 fn asks_trust(snap: &GridSnapshot) -> bool {
     (0..snap.rows as usize).any(|r| snap.line_text(r).contains("trust this folder"))
+}
+
+fn no_session() -> Vec<DaemonMessage> {
+    vec![DaemonMessage::Error { message: "sessão desconhecida".into() }]
 }
 
 fn run_message(run: &Run) -> DaemonMessage {

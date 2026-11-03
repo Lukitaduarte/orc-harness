@@ -4,6 +4,7 @@ pub mod browser;
 pub mod catalog;
 pub mod config;
 pub mod git;
+pub mod ide;
 pub mod plans;
 pub mod projects;
 pub mod manager;

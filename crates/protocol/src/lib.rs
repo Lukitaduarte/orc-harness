@@ -239,6 +239,13 @@ pub struct Profile {
     pub browser: Option<String>,
 }
 
+/// One entry of a folder in the IDE's file tree.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DirEntry {
+    pub name: String,
+    pub dir: bool,
+}
+
 /// What the app asks of a workspace browser.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
@@ -473,6 +480,16 @@ pub enum ClientMessage {
     /// Code's folder trust question once for all worktrees.
     TrustWorktrees { account_id: String },
     Browser { profile: String, action: BrowserAction },
+    /// IDE: files under the session's folder; paths are relative to it.
+    ListDir { session_id: String, path: String },
+    ReadFile { session_id: String, path: String },
+    WriteFile { session_id: String, path: String, text: String },
+    /// A JSON-RPC message for the session's language server (started on
+    /// first use in the session's folder).
+    Lsp { session_id: String, language: String, message: serde_json::Value },
+    /// Opens a path of the session's folder in Xcode, Android Studio, Zed,
+    /// VS Code or Finder.
+    OpenExternal { session_id: String, path: String, app: String },
     /// Puts a failed or stopped card back in line.
     RetryCard { plan_id: String, number: u32 },
     /// Keystrokes or pasted text for a session's terminal.
@@ -510,6 +527,11 @@ pub enum DaemonMessage {
     Pr { session_id: String, pr: Option<serde_json::Value> },
     Plans { plans: Vec<PlanDoc> },
     BrowserState { profile: String, open: bool, url: String },
+    DirEntries { session_id: String, path: String, entries: Vec<DirEntry> },
+    FileContent { session_id: String, path: String, text: String },
+    FileSaved { session_id: String, path: String },
+    /// What a language server sent (responses, diagnostics, requests).
+    Lsp { session_id: String, language: String, message: serde_json::Value },
     /// A screen of a workspace browser: JPEG in base64, page size in CSS
     /// pixels.
     BrowserFrame { profile: String, jpeg: String, width: u32, height: u32 },
