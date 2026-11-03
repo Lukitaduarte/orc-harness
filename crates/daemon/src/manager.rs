@@ -55,6 +55,37 @@ struct Managed {
     session: Session,
 }
 
+/// What `sessions.json` keeps of a session to bring it back after the
+/// daemon restarts.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct SavedState {
+    /// Ids are never reused, even across restarts.
+    next: u32,
+    sessions: Vec<Saved>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Saved {
+    summary: SessionSummary,
+    profile: Profile,
+    cols: u16,
+    rows: u16,
+}
+
+/// Claude Code keeps a conversation as `<config>/projects/<folder>/<id>.jsonl`;
+/// one that never got a message has no file and cannot be resumed.
+fn has_transcript(account: &Account, claude_session_id: &str) -> bool {
+    let config = account.config_dir.clone().unwrap_or_else(|| {
+        PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".claude")
+    });
+    let file = format!("{claude_session_id}.jsonl");
+    fs::read_dir(config.join("projects"))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .any(|d| d.path().join(&file).exists())
+}
+
 pub struct SessionManager {
     cfg: ManagerConfig,
     pub secrets: std::sync::Arc<SecretStore>,
@@ -169,7 +200,66 @@ impl SessionManager {
             id.clone(),
             Managed { summary: summary.clone(), profile, cols, rows, session },
         );
+        self.save();
         Ok(summary)
+    }
+
+    fn state_file(&self) -> PathBuf {
+        self.cfg.runtime_root.join("sessions.json")
+    }
+
+    /// Writes the sessions still running to `sessions.json` (owner only).
+    pub fn save(&self) {
+        let saved: Vec<Saved> = self
+            .sessions
+            .values()
+            .filter(|m| m.session.exited().is_none())
+            .map(|m| Saved { summary: m.summary.clone(), profile: m.profile.clone(), cols: m.cols, rows: m.rows })
+            .collect();
+        let write = || -> std::io::Result<()> {
+            fs::create_dir_all(&self.cfg.runtime_root)?;
+            let file = self.state_file();
+            let state = SavedState { next: self.next, sessions: saved };
+            fs::write(&file, serde_json::to_vec_pretty(&state)?)?;
+            fs::set_permissions(&file, std::os::unix::fs::PermissionsExt::from_mode(0o600))
+        };
+        if let Err(e) = write() {
+            eprintln!("orcd: não salvei as sessões: {e}");
+        }
+    }
+
+    /// Brings back the sessions of the last run, same ids: conversations
+    /// that exist are resumed, the others start fresh with the same id.
+    /// Returns how many came back.
+    pub fn restore(&mut self) -> usize {
+        let Ok(raw) = fs::read(self.state_file()) else { return 0 };
+        let Ok(state) = serde_json::from_slice::<SavedState>(&raw) else { return 0 };
+        self.next = self.next.max(state.next);
+        let mut n = 0;
+        for s in state.sessions {
+            let Some(account) = self.accounts.get(&s.summary.account_id).cloned() else { continue };
+            if self.sessions.contains_key(&s.summary.id) || !std::path::Path::new(&s.summary.cwd).is_dir() {
+                continue;
+            }
+            let mut summary = s.summary;
+            summary.state = SessionState::Starting;
+            let resume = has_transcript(&account, &summary.claude_session_id);
+            let spawned = self
+                .prepare(&summary, &account, &s.profile, s.cols, s.rows, resume)
+                .and_then(|spec| Session::spawn(&spec));
+            match spawned {
+                Ok(session) => {
+                    self.sessions.insert(
+                        summary.id.clone(),
+                        Managed { summary, profile: s.profile, cols: s.cols, rows: s.rows, session },
+                    );
+                    n += 1;
+                }
+                Err(e) => eprintln!("orcd: não retomei {}: {e}", summary.id),
+            }
+        }
+        self.save();
+        n
     }
 
     /// Restarts the session with a new profile, resuming the conversation.
@@ -188,11 +278,14 @@ impl SessionManager {
         m.session = Session::spawn(&spec)?;
         m.summary = summary.clone();
         m.profile = profile;
+        self.save();
         Ok(summary)
     }
 
     pub fn stop(&mut self, id: &str) -> bool {
-        self.sessions.remove(id).is_some()
+        let removed = self.sessions.remove(id).is_some();
+        self.save();
+        removed
     }
 
     pub fn session(&self, id: &str) -> Option<&Session> {
@@ -445,6 +538,53 @@ mod tests {
         p.mcp_servers.insert("postgres".into(), json!({ "command": "npx", "args": ["pg-mcp"] }));
         p.env_names.push("GREETING".into());
         p
+    }
+
+    #[test]
+    fn sessions_come_back_after_a_restart() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = tmp.path().join("cfg");
+        let account = |id: &str| Account { id: id.into(), config_dir: Some(cfg.clone()), gh_config_dir: None };
+        let make = || {
+            SessionManager::new(
+                ManagerConfig {
+                    claude: fake_claude(tmp.path()),
+                    statusline: "/opt/orc/orc-statusline".into(),
+                    hook: "/opt/orc/orc-hook".into(),
+                    runtime_root: tmp.path().join("sessions"),
+                    socket: tmp.path().join("orcd.sock"),
+                    otlp_metrics: None,
+                    orc_mcp: None,
+                },
+                vec![account("work")],
+                std::sync::Arc::new(SecretStore::memory()),
+            )
+        };
+        let mut m = make();
+        let talked = m.create("work", Some(tmp.path().into()), Profile { model: Some("opus".into()), ..Profile::default() }, 90, 30).unwrap();
+        let silent = m.create("work", Some(tmp.path().into()), Profile::default(), 90, 30).unwrap();
+        let ended = m.create("work", Some(tmp.path().into()), Profile::default(), 90, 30).unwrap();
+        m.stop(&ended.id);
+        // Claude Code wrote a transcript only for the first one.
+        fs::create_dir_all(cfg.join("projects/-tmp-x")).unwrap();
+        fs::write(cfg.join(format!("projects/-tmp-x/{}.jsonl", talked.claude_session_id)), "{}").unwrap();
+        drop(m); // the daemon goes away
+
+        let mut m = make();
+        assert_eq!(m.restore(), 2);
+        let ids: Vec<_> = m.list().into_iter().map(|s| s.id).collect();
+        assert_eq!(ids, [talked.id.clone(), silent.id.clone()]);
+        let resumed = screen(&m, &talked.id);
+        assert!(resumed.contains(&"arg:--resume".to_string()), "{resumed:?}");
+        assert!(resumed.contains(&format!("arg:{}", talked.claude_session_id)));
+        assert!(resumed.contains(&"arg:opus".to_string()), "profile kept");
+        let fresh = screen(&m, &silent.id);
+        assert!(fresh.contains(&"arg:--session-id".to_string()), "{fresh:?}");
+        // New sessions do not reuse ids.
+        let next = m.create("work", Some(tmp.path().into()), Profile::default(), 90, 30).unwrap();
+        assert_eq!(next.id, "s4");
+        let mode = std::os::unix::fs::PermissionsExt::mode(&fs::metadata(tmp.path().join("sessions/sessions.json")).unwrap().permissions());
+        assert_eq!(mode & 0o777, 0o600);
     }
 
     #[test]

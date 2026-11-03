@@ -75,6 +75,10 @@ fn main() -> std::io::Result<()> {
                 Some(c) => eprintln!("orcd: navegador dos workspaces: {}", c.display()),
                 None => eprintln!("orcd: nenhum Chrome/Chromium/Brave/Edge; navegador dos workspaces desligado"),
             }
+            let restored = daemon.sessions.lock().unwrap().restore();
+            if restored > 0 {
+                eprintln!("orcd: {restored} sessão(ões) retomada(s)");
+            }
             let daemon = daemon.with_home(home.clone()).with_browsers(orc_daemon::browser::Browsers::new(home.join("browsers"), chrome));
             runtime.block_on(async move {
                 tokio::spawn(daemon.clone().serve_otlp(otlp));

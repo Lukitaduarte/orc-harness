@@ -250,6 +250,8 @@ impl Daemon {
                     .collect();
                 if now_exited != exited {
                     exited = now_exited;
+                    // An ended session does not come back after a restart.
+                    sessions.save();
                     out.push(DaemonMessage::Sessions { sessions: list });
                 }
             }
