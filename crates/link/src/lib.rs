@@ -113,6 +113,33 @@ pub async fn endpoint(key: SecretKey, alpns: &[&[u8]]) -> std::io::Result<Endpoi
         .map_err(std::io::Error::other)
 }
 
+/// The daemon's endpoint, on a fixed UDP `port` (0 picks one) on every
+/// interface. Paired apps keep the daemon's addresses from the ticket and
+/// there is no relay, so the port must survive restarts.
+pub async fn endpoint_on(key: SecretKey, alpns: &[&[u8]], port: u16) -> std::io::Result<Endpoint> {
+    use iroh::endpoint::BindOpts;
+    Endpoint::builder(presets::Minimal)
+        .secret_key(key)
+        .relay_mode(RelayMode::Disabled)
+        .alpns(alpns.iter().map(|a| a.to_vec()).collect())
+        .clear_ip_transports()
+        .bind_addr(std::net::SocketAddr::from(([0, 0, 0, 0], port)))
+        .map_err(std::io::Error::other)?
+        .bind_addr_with_opts(
+            std::net::SocketAddr::from((std::net::Ipv6Addr::UNSPECIFIED, port)),
+            BindOpts::default().set_is_required(false),
+        )
+        .map_err(std::io::Error::other)?
+        .bind()
+        .await
+        .map_err(std::io::Error::other)
+}
+
+/// The UDP port an endpoint got (IPv4).
+pub fn bound_port(endpoint: &Endpoint) -> Option<u16> {
+    endpoint.bound_sockets().iter().find(|a| a.is_ipv4()).map(|a| a.port())
+}
+
 /// Writes one message as a JSON line.
 pub async fn write_line<W, T>(w: &mut W, msg: &T) -> std::io::Result<()>
 where
@@ -155,5 +182,14 @@ mod tests {
         let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o600);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn the_daemon_binds_the_port_it_is_given() {
+        let free = std::net::UdpSocket::bind("0.0.0.0:0").unwrap().local_addr().unwrap().port();
+        let key = SecretKey::generate();
+        let e = endpoint_on(key, &[], free).await.unwrap();
+        assert_eq!(bound_port(&e), Some(free));
+        e.close().await;
     }
 }

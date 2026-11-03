@@ -73,7 +73,20 @@ fn main() -> std::io::Result<()> {
             runtime.block_on(async move {
                 tokio::spawn(daemon.clone().serve_otlp(otlp));
                 let key = secrets::daemon_key(&secrets, &home.join("daemon.key"))?;
-                let endpoint = orc_link::endpoint(key, &[orc_link::ALPN_PAIR, orc_link::ALPN_MAIN]).await?;
+                // Same port across restarts: paired apps dial the ticket's addresses.
+                let port_file = home.join("link-port");
+                let saved: u16 = std::fs::read_to_string(&port_file).ok().and_then(|p| p.trim().parse().ok()).unwrap_or(0);
+                let alpns = [orc_link::ALPN_PAIR, orc_link::ALPN_MAIN];
+                let endpoint = match orc_link::endpoint_on(key.clone(), &alpns, saved).await {
+                    Ok(e) => e,
+                    Err(e) => {
+                        eprintln!("orcd: porta {saved} indisponível ({e}); apps pareados precisam parear de novo");
+                        orc_link::endpoint_on(key, &alpns, 0).await?
+                    }
+                };
+                if let Some(port) = orc_link::bound_port(&endpoint).filter(|p| *p != saved) {
+                    std::fs::write(&port_file, port.to_string())?;
+                }
                 let remote = Remote::new(endpoint, Devices::load(home.join("devices.json")));
                 let _ = daemon.remote.set(remote.clone());
                 eprintln!("orcd: socket em {}", socket.display());
