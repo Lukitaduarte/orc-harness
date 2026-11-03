@@ -70,6 +70,13 @@ class DaemonClient extends ChangeNotifier {
   final quotas = <String, LiveQuota>{};
   final grids = <String, LiveGrid>{};
 
+  /// The daemon's catalog (orc_protocol::CatalogEntry JSON) and templates.
+  List<Map<String, dynamic>> catalog = [];
+  List<Map<String, dynamic>> templates = [];
+
+  /// Last "Testar conexão" result per MCP id: (ok, tools, error).
+  final mcpTests = <String, (bool, int, String?)>{};
+
   link.DaemonLink? _link;
   StreamSubscription<String>? _sub;
   Timer? _retry;
@@ -187,6 +194,17 @@ class DaemonClient extends ChangeNotifier {
           DateTime.fromMillisecondsSinceEpoch((m['read_at'] as int) * 1000),
         );
         notifyListeners();
+      case 'catalog':
+        catalog = (m['entries'] as List).cast<Map<String, dynamic>>();
+        templates = (m['templates'] as List).cast<Map<String, dynamic>>();
+        notifyListeners();
+      case 'mcp_test':
+        mcpTests[m['id'] as String] = (
+          m['ok'] as bool,
+          m['tools'] as int,
+          m['error'] as String?,
+        );
+        notifyListeners();
       case 'error':
         // A slow client missed diffs: ask for full screens again.
         if (m['message'] == 'lagged') {
@@ -205,7 +223,13 @@ class DaemonClient extends ChangeNotifier {
     }
   }
 
+  /// Tests capture outgoing messages here instead of the link.
+  @visibleForTesting
+  void Function(Map<String, Object?>)? sendHook;
+
   void send(Map<String, Object?> msg) {
+    final hook = sendHook;
+    if (hook != null) return hook(msg);
     _link?.send(json: jsonEncode(msg));
   }
 

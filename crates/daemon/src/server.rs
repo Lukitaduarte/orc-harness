@@ -13,6 +13,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
 use tokio::sync::broadcast;
 
+use crate::catalog::{Catalog, mcp_env, test_mcp};
 use crate::manager::SessionManager;
 use crate::quota::QuotaStore;
 use crate::remote::Remote;
@@ -21,6 +22,7 @@ use crate::remote::Remote;
 pub struct Daemon {
     pub quotas: Arc<Mutex<QuotaStore>>,
     pub sessions: Arc<Mutex<SessionManager>>,
+    pub catalog: Arc<Mutex<Catalog>>,
     /// Everything clients should see; each connection subscribes.
     pub events: broadcast::Sender<DaemonMessage>,
     /// Set once iroh is up; mints pairing tickets for `orcd pair`.
@@ -28,10 +30,11 @@ pub struct Daemon {
 }
 
 impl Daemon {
-    pub fn new(sessions: SessionManager) -> Self {
+    pub fn new(sessions: SessionManager, catalog: Catalog) -> Self {
         Self {
             quotas: Arc::default(),
             sessions: Arc::new(Mutex::new(sessions)),
+            catalog: Arc::new(Mutex::new(catalog)),
             events: broadcast::channel(1024).0,
             remote: Arc::default(),
         }
@@ -82,10 +85,13 @@ impl Daemon {
 
     /// What a client gets on connect: accounts, sessions, known quotas.
     pub fn hello(&self) -> Vec<DaemonMessage> {
+        // Takes the sessions lock itself: build it before holding that lock.
+        let catalog = self.catalog_message();
         let sessions = self.sessions.lock().unwrap();
         let mut out = vec![
             DaemonMessage::Hello { accounts: sessions.account_ids() },
             DaemonMessage::Sessions { sessions: sessions.list() },
+            catalog,
         ];
         let quotas = self.quotas.lock().unwrap();
         for id in sessions.account_ids() {
@@ -98,6 +104,12 @@ impl Daemon {
             }
         }
         out
+    }
+
+    fn catalog_message(&self) -> DaemonMessage {
+        let secrets = self.sessions.lock().unwrap().secrets.clone();
+        let catalog = self.catalog.lock().unwrap();
+        DaemonMessage::Catalog { entries: catalog.entries(&secrets), templates: catalog.templates() }
     }
 
     /// Applies a message. Replies meant only for the sender come back;
@@ -156,6 +168,7 @@ impl Daemon {
                     return error(e);
                 }
                 emit(DaemonMessage::Secret { name, stored: true });
+                emit(self.catalog_message());
             }
             ClientMessage::DeleteSecret { name } => {
                 let secrets = self.sessions.lock().unwrap().secrets.clone();
@@ -163,6 +176,49 @@ impl Daemon {
                     return error(e);
                 }
                 emit(DaemonMessage::Secret { name, stored: false });
+                emit(self.catalog_message());
+            }
+            ClientMessage::UpsertCatalog { entry } => {
+                if let Err(e) = self.catalog.lock().unwrap().upsert(entry) {
+                    return error(e);
+                }
+                emit(self.catalog_message());
+            }
+            ClientMessage::RemoveCatalog { id } => {
+                if let Err(e) = self.catalog.lock().unwrap().remove(&id) {
+                    return error(e);
+                }
+                emit(self.catalog_message());
+            }
+            ClientMessage::UpsertTemplate { template } => {
+                if let Err(e) = self.catalog.lock().unwrap().upsert_template(&template) {
+                    return error(e);
+                }
+                emit(self.catalog_message());
+            }
+            ClientMessage::RemoveTemplate { id } => {
+                if let Err(e) = self.catalog.lock().unwrap().remove_template(&id) {
+                    return error(e);
+                }
+                emit(self.catalog_message());
+            }
+            ClientMessage::TestMcp { id } => {
+                let Some(config) = self.catalog.lock().unwrap().get(&id).and_then(|e| e.mcp.clone()) else {
+                    return vec![DaemonMessage::Error { message: format!("MCP desconhecido: {id}") }];
+                };
+                let secrets = self.sessions.lock().unwrap().secrets.clone();
+                let events = self.events.clone();
+                // Starting a server can take seconds: off the async runtime.
+                std::thread::spawn(move || {
+                    let env = mcp_env(&config, &secrets);
+                    let result = test_mcp(&config, &env, Duration::from_secs(20));
+                    let _ = events.send(DaemonMessage::McpTest {
+                        id,
+                        ok: result.is_ok(),
+                        tools: *result.as_ref().unwrap_or(&0),
+                        error: result.err(),
+                    });
+                });
             }
             ClientMessage::ListSessions => {
                 return vec![DaemonMessage::Sessions {

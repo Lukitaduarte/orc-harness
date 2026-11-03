@@ -181,15 +181,21 @@ class _ItemRow extends StatelessWidget {
   Widget _mcpStatus(BuildContext context) {
     final check = store.mcpChecks[item.id] ?? McpCheck.untested;
     final scheme = Theme.of(context).colorScheme;
+    // Live: the daemon's real result; mock: fixed demo text.
+    final result = store.mcpResult(item.id);
     final status = switch (check) {
       McpCheck.untested => null,
       McpCheck.testing => const Text('testando…').xSmall().muted(),
-      McpCheck.ok => const Text(
-        'conectado · 12 tools',
+      McpCheck.ok => Text(
+        'conectado · ${result?.$2 ?? 12} tools',
       ).xSmall().medium(color: Colors.emerald),
-      McpCheck.failed => Text(
-        'falhou: token expirado',
-      ).xSmall().medium(color: scheme.destructive),
+      McpCheck.failed => ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 260),
+        child: Text(
+          'falhou: ${result?.$3 ?? 'token expirado'}',
+          overflow: TextOverflow.ellipsis,
+        ).xSmall().medium(color: scheme.destructive),
+      ),
     };
     return Row(
       mainAxisSize: MainAxisSize.min,

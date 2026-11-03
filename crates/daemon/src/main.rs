@@ -5,6 +5,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+use orc_daemon::catalog::Catalog;
 use orc_daemon::config;
 use orc_daemon::manager::{ManagerConfig, SessionManager};
 use orc_daemon::remote::{Devices, Remote};
@@ -42,7 +43,7 @@ fn main() -> std::io::Result<()> {
                 cfg.accounts,
                 secrets.clone(),
             );
-            let daemon = Daemon::new(manager);
+            let daemon = Daemon::new(manager, Catalog::load(&home)?);
             tokio::runtime::Runtime::new()?.block_on(async move {
                 let key = secrets::daemon_key(&secrets, &home.join("daemon.key"))?;
                 let endpoint = orc_link::endpoint(key, &[orc_link::ALPN_PAIR, orc_link::ALPN_MAIN]).await?;

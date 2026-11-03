@@ -220,7 +220,8 @@ impl SessionManager {
             &json!({ "name": format!("orc-{}", s.id), "version": "0.1.0", "description": "Skills do perfil da sessão" }),
         )?;
         for skill in &profile.skills {
-            let src = Path::new(skill);
+            let expanded = crate::catalog::expand(skill);
+            let src = expanded.as_path();
             if let Some(name) = src.file_name() {
                 std::os::unix::fs::symlink(src, plugin.join("skills").join(name))?;
             }

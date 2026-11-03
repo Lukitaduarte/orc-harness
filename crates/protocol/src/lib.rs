@@ -235,6 +235,33 @@ pub struct Profile {
     pub model: Option<String>,
 }
 
+/// One item of the global catalog, configured once, enabled per session.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CatalogEntry {
+    pub id: String,
+    /// `skill`, `mcp` or `env`.
+    pub kind: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    /// Skill folder (with a SKILL.md).
+    #[serde(default)]
+    pub path: Option<String>,
+    /// MCP server config in Claude Code's `mcpServers` entry format.
+    #[serde(default)]
+    pub mcp: Option<serde_json::Value>,
+    /// Env: whether the Keychain has a value. Filled by the daemon.
+    #[serde(default)]
+    pub has_value: bool,
+}
+
+/// A plan mode template: markdown in `~/.orc/templates/<id>.md`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PlanTemplateFile {
+    pub id: String,
+    pub markdown: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionSummary {
     pub id: String,
@@ -276,6 +303,12 @@ pub enum ClientMessage {
     /// sent back to any client.
     SetSecret { name: String, value: String },
     DeleteSecret { name: String },
+    UpsertCatalog { entry: CatalogEntry },
+    RemoveCatalog { id: String },
+    /// Starts the MCP and lists its tools, to check it works.
+    TestMcp { id: String },
+    UpsertTemplate { template: PlanTemplateFile },
+    RemoveTemplate { id: String },
     /// Keystrokes or pasted text for a session's terminal.
     Input { session_id: String, data: String },
     Resize { session_id: String, cols: u16, rows: u16 },
@@ -299,6 +332,8 @@ pub enum DaemonMessage {
     PairingTicket { ticket: String },
     /// A secret was stored (or deleted, with `stored: false`); no value.
     Secret { name: String, stored: bool },
+    Catalog { entries: Vec<CatalogEntry>, templates: Vec<PlanTemplateFile> },
+    McpTest { id: String, ok: bool, tools: usize, error: Option<String> },
 }
 
 #[cfg(test)]

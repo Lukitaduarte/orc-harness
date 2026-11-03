@@ -57,4 +57,72 @@ void main() {
     store.dispose();
     d.dispose();
   });
+
+  test('live catalog, MCP tests, templates and profiles go through the daemon', () {
+    final d = DaemonClient();
+    final store = HarnessStore(daemon: d);
+    final sent = <Map<String, Object?>>[];
+    d.sendHook = sent.add;
+    d.handle('{"type":"hello","accounts":["default"]}');
+    d.handle(
+      '{"type":"catalog","entries":['
+      '{"id":"skill-review","kind":"skill","name":"review","description":"","path":"/s/review","mcp":null,"has_value":false},'
+      '{"id":"mcp-pg","kind":"mcp","name":"pg","description":"","path":null,"mcp":{"command":"npx","args":["pg"]},"has_value":false},'
+      '{"id":"env-TOKEN","kind":"env","name":"TOKEN","description":"","path":null,"mcp":null,"has_value":true}],'
+      '"templates":[{"id":"back","markdown":"---\\nname: Back end\\ndescription: Com deploy\\n---\\n# X\\n\\n## Deploy\\nok\\n"}]}',
+    );
+    d.handle(
+      '{"type":"sessions","sessions":[{"id":"s1","account_id":"default","cwd":"/p","state":"idle","model":null,"claude_session_id":"u"}]}',
+    );
+    store.selectWorkspace('live');
+
+    expect(store.catalog.map((i) => i.name), ['review', 'pg', 'TOKEN']);
+    expect(store.catalog[1].detail, 'npx pg');
+    expect(store.catalog[2].detail, contains('com valor'));
+    expect(store.planTemplates.single.name, 'Back end');
+    expect(store.planTemplates.single.description, 'Com deploy');
+
+    // Adding an env sends the name to the catalog and the value to the
+    // Keychain; nothing is kept in the app.
+    sent.clear(); // drop the grid snapshot requests from 'sessions'
+    store.addCatalogItem(
+      CatalogKind.env,
+      'API_KEY',
+      '',
+      '',
+      secretValue: 's3cret',
+    );
+    expect(sent.map((m) => m['type']), ['upsert_catalog', 'set_secret']);
+    expect((sent[0]['entry'] as Map)['name'], 'API_KEY');
+    expect(
+      store.catalog.any((i) => i.name == 'API_KEY'),
+      isFalse,
+    ); // until the daemon says so
+
+    // A real MCP test: testing until the daemon answers.
+    store.testMcp(store.catalog[1]);
+    expect(store.mcpChecks['mcp-pg'], McpCheck.testing);
+    d.handle(
+      '{"type":"mcp_test","id":"mcp-pg","ok":true,"tools":7,"error":null}',
+    );
+    expect(store.mcpChecks['mcp-pg'], McpCheck.ok);
+    expect(store.mcpResult('mcp-pg')!.$2, 7);
+
+    // Applying a profile sends the stored MCP config and env names only.
+    final s = store.session('s1');
+    s.draftItems.addAll(['skill-review', 'mcp-pg', 'env-TOKEN']);
+    sent.clear();
+    store.applyDraft(s);
+    final profile = sent.single['profile'] as Map;
+    expect(profile['skills'], ['/s/review']);
+    expect(profile['mcp_servers'], {
+      'pg': {
+        'command': 'npx',
+        'args': ['pg'],
+      },
+    });
+    expect(profile['env_names'], ['TOKEN']);
+    store.dispose();
+    d.dispose();
+  });
 }

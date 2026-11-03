@@ -48,7 +48,7 @@ fn daemon(dir: &std::path::Path, socket: &std::path::Path) -> Daemon {
         },
         vec![Account { id: "work-main".into(), config_dir: None }],
         std::sync::Arc::new(orc_daemon::secrets::SecretStore::memory()),
-    ))
+    ), orc_daemon::catalog::Catalog::load(dir).unwrap())
 }
 
 #[tokio::test]

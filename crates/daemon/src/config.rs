@@ -17,7 +17,12 @@ pub struct Config {
     pub accounts: Vec<Account>,
 }
 
+/// `~/.orc`, or `ORC_HOME` (tests and side-by-side daemons). Never change
+/// `HOME` for that: the Keychain and Claude Code's login live under it.
 pub fn orc_home() -> PathBuf {
+    if let Some(dir) = std::env::var_os("ORC_HOME") {
+        return PathBuf::from(dir);
+    }
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
     PathBuf::from(home).join(".orc")
 }

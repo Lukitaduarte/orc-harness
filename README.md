@@ -30,6 +30,10 @@ cargo build -p orc-daemon                    # orcd, orc-statusline, orc-hook
 cd app && flutter run -d macos               # ⚙ → Conectar daemon → cole o ticket
 ```
 
+Tudo do daemon fica em `~/.orc` (ou `ORC_HOME`): `config.json`, `catalog.json`, `templates/*.md`,
+`devices.json` e as pastas das sessões. Segredos (valores das envs e a chave do daemon) ficam no
+Keychain, serviço `orc-harness`.
+
 Contas em `~/.orc/config.json` (sem o arquivo: uma conta `default` com a config padrão do Claude Code):
 
 ```json

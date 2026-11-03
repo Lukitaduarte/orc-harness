@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 
 import 'live/daemon_client.dart';
@@ -65,6 +63,7 @@ class HarnessStore extends ChangeNotifier {
   /// workspace, keeping the pane layout and each session's profile picks.
   void _syncLive() {
     final d = daemon!;
+    _liveTesting.removeWhere(d.mcpTests.containsKey);
     _layouts.putIfAbsent(
       liveWorkspace.id,
       () => const LayoutLeaf('p-live', null),
@@ -154,37 +153,83 @@ class HarnessStore extends ChangeNotifier {
   };
 
   /// The profile the daemon runs a session with, from the catalog picks.
+  /// The profile the daemon runs a session with, from the catalog picks:
+  /// skill folders, MCP configs as stored in the daemon, env names only.
   Map<String, Object?> _profileFor(Session s) {
-    final picked = catalog.where((i) => s.draftItems.contains(i.id));
-    String expand(String p) => p.startsWith('~/')
-        ? '${Platform.environment['HOME'] ?? ''}${p.substring(1)}'
-        : p;
-    Map<String, Object?> mcp(String detail) {
-      if (detail.startsWith('http')) return {'type': 'http', 'url': detail};
-      final parts = detail.split(RegExp(r'\s+'));
-      return {'command': parts.first, 'args': parts.skip(1).toList()};
-    }
-
+    final picked = daemon!.catalog.where((e) => s.draftItems.contains(e['id']));
     return {
       'skills': [
-        for (final i in picked.where((i) => i.kind == CatalogKind.skill))
-          expand(i.detail),
+        for (final e in picked.where((e) => e['kind'] == 'skill')) e['path'],
       ],
       'mcp_servers': {
-        for (final i in picked.where((i) => i.kind == CatalogKind.mcp))
-          i.name: mcp(i.detail),
+        for (final e in picked.where((e) => e['kind'] == 'mcp'))
+          e['name']: e['mcp'],
       },
-      // Only names: the daemon reads the values from its Keychain.
       'env_names': [
-        for (final i in picked.where((i) => i.kind == CatalogKind.env)) i.name,
+        for (final e in picked.where((e) => e['kind'] == 'env')) e['name'],
       ],
       'model': s.model == 'padrão' ? null : s.model,
     };
   }
 
+  /// "Este Mac" is selected: catalog, templates and sessions are real.
+  bool get isLive => daemon != null && workspaceId == liveWorkspace.id;
+
   /// Global catalog, configured once and enabled per session.
-  final List<CatalogItem> catalog = [...mock.catalog];
-  final mcpChecks = <String, McpCheck>{};
+  final List<CatalogItem> _mockCatalog = [...mock.catalog];
+  final _mockChecks = <String, McpCheck>{};
+  final _liveTesting = <String>{};
+
+  List<CatalogItem> get catalog => isLive ? _liveCatalog() : _mockCatalog;
+
+  Map<String, McpCheck> get mcpChecks {
+    if (!isLive) return _mockChecks;
+    return {
+      for (final MapEntry(:key, :value) in daemon!.mcpTests.entries)
+        key: value.$1 ? McpCheck.ok : McpCheck.failed,
+      for (final id in _liveTesting) id: McpCheck.testing,
+    };
+  }
+
+  /// Tool count or error of the last real MCP test.
+  (bool, int, String?)? mcpResult(String id) =>
+      isLive ? daemon!.mcpTests[id] : null;
+
+  List<CatalogItem> _liveCatalog() => [
+    for (final e in daemon!.catalog)
+      CatalogItem(
+        e['id'] as String,
+        switch (e['kind']) {
+          'skill' => CatalogKind.skill,
+          'mcp' => CatalogKind.mcp,
+          _ => CatalogKind.env,
+        },
+        e['name'] as String,
+        e['description'] as String? ?? '',
+        detail: switch (e['kind']) {
+          'skill' => e['path'] as String? ?? '',
+          'mcp' => _mcpText(e['mcp']),
+          _ =>
+            e['has_value'] == true
+                ? 'Keychain do daemon · com valor'
+                : 'Keychain do daemon · sem valor ainda',
+        },
+      ),
+  ];
+
+  static String _mcpText(Object? mcp) {
+    if (mcp is! Map) return '';
+    if (mcp['url'] != null) return mcp['url'] as String;
+    return [mcp['command'], ...?(mcp['args'] as List?)].join(' ');
+  }
+
+  /// "npx -y pkg arg" or "https://…" into a Claude Code mcpServers entry.
+  static Map<String, Object?> _mcpConfig(String detail) {
+    final d = detail.trim();
+    if (d.startsWith('http')) return {'type': 'http', 'url': d};
+    final parts = d.split(RegExp(r'\s+'));
+    return {'command': parts.first, 'args': parts.skip(1).toList()};
+  }
 
   /// The catalog screen replaces the panes while open.
   bool catalogOpen = false;
@@ -347,21 +392,52 @@ class HarnessStore extends ChangeNotifier {
     String detail, {
     String? secretValue,
   }) {
-    // An env's value goes straight to the daemon's Keychain; the app keeps
-    // only the name.
-    if (kind == CatalogKind.env &&
-        secretValue != null &&
-        secretValue.isNotEmpty) {
-      daemon?.send({'type': 'set_secret', 'name': name, 'value': secretValue});
+    if (isLive) {
+      final kindName = switch (kind) {
+        CatalogKind.skill => 'skill',
+        CatalogKind.mcp => 'mcp',
+        CatalogKind.env => 'env',
+      };
+      daemon!.send({
+        'type': 'upsert_catalog',
+        'entry': {
+          'id':
+              '$kindName-${foldAccents(name).replaceAll(RegExp(r'[^a-z0-9]+'), '-')}',
+          'kind': kindName,
+          'name': name,
+          'description': description,
+          'path': kind == CatalogKind.skill ? detail.trim() : null,
+          'mcp': kind == CatalogKind.mcp ? _mcpConfig(detail) : null,
+        },
+      });
+      // The value goes straight to the daemon's Keychain; the app keeps
+      // nothing.
+      if (kind == CatalogKind.env &&
+          secretValue != null &&
+          secretValue.isNotEmpty) {
+        daemon!.send({
+          'type': 'set_secret',
+          'name': name,
+          'value': secretValue,
+        });
+      }
+      return;
     }
-    catalog.add(
+    _mockCatalog.add(
       CatalogItem(_nextId('item'), kind, name, description, detail: detail),
     );
     notifyListeners();
   }
 
   void removeCatalogItem(CatalogItem item) {
-    catalog.remove(item);
+    if (isLive) {
+      daemon!.send({'type': 'remove_catalog', 'id': item.id});
+      if (item.kind == CatalogKind.env) {
+        daemon!.send({'type': 'delete_secret', 'name': item.name});
+      }
+    } else {
+      _mockCatalog.remove(item);
+    }
     for (final s in sessions) {
       s.appliedItems.remove(item.id);
       s.draftItems.remove(item.id);
@@ -369,13 +445,22 @@ class HarnessStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Simulates the daemon starting the MCP and listing its tools.
+  /// Live: the daemon starts the MCP and lists its tools. Mock: simulated.
   void testMcp(CatalogItem item) {
-    mcpChecks[item.id] = McpCheck.testing;
+    if (isLive) {
+      daemon!.mcpTests.remove(item.id);
+      _liveTesting.add(item.id);
+      daemon!.send({'type': 'test_mcp', 'id': item.id});
+      notifyListeners();
+      return;
+    }
+    _mockChecks[item.id] = McpCheck.testing;
     notifyListeners();
     _later(const Duration(milliseconds: 900), () {
       // linear's token is expired in the mock, to show the failure state.
-      mcpChecks[item.id] = item.id == 'linear' ? McpCheck.failed : McpCheck.ok;
+      _mockChecks[item.id] = item.id == 'linear'
+          ? McpCheck.failed
+          : McpCheck.ok;
       notifyListeners();
     });
   }
@@ -543,11 +628,55 @@ class HarnessStore extends ChangeNotifier {
   }
 
   /// Plan mode templates, one markdown each.
-  final List<PlanTemplate> planTemplates = [...seedTemplates];
+  final List<PlanTemplate> _mockTemplates = [...seedTemplates];
+
+  /// Plan mode templates: the daemon's `~/.orc/templates` when live.
+  List<PlanTemplate> get planTemplates => isLive
+      ? [
+          for (final t in daemon!.templates)
+            _templateFromFile(t['id'] as String, t['markdown'] as String),
+        ]
+      : _mockTemplates;
+
+  /// Name and description come from the file's frontmatter.
+  static PlanTemplate _templateFromFile(String id, String markdown) {
+    String field(String key) =>
+        RegExp(
+          '^$key:\\s*(.+)\$',
+          multiLine: true,
+        ).firstMatch(markdown)?.group(1)?.trim() ??
+        '';
+    final name = field('name');
+    return PlanTemplate(
+      id,
+      name.isEmpty ? id : name,
+      field('description'),
+      markdown,
+    );
+  }
+
+  static String _templateFile(
+    String name,
+    String description,
+    String markdown,
+  ) {
+    // Replace any frontmatter with one carrying name and description.
+    final body = markdown.replaceFirst(RegExp(r'^---\n[\s\S]*?\n---\n'), '');
+    return '---\nname: $name\ndescription: $description\n---\n$body';
+  }
 
   PlanTemplate addTemplate(String name, String description, String markdown) {
+    if (isLive) {
+      final id = foldAccents(name).replaceAll(RegExp(r'[^a-z0-9]+'), '-');
+      final file = _templateFile(name, description, markdown);
+      daemon!.send({
+        'type': 'upsert_template',
+        'template': {'id': id, 'markdown': file},
+      });
+      return PlanTemplate(id, name, description, file);
+    }
     final t = PlanTemplate(_nextId('template'), name, description, markdown);
-    planTemplates.add(t);
+    _mockTemplates.add(t);
     notifyListeners();
     return t;
   }
@@ -562,11 +691,24 @@ class HarnessStore extends ChangeNotifier {
       ..name = name ?? t.name
       ..description = description ?? t.description
       ..markdown = markdown ?? t.markdown;
+    if (isLive) {
+      daemon!.send({
+        'type': 'upsert_template',
+        'template': {
+          'id': t.id,
+          'markdown': _templateFile(t.name, t.description, t.markdown),
+        },
+      });
+    }
     notifyListeners();
   }
 
   void removeTemplate(PlanTemplate t) {
-    planTemplates.remove(t);
+    if (isLive) {
+      daemon!.send({'type': 'remove_template', 'id': t.id});
+    } else {
+      _mockTemplates.remove(t);
+    }
     notifyListeners();
   }
 
