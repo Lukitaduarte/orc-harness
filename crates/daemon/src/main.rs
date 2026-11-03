@@ -70,6 +70,12 @@ fn main() -> std::io::Result<()> {
                     commit_check: bin_dir.join("orc-commit-check"),
                 },
             );
+            let chrome = orc_daemon::browser::find_chrome(std::env::var("ORC_BROWSER").ok().as_deref());
+            match &chrome {
+                Some(c) => eprintln!("orcd: navegador dos workspaces: {}", c.display()),
+                None => eprintln!("orcd: nenhum Chrome/Chromium/Brave/Edge; navegador dos workspaces desligado"),
+            }
+            let daemon = daemon.with_browsers(orc_daemon::browser::Browsers::new(home.join("browsers"), chrome));
             runtime.block_on(async move {
                 tokio::spawn(daemon.clone().serve_otlp(otlp));
                 let key = secrets::daemon_key(&secrets, &home.join("daemon.key"))?;

@@ -233,6 +233,26 @@ pub struct Profile {
     #[serde(default)]
     pub env_names: Vec<String>,
     pub model: Option<String>,
+    /// Workspace browser the session's agent drives (Playwright MCP over
+    /// CDP); the daemon opens it if needed.
+    #[serde(default)]
+    pub browser: Option<String>,
+}
+
+/// What the app asks of a workspace browser.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum BrowserAction {
+    /// Opens the browser if needed, then goes to `url` if given.
+    Open { url: Option<String> },
+    Back,
+    Forward,
+    Reload,
+    /// The pane's size in logical pixels.
+    Resize { width: u32, height: u32 },
+    /// `{kind: mouse|text|key, …}`, see browser::Browser::input.
+    Input { event: serde_json::Value },
+    Close,
 }
 
 /// One item of the global catalog, configured once, enabled per session.
@@ -452,6 +472,7 @@ pub enum ClientMessage {
     /// Opens a session in the worktrees folder so you can answer Claude
     /// Code's folder trust question once for all worktrees.
     TrustWorktrees { account_id: String },
+    Browser { profile: String, action: BrowserAction },
     /// Puts a failed or stopped card back in line.
     RetryCard { plan_id: String, number: u32 },
     /// Keystrokes or pasted text for a session's terminal.
@@ -488,6 +509,10 @@ pub enum DaemonMessage {
     /// `gh pr view` JSON (number, state, url, checks, review), or `none`.
     Pr { session_id: String, pr: Option<serde_json::Value> },
     Plans { plans: Vec<PlanDoc> },
+    BrowserState { profile: String, open: bool, url: String },
+    /// A screen of a workspace browser: JPEG in base64, page size in CSS
+    /// pixels.
+    BrowserFrame { profile: String, jpeg: String, width: u32, height: u32 },
     /// Where each loop of a running plan is.
     PlanRun { plan_id: String, cards: Vec<CardRun> },
     /// Reply to an `McpCall`: text for the agent.

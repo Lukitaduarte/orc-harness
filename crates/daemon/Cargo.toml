@@ -38,6 +38,8 @@ ignore = "0.4.34"
 regex = "1.13.1"
 axum = { version = "0.8.9", default-features = false, features = ["http1", "json", "tokio"] }
 tokio.workspace = true
+tokio-tungstenite = "0.30.0"
+futures-util = "0.3.34"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "3.7.0"

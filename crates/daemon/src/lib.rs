@@ -1,5 +1,6 @@
 //! orc-harness daemon: owns sessions, terminals, quotas and secrets.
 
+pub mod browser;
 pub mod catalog;
 pub mod config;
 pub mod git;

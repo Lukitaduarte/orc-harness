@@ -7,12 +7,13 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
-use orc_protocol::{ClientMessage, DaemonMessage, ProjectInfo, Profile};
+use orc_protocol::{BrowserAction, ClientMessage, DaemonMessage, ProjectInfo, Profile};
 use orc_protocol::GridSnapshot;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
 use tokio::sync::broadcast;
 
+use crate::browser::{Browser, BrowserEvent, Browsers};
 use crate::catalog::{Catalog, mcp_env, test_mcp};
 use crate::git;
 use crate::manager::SessionManager;
@@ -52,7 +53,13 @@ pub struct Daemon {
     pub events: broadcast::Sender<DaemonMessage>,
     /// Set once iroh is up; mints pairing tickets for `orcd pair`.
     pub remote: Arc<OnceLock<Remote>>,
+    /// Workspace browsers, and the address each open one is at.
+    pub browsers: Arc<Browsers>,
+    browser_urls: Arc<Mutex<HashMap<String, String>>>,
 }
+
+/// Playwright MCP, pinned, attached to a workspace browser.
+pub const PLAYWRIGHT_MCP: &str = "@playwright/mcp@0.0.83";
 
 impl Daemon {
     pub fn new(
@@ -75,7 +82,105 @@ impl Daemon {
             env_requests: Arc::default(),
             events: broadcast::channel(1024).0,
             remote: Arc::default(),
+            browsers: Arc::new(Browsers::new(PathBuf::new(), None)),
+            browser_urls: Arc::default(),
         }
+    }
+
+    /// Enables workspace browsers (off until set: no browser found).
+    pub fn with_browsers(mut self, browsers: Browsers) -> Self {
+        self.browsers = Arc::new(browsers);
+        self
+    }
+
+    /// The profile's browser, opened if needed; its frames and addresses
+    /// go to clients.
+    pub async fn open_browser(&self, name: &str) -> Result<Arc<Browser>, String> {
+        let events = self.events.clone();
+        let urls = self.browser_urls.clone();
+        let profile = name.to_string();
+        let (b, new) = self
+            .browsers
+            .get(name, move |e| match e {
+                BrowserEvent::Frame { jpeg, width, height } => {
+                    let _ = events.send(DaemonMessage::BrowserFrame { profile: profile.clone(), jpeg, width, height });
+                }
+                BrowserEvent::Navigated { url } => {
+                    urls.lock().unwrap().insert(profile.clone(), url.clone());
+                    let _ = events.send(DaemonMessage::BrowserState { profile: profile.clone(), open: true, url });
+                }
+            })
+            .await?;
+        if new {
+            self.browser_urls.lock().unwrap().insert(name.into(), "about:blank".into());
+            let _ = self.events.send(DaemonMessage::BrowserState { profile: name.into(), open: true, url: "about:blank".into() });
+        }
+        Ok(b)
+    }
+
+    async fn browser_action(&self, profile: &str, action: BrowserAction) -> Result<(), String> {
+        if let BrowserAction::Close = action {
+            self.browsers.close(profile).await;
+            self.browser_urls.lock().unwrap().remove(profile);
+            let _ = self.events.send(DaemonMessage::BrowserState { profile: profile.into(), open: false, url: String::new() });
+            return Ok(());
+        }
+        let b = match &action {
+            BrowserAction::Open { .. } => self.open_browser(profile).await?,
+            _ => self.browsers.running(profile).await.ok_or("o navegador não está aberto")?,
+        };
+        match action {
+            BrowserAction::Open { url: Some(url) } => b.navigate(&url).await,
+            BrowserAction::Open { url: None } => Ok(()),
+            BrowserAction::Back => b.history(-1).await,
+            BrowserAction::Forward => b.history(1).await,
+            BrowserAction::Reload => b.reload().await,
+            BrowserAction::Resize { width, height } => b.resize(width, height).await,
+            BrowserAction::Input { event } => b.input(&event).await,
+            BrowserAction::Close => unreachable!(),
+        }
+    }
+
+    /// Runs `then` with `profile`; when the profile asks for a workspace
+    /// browser, first opens it and adds the browser MCP attached to it.
+    fn with_browser(
+        &self,
+        profile: Profile,
+        then: impl FnOnce(&Daemon, Profile) -> std::io::Result<()> + Send + 'static,
+    ) -> Vec<DaemonMessage> {
+        let Some(name) = profile.browser.clone() else {
+            return match then(self, profile) {
+                Ok(()) => Vec::new(),
+                Err(e) => vec![DaemonMessage::Error { message: e.to_string() }],
+            };
+        };
+        let Ok(rt) = tokio::runtime::Handle::try_current() else {
+            return vec![DaemonMessage::Error { message: "navegador indisponível aqui".into() }];
+        };
+        let d = self.clone();
+        rt.spawn(async move {
+            let result = match d.open_browser(&name).await {
+                Ok(b) => {
+                    let mut profile = profile;
+                    profile.mcp_servers.insert(
+                        "browser".into(),
+                        serde_json::json!({
+                            "command": "npx",
+                            "args": ["-y", PLAYWRIGHT_MCP, "--cdp-endpoint", b.cdp_http],
+                        }),
+                    );
+                    let d2 = d.clone();
+                    tokio::task::spawn_blocking(move || then(&d2, profile).map_err(|e| e.to_string()))
+                        .await
+                        .unwrap_or_else(|e| Err(e.to_string()))
+                }
+                Err(e) => Err(e),
+            };
+            if let Err(message) = result {
+                let _ = d.events.send(DaemonMessage::Error { message });
+            }
+        });
+        Vec::new()
     }
 
     /// Sends each session's changed lines as they render, and the session
@@ -147,6 +252,9 @@ impl Daemon {
             DaemonMessage::Projects { projects: self.projects.lock().unwrap().list() },
             DaemonMessage::Plans { plans: plan_docs },
         ];
+        for (profile, url) in self.browser_urls.lock().unwrap().iter() {
+            out.push(DaemonMessage::BrowserState { profile: profile.clone(), open: true, url: url.clone() });
+        }
         out.extend(runs);
         let usage = self.usage.lock().unwrap();
         for s in sessions.list() {
@@ -493,18 +601,31 @@ impl Daemon {
                 }
             }
             ClientMessage::CreateSession { account_id, cwd, profile, cols, rows } => {
-                let mut sessions = self.sessions.lock().unwrap();
-                if let Err(e) = sessions.create(&account_id, cwd.map(PathBuf::from), profile, cols, rows) {
-                    return error(e);
-                }
-                emit(DaemonMessage::Sessions { sessions: sessions.list() });
+                return self.with_browser(profile, move |d, profile| {
+                    let mut sessions = d.sessions.lock().unwrap();
+                    sessions.create(&account_id, cwd.map(PathBuf::from), profile, cols, rows)?;
+                    let _ = d.events.send(DaemonMessage::Sessions { sessions: sessions.list() });
+                    Ok(())
+                });
             }
             ClientMessage::ApplyProfile { session_id, profile } => {
-                let mut sessions = self.sessions.lock().unwrap();
-                if let Err(e) = sessions.apply_profile(&session_id, profile) {
-                    return error(e);
-                }
-                emit(DaemonMessage::Sessions { sessions: sessions.list() });
+                return self.with_browser(profile, move |d, profile| {
+                    let mut sessions = d.sessions.lock().unwrap();
+                    sessions.apply_profile(&session_id, profile)?;
+                    let _ = d.events.send(DaemonMessage::Sessions { sessions: sessions.list() });
+                    Ok(())
+                });
+            }
+            ClientMessage::Browser { profile, action } => {
+                let Ok(rt) = tokio::runtime::Handle::try_current() else {
+                    return vec![DaemonMessage::Error { message: "navegador indisponível aqui".into() }];
+                };
+                let d = self.clone();
+                rt.spawn(async move {
+                    if let Err(message) = d.browser_action(&profile, action).await {
+                        let _ = d.events.send(DaemonMessage::Error { message });
+                    }
+                });
             }
             ClientMessage::StopSession { session_id } => {
                 let mut sessions = self.sessions.lock().unwrap();
@@ -606,11 +727,12 @@ impl Daemon {
                     Ok(p) => p,
                     Err(e) => return error(e),
                 };
-                let mut sessions = self.sessions.lock().unwrap();
-                if let Err(e) = sessions.create_in(&account_id, Some(path), Some((project.id, branch)), profile, cols, rows) {
-                    return error(e);
-                }
-                emit(DaemonMessage::Sessions { sessions: sessions.list() });
+                return self.with_browser(profile, move |d, profile| {
+                    let mut sessions = d.sessions.lock().unwrap();
+                    sessions.create_in(&account_id, Some(path), Some((project.id, branch)), profile, cols, rows)?;
+                    let _ = d.events.send(DaemonMessage::Sessions { sessions: sessions.list() });
+                    Ok(())
+                });
             }
             ClientMessage::Diff { session_id } => {
                 let Some((cwd, base)) = self.session_base(&session_id) else {
