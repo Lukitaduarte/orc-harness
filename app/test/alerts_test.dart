@@ -62,4 +62,29 @@ void main() {
     ]);
     d.dispose();
   });
+
+  test('a deploy waiting for your OK shows once and goes when decided', () {
+    final d = DaemonClient();
+    final alerts = <(String, String)>[];
+    final sent = <Map<String, Object?>>[];
+    d.onAlert = (t, b) => alerts.add((t, b));
+    d.sendHook = sent.add;
+    const msg =
+        '{"type":"approval","id":"a1","session_id":"s1","action":"deploy no Railway: railway up"}';
+    d.handle(msg);
+    d.handle(msg);
+    expect(d.approvals.length, 1);
+    expect(alerts.single.$1, 'Precisa do seu OK');
+    d.resolveApproval('a1', true);
+    expect(sent.last, {
+      'type': 'resolve_approval',
+      'id': 'a1',
+      'approve': true,
+    });
+    expect(d.approvals, isEmpty);
+    d.handle(msg.replaceFirst('a1', 'a2'));
+    d.handle('{"type":"approval_resolved","id":"a2","approved":false}');
+    expect(d.approvals, isEmpty, reason: 'timed out in the daemon');
+    d.dispose();
+  });
 }

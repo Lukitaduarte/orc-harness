@@ -116,6 +116,16 @@ class DaemonClient extends ChangeNotifier {
   /// Recent messages between sessions: (from, to, body), newest last.
   List<(String, String, String)> messages = [];
 
+  /// Actions waiting for your OK (deploys, releases, merges): (id,
+  /// session, what it wants to do).
+  List<(String, String, String)> approvals = [];
+
+  void resolveApproval(String id, bool approve) {
+    send({'type': 'resolve_approval', 'id': id, 'approve': approve});
+    approvals = approvals.where((a) => a.$1 != id).toList();
+    notifyListeners();
+  }
+
   void resolveEnvRequest(String id, bool approve) {
     send({'type': 'resolve_env_request', 'id': id, 'approve': approve});
     envRequests = envRequests.where((r) => r.$1 != id).toList();
@@ -507,6 +517,22 @@ class DaemonClient extends ChangeNotifier {
           ...envRequests,
           (m['id'] as String, m['session_id'] as String, m['name'] as String),
         ];
+        notifyListeners();
+      case 'approval':
+        final id = m['id'] as String;
+        if (!approvals.any((a) => a.$1 == id)) {
+          onAlert?.call(
+            'Precisa do seu OK',
+            '${sessionLabel(m['session_id'] as String)}: ${m['action']}',
+          );
+          approvals = [
+            ...approvals,
+            (id, m['session_id'] as String, m['action'] as String),
+          ];
+          notifyListeners();
+        }
+      case 'approval_resolved':
+        approvals = approvals.where((a) => a.$1 != m['id']).toList();
         notifyListeners();
       case 'env_request_resolved':
         envRequests = envRequests.where((r) => r.$1 != m['id']).toList();

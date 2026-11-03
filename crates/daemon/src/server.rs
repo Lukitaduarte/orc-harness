@@ -29,6 +29,12 @@ pub type Inbox = HashMap<String, Vec<(String, String)>>;
 /// Env values agents asked to store, waiting for you: id → (session, name, value).
 pub type EnvRequests = HashMap<String, (String, String, String)>;
 
+/// Actions waiting for your OK: id → (session, action, the hook waiting).
+pub type Approvals = HashMap<String, (String, String, tokio::sync::oneshot::Sender<bool>)>;
+
+/// How long a gated action waits for you before it is refused.
+pub const APPROVAL_TIMEOUT: Duration = Duration::from_secs(600);
+
 /// Where worktrees and the commit hook live, and the hook's checker.
 #[derive(Clone, Debug)]
 pub struct GitPaths {
@@ -61,6 +67,7 @@ pub struct Daemon {
     browser_queue: Arc<OnceLock<tokio::sync::mpsc::UnboundedSender<(String, BrowserAction)>>>,
     pub language_servers: crate::ide::LanguageServers,
     pub workspaces: Arc<Mutex<crate::workspaces::Workspaces>>,
+    pub approvals: Arc<Mutex<Approvals>>,
     /// `~/.orc` and its config.json, for new accounts (unset: refused).
     home: Option<PathBuf>,
 }
@@ -94,6 +101,7 @@ impl Daemon {
             browser_queue: Arc::default(),
             language_servers: Default::default(),
             workspaces: Arc::new(Mutex::new(crate::workspaces::Workspaces::load(None))),
+            approvals: Arc::default(),
             home: None,
         }
     }
@@ -280,6 +288,9 @@ impl Daemon {
             DaemonMessage::Projects { projects: self.projects.lock().unwrap().list() },
             DaemonMessage::Plans { plans: plan_docs },
         ];
+        for (id, (session_id, action, _)) in self.approvals.lock().unwrap().iter() {
+            out.push(DaemonMessage::Approval { id: id.clone(), session_id: session_id.clone(), action: action.clone() });
+        }
         for (profile, url) in self.browser_urls.lock().unwrap().iter() {
             out.push(DaemonMessage::BrowserState { profile: profile.clone(), open: true, url: url.clone() });
         }
@@ -1137,6 +1148,17 @@ impl Daemon {
                     Err(message) => vec![DaemonMessage::Error { message }],
                 };
             }
+            // Only the sessions' hook asks, over the local socket (see serve).
+            ClientMessage::Gate { .. } => {
+                return vec![DaemonMessage::Error { message: "só pelo hook das sessões".into() }];
+            }
+            ClientMessage::ResolveApproval { id, approve } => {
+                let Some((_, _, waiting)) = self.approvals.lock().unwrap().remove(&id) else {
+                    return vec![DaemonMessage::Error { message: "aprovação não encontrada (o tempo pode ter acabado)".into() }];
+                };
+                let _ = waiting.send(approve);
+                emit(DaemonMessage::ApprovalResolved { id, approved: approve });
+            }
             ClientMessage::RetryCard { plan_id, number } => {
                 let mut plans = self.plans.lock().unwrap();
                 let Some(run) = plans.run_mut(&plan_id) else {
@@ -1207,9 +1229,10 @@ impl Daemon {
                     let replies = match msg {
                         // Approvals come from you in the app, never from the
                         // socket the sessions' tools use.
-                        ClientMessage::ResolveEnvRequest { .. } => vec![DaemonMessage::Error {
-                            message: "aprovação só pelo app".into(),
-                        }],
+                        ClientMessage::ResolveEnvRequest { .. } | ClientMessage::ResolveApproval { .. } => {
+                            vec![DaemonMessage::Error { message: "aprovação só pelo app".into() }]
+                        }
+                        ClientMessage::Gate { session_id, tool, input } => vec![daemon.gate(&session_id, &tool, &input).await],
                         ClientMessage::NewPairingTicket => match daemon.remote.get() {
                             Some(r) => vec![DaemonMessage::PairingTicket { ticket: r.new_ticket().await.encode() }],
                             None => vec![DaemonMessage::Error { message: "iroh ainda não subiu".into() }],
@@ -1225,6 +1248,38 @@ impl Daemon {
                     }
                 }
             });
+        }
+    }
+}
+
+impl Daemon {
+    /// Decides a session's tool call: ordinary work runs; a deploy or the
+    /// like waits for your decision in the app (refused after
+    /// APPROVAL_TIMEOUT).
+    pub async fn gate(&self, session_id: &str, tool: &str, input: &serde_json::Value) -> DaemonMessage {
+        let Some(action) = crate::gates::needs_ok(tool, input) else {
+            return DaemonMessage::GateDecision { allow: true, reason: String::new() };
+        };
+        if self.sessions.lock().unwrap().summary(session_id).is_none() {
+            return DaemonMessage::GateDecision { allow: false, reason: "sessão desconhecida".into() };
+        }
+        let id = uuid::Uuid::new_v4().simple().to_string()[..12].to_string();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.approvals.lock().unwrap().insert(id.clone(), (session_id.into(), action.clone(), tx));
+        let _ = self.events.send(DaemonMessage::Approval { id: id.clone(), session_id: session_id.into(), action: action.clone() });
+        let decided = tokio::time::timeout(APPROVAL_TIMEOUT, rx).await;
+        let approved = matches!(decided, Ok(Ok(true)));
+        if decided.is_err() {
+            self.approvals.lock().unwrap().remove(&id);
+            let _ = self.events.send(DaemonMessage::ApprovalResolved { id, approved: false });
+        }
+        DaemonMessage::GateDecision {
+            allow: approved,
+            reason: match decided {
+                Ok(Ok(true)) => String::new(),
+                Ok(_) => format!("O usuário recusou: {action}. Não tente de novo por outro caminho; pergunte o que fazer."),
+                Err(_) => format!("Sem resposta do usuário em 10 minutos: {action}. Peça o OK antes de tentar de novo."),
+            },
         }
     }
 }

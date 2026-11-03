@@ -359,7 +359,12 @@ impl SessionManager {
         let hook = |event: &str| {
             json!([{
                 "matcher": if event == "PreToolUse" { json!("*") } else { json!("") },
-                "hooks": [{ "type": "command", "command": format!("{} {event}", self.cfg.hook.display()) }]
+                // PreToolUse may wait for your OK on a deploy (gates).
+                "hooks": [if event == "PreToolUse" {
+                    json!({ "type": "command", "command": format!("{} {event}", self.cfg.hook.display()), "timeout": 660 })
+                } else {
+                    json!({ "type": "command", "command": format!("{} {event}", self.cfg.hook.display()) })
+                }]
             }])
         };
         let settings = json!({

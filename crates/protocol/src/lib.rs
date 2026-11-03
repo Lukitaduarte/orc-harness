@@ -542,6 +542,11 @@ pub enum ClientMessage {
     /// skills and proposes edits (see LearningItem).
     Learn { plan_id: String, account_id: String, notes: Vec<String>, skills: Vec<String> },
     DecideLearning { plan_id: String, id: String, accept: bool },
+    /// From a session's PreToolUse hook: may this tool call run? Deploys
+    /// and the like wait for your decision (see gates).
+    Gate { session_id: String, tool: String, input: serde_json::Value },
+    /// Your decision on an action waiting for OK (app only).
+    ResolveApproval { id: String, approve: bool },
     /// Puts a failed or stopped card back in line.
     RetryCard { plan_id: String, number: u32 },
     /// Keystrokes or pasted text for a session's terminal.
@@ -579,6 +584,11 @@ pub enum DaemonMessage {
     Pr { session_id: String, pr: Option<serde_json::Value> },
     Plans { plans: Vec<PlanDoc> },
     Workspaces { workspaces: Vec<WorkspaceInfo> },
+    /// Reply to `Gate`.
+    GateDecision { allow: bool, reason: String },
+    /// A session wants to do something that needs your OK.
+    Approval { id: String, session_id: String, action: String },
+    ApprovalResolved { id: String, approved: bool },
     Learnings { plan_id: String, items: Vec<LearningItem> },
     BrowserState { profile: String, open: bool, url: String },
     DirEntries { session_id: String, path: String, entries: Vec<DirEntry> },

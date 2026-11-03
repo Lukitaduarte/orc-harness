@@ -12,7 +12,8 @@ class AgentNotices extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final d = store.daemon;
-    if (d == null || (d.envRequests.isEmpty && d.messages.isEmpty)) {
+    if (d == null ||
+        (d.envRequests.isEmpty && d.messages.isEmpty && d.approvals.isEmpty)) {
       return const SizedBox.shrink();
     }
     final scheme = Theme.of(context).colorScheme;
@@ -27,6 +28,36 @@ class AgentNotices extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          for (final (id, session, action) in d.approvals)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  Icon(
+                    LucideIcons.shieldAlert,
+                    size: 14,
+                    color: scheme.destructive,
+                  ),
+                  const Gap(8),
+                  Expanded(
+                    child: Text(
+                      '${name(session)} quer: $action. Fica bloqueado até você decidir (10 min).',
+                    ).small(),
+                  ),
+                  OutlineButton(
+                    size: ButtonSize.small,
+                    onPressed: () => d.resolveApproval(id, false),
+                    child: const Text('Recusar'),
+                  ),
+                  const Gap(6),
+                  PrimaryButton(
+                    size: ButtonSize.small,
+                    onPressed: () => d.resolveApproval(id, true),
+                    child: const Text('Aprovar'),
+                  ),
+                ],
+              ),
+            ),
           for (final (id, session, env) in d.envRequests)
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
