@@ -67,6 +67,24 @@ class _AnalyticsViewState extends State<AnalyticsView> {
       rows.fold(0, (a, r) => a + r.cacheCreation),
     );
     final prompt = types.$1 + types.$3 + types.$4;
+    final budget = store.budgetOf(store.workspaceId);
+    final month = store.monthCost(store.workspaceId);
+    // Each started plan: the cost of its cards' branches.
+    final byPlan = [
+      for (final p in store.workspaceProjects.where((p) => p.cards.isNotEmpty))
+        () {
+          final branches = p.cards.map((c) => c.branch).toSet();
+          final mine = rows.where(
+            (r) => r.branch != null && branches.contains(r.branch),
+          );
+          return (
+            p.name,
+            '${p.doneCount}/${p.cards.length}',
+            mine.fold(0, (a, r) => a + r.tokens),
+            mine.fold(0.0, (a, r) => a + r.costUsd),
+          );
+        }(),
+    ]..sort((a, b) => b.$4.compareTo(a.$4));
     final cacheHit = prompt == 0 ? null : types.$3 / prompt;
 
     return ListView(
@@ -116,8 +134,31 @@ class _AnalyticsViewState extends State<AnalyticsView> {
               'Lido do cache',
               cacheHit == null ? '—' : '${(cacheHit * 100).round()}%',
             ),
+            const Gap(12),
+            _Stat(
+              'Este mês',
+              budget == null
+                  ? formatUsd(month)
+                  : '${formatUsd(month)} / ${formatUsd(budget)}',
+            ),
           ],
         ),
+        if (budget != null && budget > 0) ...[
+          const Gap(8),
+          LinearProgressIndicator(
+            value: (month / budget).clamp(0.0, 1.0),
+            minHeight: 6,
+            color: month >= budget
+                ? Theme.of(context).colorScheme.destructive
+                : month >= budget * 0.8
+                ? Colors.amber
+                : null,
+          ),
+          const Gap(4),
+          Text(
+            '${(month * 100 / budget).round()}% do orçamento mensal de ${store.workspace.name}',
+          ).xSmall().muted(),
+        ],
         const Gap(16),
         OutlinedContainer(
           padding: const EdgeInsets.all(14),
@@ -184,6 +225,27 @@ class _AnalyticsViewState extends State<AnalyticsView> {
                     formatTokens(e.value.$1),
                     formatUsd(e.value.$2),
                   ]),
+            ],
+          ),
+        ),
+        const Gap(16),
+        OutlinedContainer(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Por plano').semiBold(),
+              const Gap(10),
+              _row(['Plano', 'Cards feitos', 'Tokens', 'Custo'], head: true),
+              const Divider(),
+              if (byPlan.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Text('Nenhum plano em execução no período.'),
+                ).small().muted()
+              else
+                for (final (name, done, tokens, cost) in byPlan)
+                  _row([name, done, formatTokens(tokens), formatUsd(cost)]),
             ],
           ),
         ),

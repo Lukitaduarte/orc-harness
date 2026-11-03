@@ -45,6 +45,7 @@ fn workspaces_and_new_accounts() {
         name: format!("WS {id}"),
         accounts: accounts.iter().map(|a| a.to_string()).collect(),
         memory: None,
+        budget_usd: None,
     };
     assert!(daemon.handle(ClientMessage::UpsertWorkspace { workspace: ws("trabalho", &[]) }).is_empty());
     assert!(daemon.handle(ClientMessage::AddAccount { id: "work-2".into(), workspace_id: "trabalho".into() }).is_empty());

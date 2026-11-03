@@ -35,6 +35,61 @@ class HarnessStore extends ChangeNotifier {
       now = DateTime.now();
       notifyListeners();
     });
+    // Usage for the budgets, now and then (the analytics screen asks too).
+    _usageTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      if (daemon?.status == LinkStatus.connected) daemon!.requestUsage(31);
+    });
+  }
+
+  late final Timer _usageTimer;
+  bool _askedUsage = false;
+
+  /// A live workspace's monthly budget in US\$, if set.
+  double? budgetOf(String workspaceId) =>
+      (daemon?.workspaces
+                  .where((w) => w['id'] == workspaceId)
+                  .map((w) => w['budget_usd'])
+                  .firstOrNull
+              as num?)
+          ?.toDouble();
+
+  /// What a workspace's accounts cost this month (UTC), from the usage rows.
+  double monthCost(String workspaceId) {
+    final month = now.toUtc().toIso8601String().substring(0, 7);
+    final ids = accounts
+        .where((a) => a.workspaceId == workspaceId)
+        .map((a) => a.id)
+        .toSet();
+    final rows = isLiveWorkspace(workspaceId) ? daemon!.usageRows : _mockUsage;
+    return rows
+        .where((r) => ids.contains(r.accountId) && r.day.startsWith(month))
+        .fold(0.0, (a, r) => a + r.costUsd);
+  }
+
+  /// Budget warnings already given: workspace, month, threshold.
+  final _budgetWarned = <String>{};
+
+  void _checkBudgets() {
+    final month = now.toUtc().toIso8601String().substring(0, 7);
+    for (final w in liveWorkspaces) {
+      final budget = budgetOf(w.id);
+      if (budget == null || budget <= 0) continue;
+      final share = monthCost(w.id) / budget;
+      for (final (limit, title) in [
+        (1.0, 'Orçamento estourado'),
+        (0.8, 'Orçamento em 80%'),
+      ]) {
+        final key = '${w.id} $month $limit';
+        if (share >= limit && _budgetWarned.add(key)) {
+          daemon?.onAlert?.call(
+            title,
+            '${w.name}: US\$${monthCost(w.id).toStringAsFixed(2)} de US\$${budget.toStringAsFixed(0)} este mês.',
+          );
+          if (limit == 1.0) _budgetWarned.add('${w.id} $month 0.8');
+          break;
+        }
+      }
+    }
   }
 
   late final Timer _clock;
@@ -104,9 +159,16 @@ class HarnessStore extends ChangeNotifier {
     List<String> accountIds, {
     String? id,
     String? memory,
+    double? budgetUsd,
   }) {
     final wsId = id ?? _freeWorkspaceId(name);
-    daemon!.upsertWorkspace(wsId, name.trim(), accountIds, memory: memory);
+    daemon!.upsertWorkspace(
+      wsId,
+      name.trim(),
+      accountIds,
+      memory: memory,
+      budgetUsd: budgetUsd,
+    );
     // Select it once the daemon reports it.
     if (id == null) _selectWhenLive = wsId;
     return wsId;
@@ -194,6 +256,11 @@ class HarnessStore extends ChangeNotifier {
       openProjectId = null;
     }
     if (live.isEmpty) return notifyListeners();
+    if (!_askedUsage && d.status == LinkStatus.connected) {
+      _askedUsage = true;
+      d.requestUsage(31);
+    }
+    _checkBudgets();
     if (_selectWhenLive case final id? when isLiveWorkspace(id)) {
       _selectWhenLive = null;
       workspaceId = id;
@@ -499,7 +566,7 @@ class HarnessStore extends ChangeNotifier {
     openProjectId = null;
     catalogOpen = false;
     analyticsOpen = true;
-    if (isLive) daemon!.requestUsage(30);
+    if (isLive) daemon!.requestUsage(31);
     notifyListeners();
   }
 
@@ -1291,6 +1358,7 @@ class HarnessStore extends ChangeNotifier {
   void dispose() {
     daemon?.removeListener(_syncLive);
     _clock.cancel();
+    _usageTimer.cancel();
     for (final t in _pending) {
       t.cancel();
     }

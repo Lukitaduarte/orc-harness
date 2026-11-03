@@ -37,7 +37,7 @@ impl Workspaces {
             })
             .collect();
         if list.is_empty() {
-            list.push(WorkspaceInfo { id: "default".into(), name: "Este Mac".into(), accounts: Vec::new(), memory: None });
+            list.push(WorkspaceInfo { id: "default".into(), name: "Este Mac".into(), accounts: Vec::new(), memory: None, budget_usd: None });
         }
         let listed: Vec<String> = list.iter().flat_map(|w| w.accounts.clone()).collect();
         let loose = accounts.iter().filter(|a| !listed.contains(a)).cloned();
@@ -104,7 +104,7 @@ mod tests {
     use super::*;
 
     fn ws(id: &str, accounts: &[&str]) -> WorkspaceInfo {
-        WorkspaceInfo { id: id.into(), name: id.to_uppercase(), accounts: accounts.iter().map(|a| a.to_string()).collect(), memory: None }
+        WorkspaceInfo { id: id.into(), name: id.to_uppercase(), accounts: accounts.iter().map(|a| a.to_string()).collect(), memory: None, budget_usd: None }
     }
 
     #[test]
@@ -113,7 +113,7 @@ mod tests {
         let file = dir.path().join("workspaces.json");
         let known = vec!["a".to_string(), "b".to_string(), "c".to_string()];
         let mut w = Workspaces::load(Some(file.clone()));
-        assert_eq!(w.view(&known), [WorkspaceInfo { id: "default".into(), name: "Este Mac".into(), accounts: known.clone(), memory: None }]);
+        assert_eq!(w.view(&known), [WorkspaceInfo { id: "default".into(), name: "Este Mac".into(), accounts: known.clone(), memory: None, budget_usd: None }]);
 
         w.upsert(ws("trabalho", &["a", "b"]), &known).unwrap();
         let v = w.view(&known);

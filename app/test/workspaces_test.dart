@@ -78,6 +78,7 @@ void main() {
         'name': 'Cliente X',
         'accounts': ['b'],
         'memory': null,
+        'budget_usd': null,
       },
     });
     d.handle(
@@ -163,5 +164,59 @@ void main() {
     expect(store.demo, isTrue);
     expect(store.workspaces.length, greaterThan(1));
     store.dispose();
+  });
+
+  test('a budget warns at 80% and past 100%, once each', () {
+    final d = DaemonClient();
+    final store = HarnessStore(daemon: d);
+    final alerts = <String>[];
+    d.onAlert = (t, _) => alerts.add(t);
+    d.sendHook = (_) {};
+    d.handle('{"type":"hello","accounts":["a"]}');
+    final today = store.now.toUtc().toIso8601String().substring(0, 10);
+    void usage(double cost) => d.handle(
+      jsonEncode({
+        'type': 'usage_report',
+        'rows': [
+          {
+            'day': today,
+            'account_id': 'a',
+            'model': 'm',
+            'usage': {
+              'input': 1,
+              'output': 1,
+              'cache_read': 0,
+              'cache_creation': 0,
+              'cost_usd': cost,
+            },
+          },
+        ],
+      }),
+    );
+    d.handle(
+      jsonEncode({
+        'type': 'workspaces',
+        'workspaces': [
+          {
+            'id': 'trabalho',
+            'name': 'Trabalho',
+            'accounts': ['a'],
+            'budget_usd': 100,
+          },
+        ],
+      }),
+    );
+    expect(store.budgetOf('trabalho'), 100);
+    usage(50);
+    expect(alerts, isEmpty);
+    usage(85);
+    usage(86);
+    expect(alerts, ['Orçamento em 80%']);
+    usage(120);
+    usage(130);
+    expect(alerts, ['Orçamento em 80%', 'Orçamento estourado']);
+    expect(store.monthCost('trabalho'), 130);
+    store.dispose();
+    d.dispose();
   });
 }

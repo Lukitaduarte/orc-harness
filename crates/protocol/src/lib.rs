@@ -361,6 +361,9 @@ pub struct WorkspaceInfo {
     /// own), `off`, or the id of a catalog MCP (mem0, basic-memory…).
     #[serde(default)]
     pub memory: Option<String>,
+    /// Monthly budget in US$; the app warns at 80% and 100%.
+    #[serde(default)]
+    pub budget_usd: Option<f64>,
 }
 
 /// A paired app (desktop or phone).

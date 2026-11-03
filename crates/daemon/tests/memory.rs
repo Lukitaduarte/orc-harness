@@ -46,6 +46,7 @@ fn a_workspace_remembers_across_sessions() {
         name: id.into(),
         accounts: accounts.iter().map(|a| a.to_string()).collect(),
         memory: memory.map(String::from),
+        budget_usd: None,
     };
     daemon.handle(ClientMessage::UpsertWorkspace { workspace: ws("trabalho", &["w"], None) });
     daemon.handle(ClientMessage::UpsertWorkspace { workspace: ws("pessoal", &["p"], None) });

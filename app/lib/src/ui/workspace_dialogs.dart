@@ -46,6 +46,12 @@ class _WorkspaceForm extends StatefulWidget {
 
 class _WorkspaceFormState extends State<_WorkspaceForm> {
   late final _name = TextEditingController(text: widget.editing?.name ?? '');
+  late final _budget = TextEditingController(
+    text: switch (widget.editing) {
+      final w? => widget.store.budgetOf(w.id)?.toStringAsFixed(0) ?? '',
+      null => '',
+    },
+  );
   late final Set<String> _accounts = {
     if (widget.editing case final w?) ...widget.store.liveAccountsOf(w.id),
   };
@@ -64,6 +70,7 @@ class _WorkspaceFormState extends State<_WorkspaceForm> {
   @override
   void dispose() {
     _name.dispose();
+    _budget.dispose();
     super.dispose();
   }
 
@@ -184,6 +191,13 @@ class _WorkspaceFormState extends State<_WorkspaceForm> {
               ),
             ),
         ],
+        const Gap(14),
+        const Text('Orçamento mensal (US\$)').small().medium(),
+        const Text(
+          'Opcional. O app avisa ao chegar em 80% e ao passar do limite.',
+        ).xSmall().muted(),
+        const Gap(6),
+        TextField(controller: _budget, placeholder: const Text('ex.: 200')),
         // Entries arrive from the daemon after the dialog opens.
         ListenableBuilder(
           listenable: store.daemon!,
@@ -218,6 +232,9 @@ class _WorkspaceFormState extends State<_WorkspaceForm> {
                         _accounts.toList(),
                         id: editing?.id,
                         memory: _memory,
+                        budgetUsd: double.tryParse(
+                          _budget.text.trim().replaceAll(',', '.'),
+                        ),
                       );
                       closeOverlay(context);
                     },

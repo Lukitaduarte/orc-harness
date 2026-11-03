@@ -181,6 +181,7 @@ class DaemonClient extends ChangeNotifier {
     String name,
     List<String> accounts, {
     String? memory,
+    double? budgetUsd,
   }) => send({
     'type': 'upsert_workspace',
     'workspace': {
@@ -188,6 +189,7 @@ class DaemonClient extends ChangeNotifier {
       'name': name,
       'accounts': accounts,
       'memory': memory,
+      'budget_usd': budgetUsd,
     },
   });
 
