@@ -5,6 +5,7 @@ import '../model.dart';
 import '../live/grid.dart';
 import '../live/live_terminal.dart';
 import 'browser_pane.dart';
+import 'code_pane.dart';
 import 'diff_dialog.dart';
 import 'format.dart';
 
@@ -51,7 +52,10 @@ class _Pane extends StatelessWidget {
     final browser = HarnessStore.isBrowserPane(leaf.sessionId)
         ? leaf.sessionId!.substring(HarnessStore.browserPrefix.length)
         : null;
-    final session = leaf.sessionId == null || browser != null
+    final code = HarnessStore.isCodePane(leaf.sessionId)
+        ? leaf.sessionId!.substring(HarnessStore.codePrefix.length)
+        : null;
+    final session = leaf.sessionId == null || browser != null || code != null
         ? null
         : store.session(leaf.sessionId!);
     return Listener(
@@ -62,10 +66,12 @@ class _Pane extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _header(context, session, browser: browser),
+            _header(context, session, browser: browser, code: code),
             const Divider(),
             Expanded(
-              child: browser != null && store.daemon != null
+              child: code != null && store.daemon != null
+                  ? CodePane(daemon: store.daemon!, sessionId: code)
+                  : browser != null && store.daemon != null
                   ? BrowserPane(
                       daemon: store.daemon!,
                       profile: browser,
@@ -109,6 +115,7 @@ class _Pane extends StatelessWidget {
     BuildContext context,
     Session? s, {
     String? browser,
+    String? code,
   }) => SizedBox(
     height: 36,
     child: Padding(
@@ -130,6 +137,12 @@ class _Pane extends StatelessWidget {
             ),
             const Gap(8),
             SecondaryBadge(child: Text(s.model)),
+          ] else if (code != null) ...[
+            const Icon(LucideIcons.code, size: 14),
+            const Gap(8),
+            Text(
+              'Código · ${store.sessions.where((x) => x.id == code).map((x) => x.name).firstOrNull ?? code}',
+            ).small().semiBold(),
           ] else if (browser != null) ...[
             const Icon(LucideIcons.globe, size: 14),
             const Gap(8),
@@ -150,6 +163,12 @@ class _Pane extends StatelessWidget {
                 'Mudanças e PR',
                 () => showDiffDialog(context, store, s.id),
               ),
+            ),
+          if (s != null && s.live)
+            _iconButton(
+              LucideIcons.code,
+              'Código (IDE na pasta da sessão)',
+              () => store.openCode(leaf.id, s.id),
             ),
           _iconButton(
             LucideIcons.columns2,

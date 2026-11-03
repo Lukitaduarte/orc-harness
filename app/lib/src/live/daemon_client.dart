@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import '../rust/api/link.dart' as link;
 import '../model.dart';
 import 'grid.dart';
+import 'lsp_client.dart';
 
 enum LinkStatus { disconnected, connecting, connected }
 
@@ -157,6 +158,55 @@ class DaemonClient extends ChangeNotifier {
     'account_id': accountId,
     'request': request,
   });
+
+  /// IDE: folder listings by (session, path), and file reads in flight.
+  final dirs = <(String, String), List<Map<String, dynamic>>>{};
+  final _reads = <(String, String), Completer<String>>{};
+
+  /// Language servers by (session, language).
+  final _lsp = <(String, String), LspClient>{};
+
+  void listDir(String sessionId, String path) =>
+      send({'type': 'list_dir', 'session_id': sessionId, 'path': path});
+
+  /// The file's text; fails with the daemon's error.
+  Future<String> readFile(String sessionId, String path) {
+    final c = _reads[(sessionId, path)] ??= Completer<String>();
+    send({'type': 'read_file', 'session_id': sessionId, 'path': path});
+    return c.future.timeout(const Duration(seconds: 20));
+  }
+
+  void writeFile(String sessionId, String path, String text) => send({
+    'type': 'write_file',
+    'session_id': sessionId,
+    'path': path,
+    'text': text,
+  });
+
+  void openExternal(String sessionId, String path, String app) => send({
+    'type': 'open_external',
+    'session_id': sessionId,
+    'path': path,
+    'app': app,
+  });
+
+  /// The session's language server for [language], rooted at its folder.
+  LspClient lsp(String sessionId, String language) =>
+      _lsp.putIfAbsent((sessionId, language), () {
+        final cwd = sessions.firstWhere((s) => s.id == sessionId).cwd;
+        return LspClient(
+          cwd,
+          (message) => send({
+            'type': 'lsp',
+            'session_id': sessionId,
+            'language': language,
+            'message': message,
+          }),
+        );
+      });
+
+  /// Last file the daemon saved: (session, path).
+  (String, String)? saved;
 
   /// Workspace browsers by profile.
   final browsers = <String, LiveBrowser>{};
@@ -403,6 +453,21 @@ class DaemonClient extends ChangeNotifier {
         planRuns[m['plan_id'] as String] = (m['cards'] as List)
             .cast<Map<String, dynamic>>();
         notifyListeners();
+      case 'dir_entries':
+        dirs[(m['session_id'] as String, m['path'] as String)] =
+            (m['entries'] as List).cast<Map<String, dynamic>>();
+        notifyListeners();
+      case 'file_content':
+        _reads
+            .remove((m['session_id'] as String, m['path'] as String))
+            ?.complete(m['text'] as String);
+      case 'file_saved':
+        saved = (m['session_id'] as String, m['path'] as String);
+        notifyListeners();
+      case 'lsp':
+        _lsp[(m['session_id'] as String, m['language'] as String)]?.handle(
+          m['message'] as Map<String, dynamic>,
+        );
       case 'browser_state':
         browserOf(m['profile'] as String)
           ..open = m['open'] as bool
@@ -446,6 +511,11 @@ class DaemonClient extends ChangeNotifier {
           }
         } else {
           error = m['message'] as String;
+          // Errors are not tied to a request: a read waiting gets it.
+          for (final c in _reads.values) {
+            c.completeError(error!);
+          }
+          _reads.clear();
           notifyListeners();
         }
       case 'link_closed':

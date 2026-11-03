@@ -222,7 +222,9 @@ class HarnessStore extends ChangeNotifier {
     LayoutLeaf() =>
       n.sessionId == null ||
               ids.contains(n.sessionId) ||
-              isBrowserPane(n.sessionId)
+              isBrowserPane(n.sessionId) ||
+              (isCodePane(n.sessionId) &&
+                  ids.contains(n.sessionId!.substring(codePrefix.length)))
           ? n
           : LayoutLeaf(n.id, null),
     LayoutSplit() => LayoutSplit(n.id, n.horizontal, [
@@ -281,6 +283,17 @@ class HarnessStore extends ChangeNotifier {
 
   static bool isBrowserPane(String? id) =>
       id?.startsWith(browserPrefix) ?? false;
+
+  /// Pane ids that show the IDE on a session's folder.
+  static const codePrefix = 'code:';
+
+  static bool isCodePane(String? id) => id?.startsWith(codePrefix) ?? false;
+
+  /// Opens the IDE on [sessionId]'s folder beside the pane showing it.
+  void openCode(String leafId, String sessionId) {
+    split(leafId, horizontal: true);
+    attach(focusedLeafId, '$codePrefix$sessionId');
+  }
 
   /// Shows the workspace's browser in [leafId], opening it if needed.
   void openBrowser(String leafId) {
@@ -390,7 +403,9 @@ class HarnessStore extends ChangeNotifier {
   Session? get focusedSession {
     final leaf = _findLeaf(layout, focusedLeafId);
     final id = leaf?.sessionId;
-    return id == null || isBrowserPane(id) ? null : session(id);
+    return id == null || isBrowserPane(id) || isCodePane(id)
+        ? null
+        : session(id);
   }
 
   /// Sessions of the current workspace not shown in any pane.
