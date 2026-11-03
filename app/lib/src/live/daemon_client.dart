@@ -205,6 +205,12 @@ class DaemonClient extends ChangeNotifier {
   void mergePr(String sessionId) =>
       send({'type': 'merge_pr', 'session_id': sessionId});
 
+  /// The folder picker: (path, parent, folders as (name, is repo)).
+  (String, String?, List<(String, bool)>)? folders;
+
+  void browseFolders(String? path, {bool hidden = false}) =>
+      send({'type': 'browse_folders', 'path': path, 'hidden': hidden});
+
   /// Paired devices (orc_protocol::DeviceInfo JSON), and which is this one.
   List<Map<String, dynamic>> devices = [];
   String? thisDevice;
@@ -605,6 +611,16 @@ class DaemonClient extends ChangeNotifier {
           requestDiff(sid);
           send({'type': 'pr_status', 'session_id': sid});
         }
+        notifyListeners();
+      case 'folders':
+        folders = (
+          m['path'] as String,
+          m['parent'] as String?,
+          [
+            for (final f in (m['folders'] as List).cast<Map<String, dynamic>>())
+              (f['name'] as String, f['repo'] as bool),
+          ],
+        );
         notifyListeners();
       case 'devices':
         devices = (m['devices'] as List).cast<Map<String, dynamic>>();

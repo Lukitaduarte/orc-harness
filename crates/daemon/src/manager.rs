@@ -291,8 +291,14 @@ impl SessionManager {
         Ok(summary)
     }
 
+    /// Ends a session and deletes its generated folder (settings, MCP
+    /// config, skills links). The conversation stays in Claude Code and the
+    /// worktree in git.
     pub fn stop(&mut self, id: &str) -> bool {
         let removed = self.sessions.remove(id).is_some();
+        if removed {
+            let _ = fs::remove_dir_all(self.runtime_dir(id));
+        }
         self.save();
         removed
     }

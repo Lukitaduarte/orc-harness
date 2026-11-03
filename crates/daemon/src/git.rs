@@ -20,6 +20,34 @@ fn git(dir: &Path, args: &[&str]) -> std::io::Result<String> {
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+/// Subfolders of `dir` (absolute; `~` and nothing mean home), folders
+/// first by name; hidden ones only when asked. Returns (path, parent,
+/// folders).
+pub fn browse(dir: Option<&str>, hidden: bool) -> std::io::Result<(String, Option<String>, Vec<orc_protocol::FolderEntry>)> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/".into());
+    let dir = match dir.map(str::trim) {
+        None | Some("") | Some("~") => PathBuf::from(&home),
+        Some(d) => crate::catalog::expand(d),
+    };
+    let dir = dir.canonicalize()?;
+    if !dir.is_dir() {
+        return Err(std::io::Error::other("não é uma pasta"));
+    }
+    let mut folders: Vec<orc_protocol::FolderEntry> = std::fs::read_dir(&dir)?
+        .flatten()
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| hidden || !n.starts_with('.'))
+        .map(|name| {
+            let repo = dir.join(&name).join(".git").exists();
+            orc_protocol::FolderEntry { name, repo }
+        })
+        .collect();
+    folders.sort_by_key(|f| f.name.to_lowercase());
+    let parent = dir.parent().map(|p| p.display().to_string());
+    Ok((dir.display().to_string(), parent, folders))
+}
+
 /// Stages everything and commits with `message` (the worktree's
 /// commit-msg hook enforces conventional commits).
 pub fn commit_all(dir: &Path, message: &str) -> std::io::Result<String> {
@@ -195,6 +223,24 @@ pub fn worktree_path(root: &Path, project_id: &str, branch: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn browses_folders_and_marks_repos() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("app/.git")).unwrap();
+        std::fs::create_dir_all(root.join("Notas")).unwrap();
+        std::fs::create_dir_all(root.join(".config")).unwrap();
+        std::fs::write(root.join("file.txt"), "x").unwrap();
+        let (path, parent, folders) = browse(Some(&root.display().to_string()), false).unwrap();
+        assert_eq!(path, root.canonicalize().unwrap().display().to_string());
+        assert!(parent.is_some());
+        assert_eq!(folders.iter().map(|f| (f.name.as_str(), f.repo)).collect::<Vec<_>>(), [("app", true), ("Notas", false)]);
+        let (_, _, all) = browse(Some(&root.display().to_string()), true).unwrap();
+        assert_eq!(all.len(), 3, "hidden on request");
+        assert!(browse(Some(&root.join("file.txt").display().to_string()), false).is_err());
+        assert!(browse(None, false).unwrap().0.len() > 1, "home by default");
+    }
 
     fn repo() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();

@@ -1235,10 +1235,29 @@ impl Daemon {
                 }
                 emit(DaemonMessage::Plans { plans: plans.docs.clone() });
             }
-            ClientMessage::RemovePlan { id } => {
+            ClientMessage::RemovePlan { id, force } => {
                 let mut plans = self.plans.lock().unwrap();
-                if plans.runs.iter().any(|r| r.plan_id == id && r.active()) {
+                let active = plans.runs.iter().any(|r| r.plan_id == id && r.active());
+                if active && !force {
                     return vec![DaemonMessage::Error { message: "o plano tem cards em execução".into() }];
+                }
+                // Its sessions go with it: cards, planner, learners.
+                let mut ending: Vec<String> = plans
+                    .runs
+                    .iter()
+                    .filter(|r| r.plan_id == id)
+                    .flat_map(|r| r.cards.iter().filter_map(|c| c.session_id.clone()))
+                    .collect();
+                ending.extend(plans.docs.iter().filter(|d| d.id == id).filter_map(|d| d.planner.clone()));
+                ending.extend(plans.learners.iter().filter(|(_, (p, _))| *p == id).map(|(s, _)| s.clone()));
+                plans.learners.retain(|_, (p, _)| *p != id);
+                if !ending.is_empty() {
+                    let mut sessions = self.sessions.lock().unwrap();
+                    for s in &ending {
+                        self.language_servers.stop(s);
+                        sessions.stop(s);
+                    }
+                    emit(DaemonMessage::Sessions { sessions: sessions.list() });
                 }
                 if let Err(e) = plans.remove(&id) {
                     return error(e);
@@ -1308,6 +1327,12 @@ impl Daemon {
                 };
                 let _ = waiting.send(approve);
                 emit(DaemonMessage::ApprovalResolved { id, approved: approve });
+            }
+            ClientMessage::BrowseFolders { path, hidden } => {
+                return match git::browse(path.as_deref(), hidden) {
+                    Ok((path, parent, folders)) => vec![DaemonMessage::Folders { path, parent, folders }],
+                    Err(e) => error(e),
+                };
             }
             ClientMessage::ListDevices => {
                 let devices = self.remote.get().map(|r| r.device_list(None)).unwrap_or_default();

@@ -166,7 +166,7 @@ fn cards_run_in_order_and_follow_their_prs() {
     }
     assert!(saw_run);
     assert!(daemon.hello().iter().any(|m| matches!(m, DaemonMessage::PlanRun { .. })));
-    let removing = daemon.handle(ClientMessage::RemovePlan { id: "push".into() });
+    let removing = daemon.handle(ClientMessage::RemovePlan { id: "push".into(), force: false });
     assert!(matches!(&removing[..], [DaemonMessage::Error { .. }]), "active plans stay");
 
     // Planning: a session in the repo gets the plan and the request…
@@ -200,4 +200,15 @@ fn cards_run_in_order_and_follow_their_prs() {
         (0..g.rows as usize).any(|row| g.line_text(row).contains("Revise os comentários"))
     });
     assert!((0..screen.rows as usize).any(|row| screen.line_text(row).contains("Revise os comentários")));
+
+    // Deleting a running plan, on purpose: its sessions end, it is gone.
+    let card_sessions: Vec<String> = daemon.plans.lock().unwrap().runs[0].cards.iter().filter_map(|c| c.session_id.clone()).collect();
+    assert!(!card_sessions.is_empty());
+    assert!(daemon.handle(ClientMessage::RemovePlan { id: "push".into(), force: true }).is_empty());
+    let alive: Vec<String> = daemon.sessions.lock().unwrap().list().into_iter().map(|s| s.id).collect();
+    assert!(card_sessions.iter().all(|s| !alive.contains(s)), "card sessions ended");
+    assert!(!alive.contains(&planner), "the planner too");
+    assert!(daemon.plans.lock().unwrap().docs.is_empty());
+    assert!(!dir.join("plans/push").exists());
+    assert!(!dir.join("sessions").join(&planner).exists(), "its generated folder is gone");
 }

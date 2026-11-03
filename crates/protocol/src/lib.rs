@@ -366,6 +366,13 @@ pub struct WorkspaceInfo {
     pub budget_usd: Option<f64>,
 }
 
+/// A subfolder in the folder picker.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FolderEntry {
+    pub name: String,
+    pub repo: bool,
+}
+
 /// A paired app (desktop or phone).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DeviceInfo {
@@ -552,7 +559,14 @@ pub enum ClientMessage {
     ResolveEnvRequest { id: String, approve: bool },
     /// Saves a plan (new or updated) with its review state.
     SavePlan { plan: PlanDoc },
-    RemovePlan { id: String },
+    /// Deletes a plan. A plan running cards is refused unless `force`,
+    /// which first stops its card, planning and learning sessions
+    /// (branches, worktrees and PRs stay).
+    RemovePlan {
+        id: String,
+        #[serde(default)]
+        force: bool,
+    },
     /// Runs an approved plan's loops as worktree sessions on `account_id`.
     StartPlan { plan_id: String, account_id: String, cards: Vec<CardSpec> },
     /// Asks the plan's planning session (started if needed, in the project's
@@ -586,6 +600,8 @@ pub enum ClientMessage {
     GitPush { session_id: String },
     /// Squash-merges the branch's PR (gh, as the session's account).
     MergePr { session_id: String },
+    /// Folders of the Mac, for picking a repository (default: home).
+    BrowseFolders { path: Option<String>, #[serde(default)] hidden: bool },
     ListDevices,
     /// Unpairs a device and drops its connection.
     RevokeDevice { id: String },
@@ -630,6 +646,8 @@ pub enum DaemonMessage {
     Workspaces { workspaces: Vec<WorkspaceInfo> },
     Memory { workspace_id: String, entries: Vec<MemoryEntry> },
     Devices { devices: Vec<DeviceInfo> },
+    /// A folder's subfolders; `repo` marks git repositories.
+    Folders { path: String, parent: Option<String>, folders: Vec<FolderEntry> },
     /// Result of a commit, push or merge.
     GitResult { session_id: String, action: String, ok: bool, output: String },
     /// Reply to `Gate`.
