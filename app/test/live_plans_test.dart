@@ -220,6 +220,18 @@ void main() {
     expect(plan.plannerSession, 's9');
   });
 
+  test('a run shows each card\'s account and why a card waits', () {
+    plans([doc(state: {'startedAt': 1})]);
+    final p = store.workspaceProjects.single;
+    applyRun(p, [
+      {'number': 1, 'state': 'running', 'session_id': 's1', 'branch': 'x', 'pr': null, 'pr_url': null, 'note': null, 'account_id': 'b'},
+      {'number': 2, 'state': 'todo', 'session_id': null, 'branch': 'y', 'pr': null, 'pr_url': null, 'note': 'aguardando cota: a 5h 95%', 'account_id': null},
+    ]);
+    expect(p.cards[0].accountId, 'b');
+    expect(p.cards[1].waiting, startsWith('aguardando cota'));
+    expect(p.cards[1].halt, isNull, reason: 'waiting is not a failure');
+  });
+
   test('canonical text ignores key order', () {
     expect(
       canonical({

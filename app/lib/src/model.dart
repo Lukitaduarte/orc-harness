@@ -211,6 +211,12 @@ class TaskCard {
   /// Why a live card is not moving (did not start, or its session ended
   /// without a PR); it can be retried.
   String? halt;
+
+  /// A live card in line, and why it waits (every account at its quota).
+  String? waiting;
+
+  /// The account a live card's session runs on.
+  String? accountId;
   final String description;
 
   /// Acceptance criteria; the card is done when all hold.

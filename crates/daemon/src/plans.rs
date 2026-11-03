@@ -32,6 +32,7 @@ impl Run {
                 pr: None,
                 pr_url: None,
                 note: None,
+                account_id: None,
             })
             .collect();
         Self { plan_id: plan_id.into(), project_id: project_id.into(), account_id: account_id.into(), specs, cards }

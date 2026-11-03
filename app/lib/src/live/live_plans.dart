@@ -122,6 +122,8 @@ void applyRun(Project p, List<Map<String, dynamic>> cards) {
       ..sessionId = r['session_id'] as String?
       ..pr = r['pr'] as int?
       ..prUrl = r['pr_url'] as String?
+      ..accountId = r['account_id'] as String?
+      ..waiting = state == 'todo' ? r['note'] as String? : null
       ..halt = switch (state) {
         'failed' => 'Não começou: ${r['note'] ?? 'erro'}',
         'stopped' => 'Parou: ${r['note'] ?? 'sessão encerrada'}',

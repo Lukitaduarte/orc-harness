@@ -291,9 +291,19 @@ class _CardTile extends StatelessWidget {
         ),
       ],
       KanbanColumn.ready => [
-        const Text('Na fila: começa quando houver vaga').xSmall().muted(),
+        Expanded(
+          child: Text(
+            c.waiting ?? 'Na fila: começa quando houver vaga',
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ).xSmall().muted(),
+        ),
       ],
       KanbanColumn.running || KanbanColumn.review => [
+        if (c.accountId != null) ...[
+          OutlineBadge(child: Text(c.accountId!)),
+          const Gap(4),
+        ],
         if (hasSession)
           OutlineButton(
             size: ButtonSize.small,

@@ -452,7 +452,22 @@ impl Daemon {
             return;
         }
         let project = self.projects.lock().unwrap().get(&run.project_id).cloned();
+        let candidates = self.run_accounts(run, project.as_ref());
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
         for spec in ready {
+            // The account with most room; none with room: the card waits.
+            let account = match self.quotas.lock().unwrap().pick(&candidates, now) {
+                Ok(a) => a,
+                Err(why) => {
+                    if let Some(card) = run.card_mut(spec.number) {
+                        card.note = Some(why);
+                    }
+                    continue;
+                }
+            };
             let started = project
                 .as_ref()
                 .ok_or_else(|| std::io::Error::other("o projeto do plano foi removido"))
@@ -460,7 +475,7 @@ impl Daemon {
                     let path = self.worktree(project, &spec.branch)?;
                     let profile = Profile { model: spec.model.clone(), ..Profile::default() };
                     self.sessions.lock().unwrap().create_with_prompt(
-                        &run.account_id,
+                        &account,
                         Some(path),
                         Some((project.id.clone(), spec.branch.clone())),
                         profile,
@@ -474,6 +489,8 @@ impl Daemon {
                 Ok(s) => {
                     card.state = "running".into();
                     card.session_id = Some(s.id);
+                    card.account_id = Some(account);
+                    card.note = None;
                 }
                 Err(e) => {
                     card.state = "failed".into();
@@ -482,6 +499,21 @@ impl Daemon {
             }
         }
         let _ = self.events.send(DaemonMessage::Sessions { sessions: self.sessions.lock().unwrap().list() });
+    }
+
+    /// Accounts a run's cards may use: those of its repository's workspace
+    /// (the run's own account if that is unknown).
+    fn run_accounts(&self, run: &Run, project: Option<&ProjectInfo>) -> Vec<String> {
+        let all = self.sessions.lock().unwrap().account_ids();
+        let view = self.workspaces.lock().unwrap().view(&all);
+        let ws = project
+            .and_then(|p| p.workspace_id.as_deref())
+            .and_then(|id| view.iter().find(|w| w.id == id))
+            .or_else(|| view.iter().find(|w| w.accounts.contains(&run.account_id)));
+        match ws {
+            Some(w) if !w.accounts.is_empty() => w.accounts.clone(),
+            _ => vec![run.account_id.clone()],
+        }
     }
 
     /// Asks GitHub about every card with work out: an open PR moves it to
@@ -516,6 +548,7 @@ impl Daemon {
             .collect();
         let mut plans = self.plans.lock().unwrap();
         let mut changed = Vec::new();
+        let mut moved_plans = Vec::new();
         for (plan, n, branch, pr, alive) in answers {
             let Some(run) = plans.run_mut(&plan) else { continue };
             let moved = match &pr {
@@ -531,13 +564,24 @@ impl Daemon {
                 None => false,
             };
             if moved && !changed.contains(&plan) {
+                moved_plans.push(plan.clone());
                 changed.push(plan);
+            }
+        }
+        // Cards waiting for quota or a free slot get another try each poll.
+        for run in plans.runs.iter().filter(|r| !r.finished()) {
+            if !run.ready_to_start().is_empty() && !changed.contains(&run.plan_id) {
+                changed.push(run.plan_id.clone());
             }
         }
         for plan in changed {
             let Some(run) = plans.run_mut(&plan) else { continue };
+            let before = run.cards.clone();
             self.start_ready(run);
             let run = run.clone();
+            if run.cards == before && !moved_plans.contains(&plan) {
+                continue;
+            }
             if let Err(e) = plans.save_run(&run) {
                 eprintln!("orcd: não salvei a execução de {plan}: {e}");
             }

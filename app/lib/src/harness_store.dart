@@ -601,8 +601,9 @@ class HarnessStore extends ChangeNotifier {
 
   void newSession() {
     if (isLive) {
-      final acc = workspaceAccounts.firstOrNull;
-      if (acc == null) return;
+      // The account with most room in its 5h window.
+      if (workspaceAccounts.isEmpty) return;
+      final acc = freestAccount;
       _attachNextLive = true;
       daemon!.createSession(acc.id);
       return;

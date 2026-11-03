@@ -46,7 +46,46 @@ impl QuotaStore {
     pub fn get(&self, account_id: &str) -> Option<&AccountQuota> {
         self.accounts.get(account_id)
     }
+
+    /// Used share of a window now: a window past its reset is empty.
+    fn used(w: Option<QuotaWindow>, now: i64) -> f64 {
+        w.filter(|w| w.resets_at > now).map(|w| w.used_percentage).unwrap_or(0.0)
+    }
+
+    /// The account with the most room (lowest 5h, then 7d) for new work.
+    /// Accounts without a reading yet count as empty. Fails with the
+    /// reason when every one is at its limit.
+    pub fn pick(&self, candidates: &[String], now: i64) -> Result<String, String> {
+        let room = |id: &String| {
+            let l = self.get(id).map(|q| q.limits.clone()).unwrap_or_default();
+            (Self::used(l.five_hour, now), Self::used(l.seven_day, now))
+        };
+        let open = candidates
+            .iter()
+            .map(|id| (id, room(id)))
+            .filter(|(_, (h5, d7))| *h5 < FIVE_HOUR_LIMIT && *d7 < SEVEN_DAY_LIMIT)
+            .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        match open {
+            Some((id, _)) => Ok(id.clone()),
+            None if candidates.is_empty() => Err("nenhuma conta no workspace".into()),
+            None => Err(format!(
+                "aguardando cota: {}",
+                candidates
+                    .iter()
+                    .map(|id| {
+                        let (h5, d7) = room(id);
+                        format!("{id} 5h {h5:.0}% · 7d {d7:.0}%")
+                    })
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            )),
+        }
+    }
 }
+
+/// Above these a window has no room for new work (cards wait).
+pub const FIVE_HOUR_LIMIT: f64 = 90.0;
+pub const SEVEN_DAY_LIMIT: f64 = 95.0;
 
 /// Short text for the statusLine itself: "5h 62% · 7d 38%".
 pub fn status_text(limits: &RateLimits) -> String {
@@ -63,6 +102,23 @@ pub fn status_text(limits: &RateLimits) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn picks_the_account_with_most_room_and_waits_when_none() {
+        let mut q = QuotaStore::default();
+        q.ingest(&report("a", Some(70.0), Some(20.0), 1));
+        q.ingest(&report("b", Some(30.0), Some(96.0), 1));
+        q.ingest(&report("c", Some(40.0), Some(50.0), 1));
+        let ids = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(q.pick(&ids(&["a", "b", "c"]), 500).unwrap(), "c", "b is out of week");
+        assert_eq!(q.pick(&ids(&["a", "new"]), 500).unwrap(), "new", "no reading yet: empty");
+        q.ingest(&report("a", Some(95.0), Some(20.0), 1));
+        let err = q.pick(&ids(&["a", "b"]), 500).unwrap_err();
+        assert!(err.starts_with("aguardando cota") && err.contains("a 5h 95%"), "{err}");
+        // After the reset the window is empty again.
+        assert_eq!(q.pick(&ids(&["a", "b"]), 2000).unwrap(), "a");
+        assert!(q.pick(&[], 0).is_err());
+    }
 
     fn report(account: &str, five: Option<f64>, seven: Option<f64>, at: i64) -> StatusReport {
         let w = |p| QuotaWindow { used_percentage: p, resets_at: 1_000 };

@@ -402,9 +402,12 @@ pub struct CardRun {
     pub branch: String,
     pub pr: Option<u64>,
     pub pr_url: Option<String>,
-    /// Why the card is failed or stopped.
+    /// Why the card is failed, stopped or waiting (quota).
     #[serde(default)]
     pub note: Option<String>,
+    /// The account its session runs on (the one with most room).
+    #[serde(default)]
+    pub account_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
