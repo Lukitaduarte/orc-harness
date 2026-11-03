@@ -228,6 +228,16 @@ impl SessionManager {
         })
     }
 
+    /// A starting session showing Claude Code's folder trust question waits
+    /// for you (hooks only run after it is answered).
+    pub fn on_trust_question(&mut self, id: &str) -> Option<SessionState> {
+        let m = self.sessions.get_mut(id)?;
+        (m.summary.state == SessionState::Starting).then(|| {
+            m.summary.state = SessionState::WaitingInput;
+            SessionState::WaitingInput
+        })
+    }
+
     pub fn runtime_dir(&self, id: &str) -> PathBuf {
         self.cfg.runtime_root.join(id)
     }

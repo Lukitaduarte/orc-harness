@@ -88,8 +88,9 @@ impl Daemon {
             tick.tick().await;
             let mut out = Vec::new();
             {
-                let sessions = self.sessions.lock().unwrap();
+                let mut sessions = self.sessions.lock().unwrap();
                 let list = sessions.list();
+                let mut trust = Vec::new();
                 last.retain(|id, _| list.iter().any(|s| &s.id == id));
                 for summary in &list {
                     let Some(s) = sessions.session(&summary.id) else { continue };
@@ -99,11 +100,19 @@ impl Daemon {
                         continue;
                     }
                     let snap = s.snapshot();
+                    if summary.state == orc_protocol::SessionState::Starting && asks_trust(&snap) {
+                        trust.push(summary.id.clone());
+                    }
                     let diff = snap.diff_from(entry.map(|(_, p)| p).unwrap_or(&GridSnapshot::default()));
                     if !diff.lines.is_empty() || entry.is_none_or(|(_, p)| p.cursor != snap.cursor) {
                         out.push(DaemonMessage::GridDiff { session_id: summary.id.clone(), diff });
                     }
                     last.insert(summary.id.clone(), (generation, snap));
+                }
+                for id in trust {
+                    if let Some(state) = sessions.on_trust_question(&id) {
+                        out.push(DaemonMessage::SessionState { session_id: id, state });
+                    }
                 }
                 let now_exited: Vec<String> = list
                     .iter()
@@ -707,6 +716,18 @@ impl Daemon {
                     Err(message) => vec![DaemonMessage::Error { message }],
                 };
             }
+            ClientMessage::TrustWorktrees { account_id } => {
+                // Answering Claude Code's trust question here once covers
+                // every worktree the harness creates inside.
+                if let Err(e) = std::fs::create_dir_all(&self.git.worktrees) {
+                    return error(e);
+                }
+                let mut sessions = self.sessions.lock().unwrap();
+                if let Err(e) = sessions.create(&account_id, Some(self.git.worktrees.clone()), Profile::default(), 100, 30) {
+                    return error(e);
+                }
+                emit(DaemonMessage::Sessions { sessions: sessions.list() });
+            }
             ClientMessage::RetryCard { plan_id, number } => {
                 let mut plans = self.plans.lock().unwrap();
                 let Some(run) = plans.run_mut(&plan_id) else {
@@ -814,6 +835,12 @@ impl Daemon {
         let app = Router::new().route("/v1/metrics", post(metrics)).with_state(self);
         axum::serve(listener, app).await
     }
+}
+
+/// Claude Code asks whether to trust a new folder before anything else.
+/// Trusting a folder covers the ones inside it.
+fn asks_trust(snap: &GridSnapshot) -> bool {
+    (0..snap.rows as usize).any(|r| snap.line_text(r).contains("trust this folder"))
 }
 
 fn run_message(run: &Run) -> DaemonMessage {

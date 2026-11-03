@@ -449,6 +449,9 @@ pub enum ClientMessage {
     /// Asks the plan's planning session (started if needed, in the project's
     /// repository) to draft the plan or address comments.
     AskPlanner { plan_id: String, account_id: String, request: String },
+    /// Opens a session in the worktrees folder so you can answer Claude
+    /// Code's folder trust question once for all worktrees.
+    TrustWorktrees { account_id: String },
     /// Puts a failed or stopped card back in line.
     RetryCard { plan_id: String, number: u32 },
     /// Keystrokes or pasted text for a session's terminal.

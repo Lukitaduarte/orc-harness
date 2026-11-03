@@ -60,6 +60,28 @@ class RepoSection extends StatelessWidget {
           onPressed: () => _dialog(context, _AddRepo(store)),
           child: const Text('Adicionar repositório').small(),
         ),
+        if (d.projects.isNotEmpty && d.accounts.isNotEmpty)
+          Tooltip(
+            tooltip: (context) => const TooltipContainer(
+              child: Text(
+                'O Claude Code pergunta se confia em cada pasta nova. '
+                'Responda "Yes" uma vez nesta sessão e todas as worktrees '
+                'do harness ficam confiáveis.',
+              ),
+            ),
+            child: GhostButton(
+              alignment: Alignment.centerLeft,
+              leading: const Icon(LucideIcons.shieldCheck, size: 16),
+              onPressed: () {
+                store.prepareLiveAttach();
+                d.send({
+                  'type': 'trust_worktrees',
+                  'account_id': d.accounts.first,
+                });
+              },
+              child: const Text('Confiar nas worktrees').small(),
+            ),
+          ),
       ],
     );
   }
