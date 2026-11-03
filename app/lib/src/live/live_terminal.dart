@@ -28,9 +28,25 @@ class _LiveTerminalState extends State<LiveTerminal> {
   (int, int)? _reported;
 
   @override
+  void initState() {
+    super.initState();
+    // A session opened in the focused pane takes the keyboard once.
+    if (widget.focused) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _focus.requestFocus();
+      });
+    }
+  }
+
+  @override
   void didUpdateWidget(LiveTerminal old) {
     super.didUpdateWidget(old);
-    if (widget.focused && !_focus.hasFocus) _focus.requestFocus();
+    // Only when this pane becomes the focused one: rebuilds happen every
+    // second (the quota clock) and must not pull the keyboard away from a
+    // dialog or text field you are typing in.
+    if (widget.focused && !old.focused && !_focus.hasFocus) {
+      _focus.requestFocus();
+    }
   }
 
   @override
