@@ -5,6 +5,7 @@ import '../harness_store.dart';
 import '../live/daemon_client.dart';
 import '../model.dart';
 import 'agent_notices.dart';
+import 'confirm.dart';
 import 'connect_dialog.dart';
 import 'format.dart';
 import 'live_input_bar.dart';
@@ -179,6 +180,16 @@ class _MobileShellState extends State<MobileShell> {
             title: s.name,
             subtitle: '${s.branch} · ${s.model}',
             onTap: () => setState(() => _session = s.id),
+            onLongPress: () async {
+              if (await confirm(
+                context,
+                'Apagar a sessão ${s.name}?',
+                'Encerra o processo. A worktree, os commits e a conversa ficam.',
+                'Apagar',
+              )) {
+                store.deleteSession(s.id);
+              }
+            },
           ),
         if (sessions.isEmpty)
           const Padding(
@@ -213,6 +224,16 @@ class _MobileShellState extends State<MobileShell> {
               ? '${p.plan!.approvedCount}/${p.plan!.sections.length} seções aprovadas · ${p.plan!.openThreads} comentários'
               : '${p.doneCount}/${p.cards.length} cards feitos',
           onTap: () => setState(() => _project = p.id),
+          onLongPress: () async {
+            if (await confirm(
+              context,
+              'Apagar o plano ${p.name}?',
+              'Sessões dos cards em execução são encerradas. Branches, worktrees e PRs ficam.',
+              'Apagar',
+            )) {
+              store.deleteProject(p);
+            }
+          },
         ),
       if (store.workspaceProjects.isEmpty)
         const Padding(
@@ -229,18 +250,21 @@ class _Tile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.onLongPress,
   });
 
   final Widget leading;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 6),
     child: GestureDetector(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: OutlinedContainer(
         padding: const EdgeInsets.all(12),
         child: Row(

@@ -5,6 +5,7 @@ import '../model.dart';
 import 'connect_dialog.dart';
 import 'format.dart';
 import 'repos.dart';
+import 'confirm.dart';
 import 'workspace_dialogs.dart';
 import 'new_plan_dialog.dart';
 
@@ -149,63 +150,257 @@ class Sidebar extends StatelessWidget {
           '${accounts.length} contas · ${sessions.length} sessões',
         ).xSmall().muted(),
         const Gap(16),
-        const _SectionLabel('Contas'),
-        for (final a in accounts) _AccountCard(a, store.now),
-        if (store.isLive)
-          GhostButton(
-            alignment: Alignment.centerLeft,
-            leading: const Icon(LucideIcons.userPlus, size: 16),
-            onPressed: () => showNewAccountDialog(context, store),
-            child: const Text('Nova conta').small(),
+        _SectionLabel(
+          'Contas',
+          addTip: 'Nova conta',
+          onAdd: store.isLive
+              ? () => showNewAccountDialog(context, store)
+              : null,
+        ),
+        for (final a in accounts)
+          _RowActions(
+            tip: 'Conta',
+            onAction: a.live ? () => _accountActions(context, a) : null,
+            child: _AccountCard(a, store.now),
           ),
         const Gap(8),
-        const _SectionLabel('Sessões'),
-        for (final s in sessions)
-          _SessionRow(
-            s,
-            selected: store.openProjectId == null && s.id == focused?.id,
-            onTap: () => store.showSession(s.id),
-          ),
-        GhostButton(
-          alignment: Alignment.centerLeft,
-          leading: const Icon(LucideIcons.plus, size: 16),
-          onPressed: store.newSession,
-          child: const Text('Nova sessão').small(),
+        _SectionLabel(
+          'Sessões',
+          addTip: 'Nova sessão',
+          onAdd: store.newSession,
         ),
+        for (final s in sessions)
+          _RowActions(
+            tip: 'Apagar sessão',
+            icon: LucideIcons.trash2,
+            onAction: () async {
+              if (await confirm(
+                context,
+                'Apagar a sessão ${s.name}?',
+                'Encerra o processo e tira da lista. A worktree, os commits e '
+                    'a conversa (claude --resume) ficam.',
+                'Apagar',
+              )) {
+                store.deleteSession(s.id);
+              }
+            },
+            child: _SessionRow(
+              s,
+              selected: store.openProjectId == null && s.id == focused?.id,
+              onTap: () => store.showSession(s.id),
+            ),
+          ),
         const Gap(16),
         if (store.isLive) ...[
-          const _SectionLabel('Repositórios'),
+          _SectionLabel(
+            'Repositórios',
+            addTip: 'Adicionar repositório',
+            onAdd: () => showAddRepo(context, store),
+          ),
           RepoSection(store),
           const Gap(16),
         ],
-        const _SectionLabel('Projetos'),
-        for (final p in store.workspaceProjects)
-          _ProjectRow(
-            p,
-            selected: p.id == store.openProjectId,
-            onTap: () => store.openProjectView(p.id),
-          ),
-        GhostButton(
-          alignment: Alignment.centerLeft,
-          leading: const Icon(LucideIcons.plus, size: 16),
-          onPressed: () => showNewPlanDialog(context, store),
-          child: const Text('Novo plano').small(),
+        _SectionLabel(
+          'Planos',
+          addTip: 'Novo plano',
+          onAdd: () => showNewPlanDialog(context, store),
         ),
+        for (final p in store.workspaceProjects)
+          _RowActions(
+            tip: 'Apagar plano',
+            icon: LucideIcons.trash2,
+            onAction: () async {
+              final running = p.cards.any(
+                (c) =>
+                    c.state == CardState.running || c.state == CardState.review,
+              );
+              if (await confirm(
+                context,
+                'Apagar o plano ${p.name}?',
+                running
+                    ? 'Ele tem cards em execução: as sessões deles são encerradas. '
+                          'Branches, worktrees e PRs ficam.'
+                    : 'Branches, worktrees e PRs ficam.',
+                'Apagar',
+              )) {
+                store.deleteProject(p);
+              }
+            },
+            child: _ProjectRow(
+              p,
+              selected: p.id == store.openProjectId,
+              onTap: () => store.openProjectView(p.id),
+            ),
+          ),
       ],
     );
   }
+
+  /// What you can do with an account: log out, take it out.
+  Future<void> _accountActions(BuildContext context, Account a) async {
+    final choice = await showOverlay<String>(
+      context,
+      DialogConfiguration<String>(
+        builder: (context) {
+          final theme = Theme.of(context);
+          return ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: ModalBackdrop(
+              borderRadius: theme.borderRadiusXl,
+              child: OutlinedContainer(
+                backgroundColor: theme.colorScheme.popover,
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Conta ${a.email}').large().semiBold(),
+                    const Gap(12),
+                    OutlineButton(
+                      leading: const Icon(LucideIcons.logOut, size: 14),
+                      onPressed: () => closeOverlay(context, 'logout'),
+                      child: const Text('Sair da conta (/logout)'),
+                    ),
+                    const Gap(4),
+                    const Text(
+                      'Abre uma sessão nela e roda o /logout do Claude Code.',
+                    ).xSmall().muted(),
+                    const Gap(12),
+                    DestructiveButton(
+                      leading: const Icon(LucideIcons.userMinus, size: 14),
+                      onPressed: () => closeOverlay(context, 'remove'),
+                      child: const Text('Remover do harness'),
+                    ),
+                    const Gap(4),
+                    const Text(
+                      'Encerra as sessões dela e a tira das contas. A pasta e as '
+                      'conversas ficam no disco.',
+                    ).xSmall().muted(),
+                    const Gap(16),
+                    OutlineButton(
+                      onPressed: () => closeOverlay(context, null),
+                      child: const Text('Cancelar'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    ).future;
+    if (!context.mounted) return;
+    switch (choice) {
+      case 'logout':
+        if (await confirm(
+          context,
+          'Sair da conta ${a.email}?',
+          a.id == 'default'
+              ? 'É a conta padrão do Claude Code neste Mac: o login sai também '
+                    'fora do harness.'
+              : 'O login dessa conta sai do Claude Code.',
+          'Sair',
+        )) {
+          store.logoutAccount(a.id);
+        }
+      case 'remove':
+        if (await confirm(
+          context,
+          'Remover ${a.email} do harness?',
+          'As sessões dela são encerradas.',
+          'Remover',
+        )) {
+          store.removeAccount(a.id);
+        }
+    }
+  }
 }
 
+/// A section title with an optional + on the other side.
 class _SectionLabel extends StatelessWidget {
-  const _SectionLabel(this.text);
+  const _SectionLabel(this.text, {this.onAdd, this.addTip});
 
   final String text;
+  final VoidCallback? onAdd;
+  final String? addTip;
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Text(text.toUpperCase()).xSmall().semiBold().muted(),
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(text.toUpperCase()).xSmall().semiBold().muted(),
+        if (onAdd != null)
+          Tooltip(
+            tooltip: (context) => TooltipContainer(child: Text(addTip ?? '')),
+            child: GhostButton(
+              density: ButtonDensity.icon,
+              size: ButtonSize.small,
+              onPressed: onAdd,
+              child: const Icon(LucideIcons.plus, size: 14),
+            ),
+          ),
+      ],
+    ),
   );
+}
+
+/// A row with an action icon on hover; right click (or long press on the
+/// phone) does the same.
+class _RowActions extends StatefulWidget {
+  const _RowActions({
+    required this.child,
+    required this.onAction,
+    required this.tip,
+    this.icon = LucideIcons.ellipsis,
+  });
+
+  final Widget child;
+  final VoidCallback? onAction;
+  final String tip;
+  final IconData icon;
+
+  @override
+  State<_RowActions> createState() => _RowActionsState();
+}
+
+class _RowActionsState extends State<_RowActions> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final action = widget.onAction;
+    if (action == null) return widget.child;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onSecondaryTap: action,
+        onLongPress: action,
+        child: Stack(
+          children: [
+            widget.child,
+            if (_hover)
+              Positioned(
+                right: 4,
+                top: 4,
+                child: Tooltip(
+                  tooltip: (context) =>
+                      TooltipContainer(child: Text(widget.tip)),
+                  child: GhostButton(
+                    density: ButtonDensity.icon,
+                    size: ButtonSize.small,
+                    onPressed: action,
+                    child: Icon(widget.icon, size: 13),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _AccountCard extends StatelessWidget {
@@ -232,7 +427,19 @@ class _AccountCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ).small().medium(),
                 ),
-                OutlineBadge(child: Text(account.plan)),
+                // Claude Code's own mark (the ✻ of its terminal).
+                Tooltip(
+                  tooltip: (context) =>
+                      const TooltipContainer(child: Text('Claude Code')),
+                  child: const Text(
+                    '✻',
+                    style: TextStyle(
+                      color: Color(0xFFD97757),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
               ],
             ),
             const Gap(10),

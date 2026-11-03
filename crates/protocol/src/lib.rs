@@ -602,6 +602,11 @@ pub enum ClientMessage {
     MergePr { session_id: String },
     /// Folders of the Mac, for picking a repository (default: home).
     BrowseFolders { path: Option<String>, #[serde(default)] hidden: bool },
+    /// Takes an account out of the harness: its sessions end; its folder
+    /// (and conversations) stay. The last account cannot go.
+    RemoveAccount { id: String },
+    /// Opens a session on the account and runs Claude Code's /logout.
+    LogoutAccount { id: String },
     ListDevices,
     /// Unpairs a device and drops its connection.
     RevokeDevice { id: String },

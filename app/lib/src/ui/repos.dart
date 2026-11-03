@@ -54,12 +54,6 @@ class RepoSection extends StatelessWidget {
               ],
             ),
           ),
-        GhostButton(
-          alignment: Alignment.centerLeft,
-          leading: const Icon(LucideIcons.folderGit2, size: 16),
-          onPressed: () => _dialog(context, _AddRepo(store)),
-          child: const Text('Adicionar repositório').small(),
-        ),
         if (store.workspaceRepos.isNotEmpty &&
             store.workspaceAccounts.isNotEmpty)
           Tooltip(
@@ -87,6 +81,10 @@ class RepoSection extends StatelessWidget {
     );
   }
 }
+
+/// "Adicionar repositório" (the + on the section title).
+Future<void> showAddRepo(BuildContext context, HarnessStore store) =>
+    _dialog(context, _AddRepo(store));
 
 Future<void> _dialog(BuildContext context, Widget child) => showOverlay<void>(
   context,

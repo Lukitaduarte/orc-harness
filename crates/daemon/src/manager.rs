@@ -123,6 +123,16 @@ impl SessionManager {
         self.extra_mcp = extra;
     }
 
+    /// Ends the account's sessions and forgets it.
+    pub fn remove_account(&mut self, id: &str) {
+        let ids: Vec<String> = self.sessions.values().filter(|m| m.summary.account_id == id).map(|m| m.summary.id.clone()).collect();
+        for s in ids {
+            self.stop(&s);
+        }
+        self.accounts.remove(id);
+        self.extra_mcp.remove(id);
+    }
+
     pub fn add_account(&mut self, account: Account) {
         self.accounts.insert(account.id.clone(), account);
     }

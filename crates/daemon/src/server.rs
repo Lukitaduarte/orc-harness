@@ -1328,6 +1328,42 @@ impl Daemon {
                 let _ = waiting.send(approve);
                 emit(DaemonMessage::ApprovalResolved { id, approved: approve });
             }
+            ClientMessage::RemoveAccount { id } => {
+                let Some(home) = &self.home else {
+                    return vec![DaemonMessage::Error { message: "este daemon não edita contas".into() }];
+                };
+                if let Err(e) = crate::config::remove_account(&home.join("config.json"), &id) {
+                    return error(e);
+                }
+                let known = {
+                    let mut sessions = self.sessions.lock().unwrap();
+                    sessions.remove_account(&id);
+                    emit(DaemonMessage::Sessions { sessions: sessions.list() });
+                    sessions.account_ids()
+                };
+                emit(DaemonMessage::Hello { accounts: known });
+                emit(self.workspaces_message());
+            }
+            ClientMessage::LogoutAccount { id } => {
+                let home = std::env::var("HOME").map(PathBuf::from).unwrap_or_default();
+                let mut sessions = self.sessions.lock().unwrap();
+                let s = match sessions.create(&id, Some(home), Profile::default(), 100, 30) {
+                    Ok(s) => s,
+                    Err(e) => return error(e),
+                };
+                emit(DaemonMessage::Sessions { sessions: sessions.list() });
+                drop(sessions);
+                // Typed once Claude Code is up: the command, then Enter.
+                let all = self.sessions.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_secs(4));
+                    if let Some(session) = all.lock().unwrap().session(&s.id) {
+                        let _ = session.write(b"/logout");
+                        std::thread::sleep(Duration::from_millis(300));
+                        let _ = session.write(b"\r");
+                    }
+                });
+            }
             ClientMessage::BrowseFolders { path, hidden } => {
                 return match git::browse(path.as_deref(), hidden) {
                     Ok((path, parent, folders)) => vec![DaemonMessage::Folders { path, parent, folders }],

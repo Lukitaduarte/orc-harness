@@ -195,6 +195,45 @@ class HarnessStore extends ChangeNotifier {
 
   void deleteWorkspace(String id) => daemon!.removeWorkspace(id);
 
+  /// Ends a session and takes it off the list (its worktree, commits and
+  /// conversation stay).
+  void deleteSession(String id) {
+    final s = sessions.where((s) => s.id == id).firstOrNull;
+    if (s == null) return;
+    if (s.live) {
+      daemon!.stop(id);
+    } else {
+      sessions.remove(s);
+      _layouts[workspaceId] = _clearMissing(
+        layout,
+        sessions.map((s) => s.id).toSet(),
+      );
+    }
+    notifyListeners();
+  }
+
+  /// Deletes a plan; a running one has its sessions ended first (branches,
+  /// worktrees and PRs stay).
+  void deleteProject(Project p) {
+    if (openProjectId == p.id) openProjectId = null;
+    if (p.live) {
+      daemon!.send({'type': 'remove_plan', 'id': p.id, 'force': true});
+    } else {
+      projects.remove(p);
+    }
+    notifyListeners();
+  }
+
+  /// Takes an account out of the harness (its sessions end).
+  void removeAccount(String id) =>
+      daemon!.send({'type': 'remove_account', 'id': id});
+
+  /// Runs Claude Code's /logout on the account, in a session you see.
+  void logoutAccount(String id) {
+    _attachNextLive = true;
+    daemon!.send({'type': 'logout_account', 'id': id});
+  }
+
   /// A live workspace's memory provider: `orc` (the harness's own, the
   /// default), `off`, or a catalog MCP id.
   String memoryOf(String workspaceId) =>

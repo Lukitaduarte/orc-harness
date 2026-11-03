@@ -76,4 +76,13 @@ fn workspaces_and_new_accounts() {
     assert!(daemon.handle(ClientMessage::RemoveWorkspace { id: "default".into() }).is_empty());
     assert_eq!(workspaces(&daemon)[0].accounts, ["work-2", "default"], "loose accounts land in the first");
     assert!(matches!(&daemon.handle(ClientMessage::RemoveWorkspace { id: "trabalho".into() })[..], [DaemonMessage::Error { .. }]));
+
+    // Removing an account: its sessions end; it leaves config.json and the
+    // workspaces; the last one stays.
+    assert!(daemon.handle(ClientMessage::RemoveAccount { id: "work-2".into() }).is_empty());
+    assert!(daemon.sessions.lock().unwrap().list().is_empty());
+    let cfg = orc_daemon::config::load(&dir.join("config.json")).unwrap();
+    assert_eq!(cfg.accounts.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(), ["default"]);
+    assert!(workspaces(&daemon).iter().all(|w| !w.accounts.contains(&"work-2".to_string())));
+    assert!(matches!(&daemon.handle(ClientMessage::RemoveAccount { id: "default".into() })[..], [DaemonMessage::Error { .. }]));
 }

@@ -69,6 +69,25 @@ pub fn add_account(path: &Path, home: &Path, id: &str) -> std::io::Result<Accoun
     Ok(Account { id: id.into(), config_dir: Some(dir), gh_config_dir: Some(gh) })
 }
 
+/// Takes account `id` out of `config.json` (a missing file had only the
+/// implicit `default`).
+pub fn remove_account(path: &Path, id: &str) -> std::io::Result<()> {
+    let mut v: serde_json::Value = match std::fs::read(path) {
+        Ok(raw) => serde_json::from_slice(&raw)?,
+        Err(_) => serde_json::json!({ "accounts": [{ "id": "default" }] }),
+    };
+    let list = v["accounts"].as_array_mut().ok_or_else(|| std::io::Error::other("config.json sem contas"))?;
+    let before = list.len();
+    list.retain(|a| a["id"] != id);
+    if list.len() == before {
+        return Err(std::io::Error::other(format!("conta desconhecida: {id}")));
+    }
+    if list.is_empty() {
+        return Err(std::io::Error::other("a última conta fica"));
+    }
+    std::fs::write(path, serde_json::to_vec_pretty(&v)?)
+}
+
 pub fn load(path: &Path) -> std::io::Result<Config> {
     let default = || Config {
         claude: "claude".into(),
