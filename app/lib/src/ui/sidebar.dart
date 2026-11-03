@@ -158,10 +158,10 @@ class Sidebar extends StatelessWidget {
               : null,
         ),
         for (final a in accounts)
-          _RowActions(
-            tip: 'Conta',
-            onAction: a.live ? () => _accountActions(context, a) : null,
-            child: _AccountCard(a, store.now),
+          _AccountCard(
+            a,
+            store.now,
+            onMenu: a.live ? () => _accountActions(context, a) : null,
           ),
         const Gap(8),
         _SectionLabel(
@@ -404,10 +404,13 @@ class _RowActionsState extends State<_RowActions> {
 }
 
 class _AccountCard extends StatelessWidget {
-  const _AccountCard(this.account, this.now);
+  const _AccountCard(this.account, this.now, {this.onMenu});
 
   final Account account;
   final DateTime now;
+
+  /// Log out / remove (live accounts).
+  final VoidCallback? onMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -419,14 +422,9 @@ class _AccountCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ✻ name … (space between)
             Row(
               children: [
-                Expanded(
-                  child: Text(
-                    account.email,
-                    overflow: TextOverflow.ellipsis,
-                  ).small().medium(),
-                ),
                 // Claude Code's own mark (the ✻ of its terminal).
                 Tooltip(
                   tooltip: (context) =>
@@ -440,6 +438,20 @@ class _AccountCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                const Gap(8),
+                Expanded(
+                  child: Text(
+                    account.email,
+                    overflow: TextOverflow.ellipsis,
+                  ).small().medium(),
+                ),
+                if (onMenu != null)
+                  GhostButton(
+                    density: ButtonDensity.icon,
+                    size: ButtonSize.small,
+                    onPressed: onMenu,
+                    child: const Icon(LucideIcons.ellipsis, size: 14),
+                  ),
               ],
             ),
             const Gap(10),
