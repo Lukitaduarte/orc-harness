@@ -9,6 +9,7 @@ import 'connect_dialog.dart';
 import 'format.dart';
 import 'live_input_bar.dart';
 import 'panes.dart' show TerminalView;
+import 'plan_view.dart';
 import 'sidebar.dart' show QuotaMeter;
 import '../live/live_terminal.dart';
 
@@ -339,8 +340,8 @@ class _SessionScreen extends StatelessWidget {
   }
 }
 
-/// A plan or board on the phone: its sections' approval and the cards, with
-/// PR links. Reviewing content stays on the desktop for now.
+/// A plan on the phone: the plan view, compact, while it is being reviewed;
+/// then the cards, with PR links and retry.
 class _ProjectScreen extends StatelessWidget {
   const _ProjectScreen(this.store, this.project, {required this.onBack});
 
@@ -375,84 +376,61 @@ class _ProjectScreen extends StatelessWidget {
             ),
             const Divider(),
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(12),
-                children: [
-                  if (plan != null && p.isPlanning) ...[
-                    Text(plan.summary).small(),
-                    const Gap(10),
-                    for (final s in plan.sections)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Row(
-                          children: [
-                            Icon(
-                              s.approved
-                                  ? LucideIcons.circleCheck
-                                  : LucideIcons.circle,
-                              size: 14,
-                            ),
-                            const Gap(8),
-                            Expanded(child: Text(s.title).small()),
-                            Text(
-                              '${plan.threadsOn(s.id).length}',
-                            ).xSmall().muted(),
-                          ],
-                        ),
-                      ),
-                    const Gap(8),
-                    const Text(
-                      'Revise e aprove as seções no desktop.',
-                    ).xSmall().muted(),
-                  ],
-                  for (final c in p.cards)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: OutlinedContainer(
-                        padding: const EdgeInsets.all(10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Text('#${c.number}').xSmall().muted(),
-                                const Gap(6),
-                                Expanded(
-                                  child: Text(c.title).small().semiBold(),
-                                ),
-                                OutlineBadge(
-                                  child: Text(_column(p.columnOf(c))),
-                                ),
-                              ],
-                            ),
-                            if (c.halt != null) ...[
-                              const Gap(4),
-                              Text(c.halt!).xSmall().muted(),
-                              const Gap(4),
-                              OutlineButton(
-                                size: ButtonSize.small,
-                                onPressed: () => store.retryCard(p, c),
-                                child: const Text('Tentar de novo'),
+              child: plan != null && p.isPlanning
+                  // Read, comment, approve and start from the phone.
+                  ? PlanView(store, p, compact: true)
+                  : ListView(
+                      padding: const EdgeInsets.all(12),
+                      children: [
+                        for (final c in p.cards)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: OutlinedContainer(
+                              padding: const EdgeInsets.all(10),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text('#${c.number}').xSmall().muted(),
+                                      const Gap(6),
+                                      Expanded(
+                                        child: Text(c.title).small().semiBold(),
+                                      ),
+                                      OutlineBadge(
+                                        child: Text(_column(p.columnOf(c))),
+                                      ),
+                                    ],
+                                  ),
+                                  if (c.halt != null) ...[
+                                    const Gap(4),
+                                    Text(c.halt!).xSmall().muted(),
+                                    const Gap(4),
+                                    OutlineButton(
+                                      size: ButtonSize.small,
+                                      onPressed: () => store.retryCard(p, c),
+                                      child: const Text('Tentar de novo'),
+                                    ),
+                                  ],
+                                  if (c.prUrl != null) ...[
+                                    const Gap(4),
+                                    GhostButton(
+                                      size: ButtonSize.small,
+                                      leading: const Icon(
+                                        LucideIcons.gitPullRequest,
+                                        size: 12,
+                                      ),
+                                      onPressed: () =>
+                                          launchUrl(Uri.parse(c.prUrl!)),
+                                      child: Text('PR #${c.pr}'),
+                                    ),
+                                  ],
+                                ],
                               ),
-                            ],
-                            if (c.prUrl != null) ...[
-                              const Gap(4),
-                              GhostButton(
-                                size: ButtonSize.small,
-                                leading: const Icon(
-                                  LucideIcons.gitPullRequest,
-                                  size: 12,
-                                ),
-                                onPressed: () => launchUrl(Uri.parse(c.prUrl!)),
-                                child: Text('PR #${c.pr}'),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
+                            ),
+                          ),
+                      ],
                     ),
-                ],
-              ),
             ),
           ],
         ),

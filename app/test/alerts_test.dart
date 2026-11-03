@@ -100,4 +100,27 @@ void main() {
     expect((d.thisDevice, d.devices.length), ('a', 1));
     d.dispose();
   });
+
+  test('whoever types gets their terminal size back', () {
+    final d = DaemonClient();
+    final sent = <Map<String, Object?>>[];
+    d.sendHook = sent.add;
+    d.resize('s1', 100, 30);
+    // The phone resized it meanwhile: the grid comes at 40x20.
+    d.handle(
+      '{"type":"grid_diff","session_id":"s1","diff":{"cols":40,"rows":20,"lines":[],"cursor":{"row":0,"col":0,"visible":true}}}',
+    );
+    sent.clear();
+    d.input('s1', 'a');
+    expect(sent.map((m) => m['type']), ['resize', 'input']);
+    expect((sent.first['cols'], sent.first['rows']), (100, 30));
+    // Same size: just the keys.
+    d.handle(
+      '{"type":"grid_diff","session_id":"s1","diff":{"cols":100,"rows":30,"lines":[],"cursor":{"row":0,"col":0,"visible":true}}}',
+    );
+    sent.clear();
+    d.input('s1', 'b');
+    expect(sent.map((m) => m['type']), ['input']);
+    d.dispose();
+  });
 }

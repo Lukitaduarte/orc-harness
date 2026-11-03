@@ -736,10 +736,26 @@ class DaemonClient extends ChangeNotifier {
   void stop(String sessionId) =>
       send({'type': 'stop_session', 'session_id': sessionId});
 
-  void input(String sessionId, String data) =>
-      send({'type': 'input', 'session_id': sessionId, 'data': data});
+  /// The size this device's view of each session wants.
+  final _mySize = <String, (int, int)>{};
 
-  void resize(String sessionId, int cols, int rows) => send({
+  /// A terminal has one size: whoever types gets theirs. If another device
+  /// (the phone, the desktop) resized it, this one takes it back first.
+  void input(String sessionId, String data) {
+    final mine = _mySize[sessionId];
+    final g = grids[sessionId]?.state;
+    if (mine != null && g != null && g.cols > 0 && (g.cols, g.rows) != mine) {
+      _sendResize(sessionId, mine.$1, mine.$2);
+    }
+    send({'type': 'input', 'session_id': sessionId, 'data': data});
+  }
+
+  void resize(String sessionId, int cols, int rows) {
+    _mySize[sessionId] = (cols, rows);
+    _sendResize(sessionId, cols, rows);
+  }
+
+  void _sendResize(String sessionId, int cols, int rows) => send({
     'type': 'resize',
     'session_id': sessionId,
     'cols': cols,

@@ -9,10 +9,13 @@ import 'diagrams.dart';
 /// approved one by one (final), comments that revise open sections or become
 /// amendments on approved ones, and "Iniciar execução" once all are approved.
 class PlanView extends StatefulWidget {
-  const PlanView(this.store, this.project, {super.key});
+  const PlanView(this.store, this.project, {super.key, this.compact = false});
 
   final HarnessStore store;
   final Project project;
+
+  /// Phone: no side panel; each section shows its own comments.
+  final bool compact;
 
   @override
   State<PlanView> createState() => _PlanViewState();
@@ -33,25 +36,29 @@ class _PlanViewState extends State<PlanView> {
 
   @override
   Widget build(BuildContext context) {
+    final sections = Stack(
+      children: [
+        ListView(
+          padding: EdgeInsets.fromLTRB(
+            widget.compact ? 10 : 16,
+            16,
+            widget.compact ? 10 : 16,
+            88,
+          ),
+          children: [
+            _header(),
+            const Gap(16),
+            for (final s in plan.sections) _section(s),
+          ],
+        ),
+        if (!started) Positioned(right: 24, bottom: 20, child: _startButton()),
+      ],
+    );
+    if (widget.compact) return sections;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: Stack(
-            children: [
-              ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
-                children: [
-                  _header(),
-                  const Gap(16),
-                  for (final s in plan.sections) _section(s),
-                ],
-              ),
-              if (!started)
-                Positioned(right: 24, bottom: 20, child: _startButton()),
-            ],
-          ),
-        ),
+        Expanded(child: sections),
         const VerticalDivider(),
         SizedBox(
           width: 340,
@@ -68,31 +75,43 @@ class _PlanViewState extends State<PlanView> {
 
   Widget _header() {
     final total = plan.sections.length;
+    final review = plan.threads.any((t) => t.awaitingAgent);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Flexible(child: Text(widget.project.name).large().semiBold()),
-            const Gap(8),
-            OutlineBadge(child: Text('plano v${plan.version}')),
-            const Gap(8),
-            Text(
-              started
-                  ? 'em execução desde ${_time(plan.startedAt!)}'
-                  : '${plan.approvedCount}/$total seções aprovadas',
-            ).xSmall().muted(),
-            const Spacer(),
-            if (plan.plannerSession case final id?
-                when store.sessions.any((s) => s.id == id))
-              GhostButton(
-                size: ButtonSize.small,
-                leading: const Icon(LucideIcons.terminal, size: 12),
-                onPressed: () => store.showSession(id),
-                child: const Text('Sessão de planejamento'),
+        _line([
+          Flexible(child: Text(widget.project.name).large().semiBold()),
+          const Gap(8),
+          OutlineBadge(child: Text('plano v${plan.version}')),
+          const Gap(8),
+          Text(
+            started
+                ? 'em execução desde ${_time(plan.startedAt!)}'
+                : '${plan.approvedCount}/$total seções aprovadas',
+          ).xSmall().muted(),
+          const Spacer(),
+          if (plan.plannerSession case final id?
+              when store.sessions.any((s) => s.id == id))
+            GhostButton(
+              size: ButtonSize.small,
+              leading: const Icon(LucideIcons.terminal, size: 12),
+              onPressed: () => store.showSession(id),
+              child: const Text('Sessão de planejamento'),
+            ),
+          // On the phone the review panel is not there: ask from here.
+          if (widget.compact && review && !started)
+            OutlineButton(
+              size: ButtonSize.small,
+              onPressed: plan.reviewing
+                  ? null
+                  : () => store.requestPlanReview(plan),
+              child: Text(
+                plan.reviewing
+                    ? 'Claude revisando…'
+                    : 'Pedir revisão ao Claude',
               ),
-          ],
-        ),
+            ),
+        ]),
         const Gap(6),
         Text(plan.summary).small(),
         const Gap(8),
@@ -152,60 +171,55 @@ class _PlanViewState extends State<PlanView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Text(s.title).semiBold(),
-                if (s.instruction.isNotEmpty) ...[
-                  const Gap(6),
-                  Tooltip(
-                    tooltip: (context) => TooltipContainer(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 360),
-                        child: Text('Instrução do template: ${s.instruction}'),
-                      ),
-                    ),
-                    child: const Icon(LucideIcons.info, size: 14),
-                  ),
-                ],
-                const Gap(8),
-                if (s.changedAfterApproval)
-                  const DestructiveBadge(child: Text('alterada após aprovação'))
-                else if (s.approved)
-                  _approvedTag(s),
-                const Spacer(),
-                if (open > 0)
-                  GhostButton(
-                    size: ButtonSize.small,
-                    onPressed: () => setState(() => _filter = s.id),
-                    child: SecondaryBadge(
-                      child: Text('$open aberto${open > 1 ? 's' : ''}'),
+            _line([
+              Text(s.title).semiBold(),
+              if (s.instruction.isNotEmpty) ...[
+                const Gap(6),
+                Tooltip(
+                  tooltip: (context) => TooltipContainer(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 360),
+                      child: Text('Instrução do template: ${s.instruction}'),
                     ),
                   ),
-                if (!started)
-                  GhostButton(
-                    size: ButtonSize.small,
-                    leading: const Icon(
-                      LucideIcons.messageSquarePlus,
-                      size: 14,
-                    ),
-                    onPressed: () => setState(
-                      () => _composing = _composing == s.id ? null : s.id,
-                    ),
-                    child: const Text('Comentar'),
-                  ),
-                if (!s.approved && !started) ...[
-                  const Gap(4),
-                  OutlineButton(
-                    size: ButtonSize.small,
-                    leading: const Icon(LucideIcons.check, size: 12),
-                    onPressed: plan.drafting
-                        ? null
-                        : () => store.approveSection(s),
-                    child: const Text('Aprovar'),
-                  ),
-                ],
+                  child: const Icon(LucideIcons.info, size: 14),
+                ),
               ],
-            ),
+              const Gap(8),
+              if (s.changedAfterApproval)
+                const DestructiveBadge(child: Text('alterada após aprovação'))
+              else if (s.approved)
+                _approvedTag(s),
+              const Spacer(),
+              if (open > 0)
+                GhostButton(
+                  size: ButtonSize.small,
+                  onPressed: () => setState(() => _filter = s.id),
+                  child: SecondaryBadge(
+                    child: Text('$open aberto${open > 1 ? 's' : ''}'),
+                  ),
+                ),
+              if (!started)
+                GhostButton(
+                  size: ButtonSize.small,
+                  leading: const Icon(LucideIcons.messageSquarePlus, size: 14),
+                  onPressed: () => setState(
+                    () => _composing = _composing == s.id ? null : s.id,
+                  ),
+                  child: const Text('Comentar'),
+                ),
+              if (!s.approved && !started) ...[
+                const Gap(4),
+                OutlineButton(
+                  size: ButtonSize.small,
+                  leading: const Icon(LucideIcons.check, size: 12),
+                  onPressed: plan.drafting
+                      ? null
+                      : () => store.approveSection(s),
+                  child: const Text('Aprovar'),
+                ),
+              ],
+            ]),
             const Gap(10),
             for (final b in s.blocks)
               Padding(
@@ -226,11 +240,27 @@ class _PlanViewState extends State<PlanView> {
                   });
                 },
               ),
+            if (widget.compact)
+              for (final t in plan.threadsOn(s.id).where((t) => !t.resolved))
+                threadCard(store, t),
           ],
         ),
       ),
     );
   }
+
+  /// A row of header items; on the phone they wrap instead (no Spacer).
+  Widget _line(List<Widget> children) => widget.compact
+      ? Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            for (final c in children)
+              if (c is! Spacer && c is! Gap) c is Flexible ? c.child : c,
+          ],
+        )
+      : Row(children: children);
 
   Widget _approvedTag(PlanSection s) => Tooltip(
     tooltip: (context) => TooltipContainer(
@@ -520,41 +550,43 @@ class _ReviewPanelState extends State<_ReviewPanel> {
     );
   }
 
-  Widget _thread(CommentThread t) {
-    final store = widget.store;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: OutlinedContainer(
-        padding: const EdgeInsets.all(10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                OutlineBadge(child: Text(t.anchorLabel)),
-                const Gap(6),
-                if (t.resolved)
-                  const Text('resolvido').xSmall().muted()
-                else if (t.awaitingAgent)
-                  const Text('aguardando Claude').xSmall().muted(),
-                const Spacer(),
-                GhostButton(
-                  size: ButtonSize.small,
-                  onPressed: () => store.setResolved(t, !t.resolved),
-                  child: Text(t.resolved ? 'Reabrir' : 'Resolver'),
-                ),
-              ],
-            ),
-            const Gap(8),
-            CommentList(t.messages, now: store.now),
-            if (!t.resolved)
-              CommentComposer(
-                placeholder: 'Responder…',
-                onSend: (text) => store.reply(t, text),
+  Widget _thread(CommentThread t) => threadCard(widget.store, t);
+}
+
+/// A comment thread with replies and resolve (review panel and phone).
+Widget threadCard(HarnessStore store, CommentThread t) {
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: OutlinedContainer(
+      padding: const EdgeInsets.all(10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              OutlineBadge(child: Text(t.anchorLabel)),
+              const Gap(6),
+              if (t.resolved)
+                const Text('resolvido').xSmall().muted()
+              else if (t.awaitingAgent)
+                const Text('aguardando Claude').xSmall().muted(),
+              const Spacer(),
+              GhostButton(
+                size: ButtonSize.small,
+                onPressed: () => store.setResolved(t, !t.resolved),
+                child: Text(t.resolved ? 'Reabrir' : 'Resolver'),
               ),
-          ],
-        ),
+            ],
+          ),
+          const Gap(8),
+          CommentList(t.messages, now: store.now),
+          if (!t.resolved)
+            CommentComposer(
+              placeholder: 'Responder…',
+              onSend: (text) => store.reply(t, text),
+            ),
+        ],
       ),
-    );
-  }
+    ),
+  );
 }
