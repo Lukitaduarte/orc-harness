@@ -87,4 +87,17 @@ void main() {
     expect(d.approvals, isEmpty, reason: 'timed out in the daemon');
     d.dispose();
   });
+
+  test('devices keep which one is this after a broadcast', () {
+    final d = DaemonClient();
+    d.handle(
+      '{"type":"devices","devices":[{"id":"a","name":"Mac","paired_at":1,"connected":true,"this":true},{"id":"b","name":"iPhone","paired_at":1,"connected":true,"this":false}]}',
+    );
+    expect(d.thisDevice, 'a');
+    d.handle(
+      '{"type":"devices","devices":[{"id":"a","name":"Mac","paired_at":1,"connected":true,"this":false}]}',
+    );
+    expect((d.thisDevice, d.devices.length), ('a', 1));
+    d.dispose();
+  });
 }

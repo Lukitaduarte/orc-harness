@@ -45,7 +45,40 @@ class _ConnectState extends State<_Connect> {
   void initState() {
     super.initState();
     _ticket.addListener(() => setState(() {}));
+    final d = widget.store.daemon;
+    if (d != null && d.status == LinkStatus.connected) d.listDevices();
   }
+
+  /// Paired apps; revoking one drops it now and it must pair again.
+  List<Widget> _devices(DaemonClient d) => [
+    const Gap(16),
+    const Text('Aparelhos pareados').small().medium(),
+    const Gap(6),
+    for (final dev in d.devices)
+      Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Row(
+          children: [
+            Icon(
+              dev['connected'] == true ? LucideIcons.wifi : LucideIcons.wifiOff,
+              size: 14,
+            ),
+            const Gap(8),
+            Expanded(
+              child: Text(
+                '${dev['name']}${dev['id'] == d.thisDevice ? ' (este)' : ''}',
+              ).small(),
+            ),
+            if (dev['id'] != d.thisDevice)
+              DestructiveButton(
+                size: ButtonSize.small,
+                onPressed: () => d.revokeDevice(dev['id'] as String),
+                child: const Text('Revogar'),
+              ),
+          ],
+        ),
+      ),
+  ];
 
   @override
   void dispose() {
@@ -80,6 +113,7 @@ class _ConnectState extends State<_Connect> {
               d.error!,
             ).xSmall().medium(color: Theme.of(context).colorScheme.destructive),
           ],
+          if (d.devices.isNotEmpty) ..._devices(d),
           const Gap(16),
           const Text(
             'No Mac onde o orcd roda: `orcd serve` e, em outro terminal, `orcd pair`. '

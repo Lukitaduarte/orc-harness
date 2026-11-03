@@ -363,6 +363,20 @@ pub struct WorkspaceInfo {
     pub memory: Option<String>,
 }
 
+/// A paired app (desktop or phone).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DeviceInfo {
+    /// Its iroh key.
+    pub id: String,
+    pub name: String,
+    /// Unix seconds.
+    pub paired_at: i64,
+    pub connected: bool,
+    /// The device asking.
+    #[serde(default)]
+    pub this: bool,
+}
+
 /// One entry of the harness's memory provider.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MemoryEntry {
@@ -564,6 +578,9 @@ pub enum ClientMessage {
     Gate { session_id: String, tool: String, input: serde_json::Value },
     /// Your decision on an action waiting for OK (app only).
     ResolveApproval { id: String, approve: bool },
+    ListDevices,
+    /// Unpairs a device and drops its connection.
+    RevokeDevice { id: String },
     ListMemory { workspace_id: String },
     ForgetMemory { workspace_id: String, id: String },
     /// Puts a failed or stopped card back in line.
@@ -604,6 +621,7 @@ pub enum DaemonMessage {
     Plans { plans: Vec<PlanDoc> },
     Workspaces { workspaces: Vec<WorkspaceInfo> },
     Memory { workspace_id: String, entries: Vec<MemoryEntry> },
+    Devices { devices: Vec<DeviceInfo> },
     /// Reply to `Gate`.
     GateDecision { allow: bool, reason: String },
     /// A session wants to do something that needs your OK.

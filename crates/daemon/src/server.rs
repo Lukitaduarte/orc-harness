@@ -1260,6 +1260,18 @@ impl Daemon {
                 let _ = waiting.send(approve);
                 emit(DaemonMessage::ApprovalResolved { id, approved: approve });
             }
+            ClientMessage::ListDevices => {
+                let devices = self.remote.get().map(|r| r.device_list(None)).unwrap_or_default();
+                return vec![DaemonMessage::Devices { devices }];
+            }
+            ClientMessage::RevokeDevice { id } => {
+                let Some(remote) = self.remote.get() else { return Vec::new() };
+                match remote.revoke(&id) {
+                    Ok(true) => emit(DaemonMessage::Devices { devices: remote.device_list(None) }),
+                    Ok(false) => return vec![DaemonMessage::Error { message: "aparelho não encontrado".into() }],
+                    Err(e) => return error(e),
+                }
+            }
             ClientMessage::ListMemory { workspace_id } => {
                 let entries = self.memory.as_ref().map(|m| m.list(&workspace_id)).unwrap_or_default();
                 return vec![DaemonMessage::Memory { workspace_id, entries }];

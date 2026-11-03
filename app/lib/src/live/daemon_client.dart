@@ -191,6 +191,14 @@ class DaemonClient extends ChangeNotifier {
     },
   });
 
+  /// Paired devices (orc_protocol::DeviceInfo JSON), and which is this one.
+  List<Map<String, dynamic>> devices = [];
+  String? thisDevice;
+
+  void listDevices() => send({'type': 'list_devices'});
+
+  void revokeDevice(String id) => send({'type': 'revoke_device', 'id': id});
+
   /// The harness memory of each workspace (orc_protocol::MemoryEntry JSON).
   final memory = <String, List<Map<String, dynamic>>>{};
 
@@ -570,6 +578,14 @@ class DaemonClient extends ChangeNotifier {
       case 'learnings':
         learnings[m['plan_id'] as String] = (m['items'] as List)
             .cast<Map<String, dynamic>>();
+        notifyListeners();
+      case 'devices':
+        devices = (m['devices'] as List).cast<Map<String, dynamic>>();
+        // Broadcasts after a revoke do not say which one is this.
+        thisDevice =
+            devices.where((d) => d['this'] == true).firstOrNull?['id']
+                as String? ??
+            thisDevice;
         notifyListeners();
       case 'memory':
         memory[m['workspace_id'] as String] = (m['entries'] as List)

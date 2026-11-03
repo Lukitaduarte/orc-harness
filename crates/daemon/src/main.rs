@@ -156,6 +156,34 @@ fn main() -> std::io::Result<()> {
             }
             Ok(())
         }
+        Some("devices") | Some("revoke") => {
+            // Over the owner-only local socket, like pair.
+            use std::io::{BufRead, BufReader, Write};
+            let socket = config::orc_home().join("orcd.sock");
+            let mut stream = std::os::unix::net::UnixStream::connect(&socket)
+                .map_err(|e| std::io::Error::other(format!("orcd não está rodando ({e})")))?;
+            let msg = match (args[0].as_str(), args.get(1)) {
+                ("revoke", Some(id)) => serde_json::json!({ "type": "revoke_device", "id": id }),
+                ("revoke", None) => {
+                    eprintln!("uso: orcd revoke ID (veja orcd devices)");
+                    std::process::exit(2);
+                }
+                _ => serde_json::json!({ "type": "list_devices" }),
+            };
+            stream.write_all(format!("{msg}\n").as_bytes())?;
+            if args[0] == "revoke" {
+                eprintln!("revogado (se existia); a conexão dele caiu");
+                return Ok(());
+            }
+            let mut line = String::new();
+            BufReader::new(stream).read_line(&mut line)?;
+            if let Ok(DaemonMessage::Devices { devices }) = serde_json::from_str(&line) {
+                for d in devices {
+                    println!("{}  {}  {}", d.id, d.name, if d.connected { "conectado" } else { "" });
+                }
+            }
+            Ok(())
+        }
         Some("install") => {
             // `--sign "Apple Development: …"` signs the copies (see
             // `security find-identity -v -p codesigning`).

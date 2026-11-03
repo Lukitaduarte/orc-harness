@@ -7,7 +7,7 @@ use orc_client_core::{Identity, connect, pair};
 use orc_daemon::manager::{Account, ManagerConfig, SessionManager};
 use orc_daemon::remote::{Devices, Remote};
 use orc_daemon::server::Daemon;
-use orc_protocol::{DaemonMessage, GridSnapshot};
+use orc_protocol::{ClientMessage as DaemonClientMessage, DaemonMessage, GridSnapshot};
 
 async fn start_daemon(dir: &std::path::Path) -> (Daemon, Remote) {
     let fake = dir.join("fake-claude");
@@ -145,4 +145,43 @@ async fn unpaired_devices_are_refused() {
         closed_rx.recv_timeout(Duration::from_secs(10)).expect("stranger was not disconnected");
     }
     assert!(rx.try_recv().is_err(), "stranger received daemon data");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_revoked_device_is_dropped_and_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let (daemon, remote) = start_daemon(dir.path()).await;
+    let phone = pair(&remote.new_ticket().await.encode(), "iPhone").await.unwrap();
+    let mac = pair(&remote.new_ticket().await.encode(), "Mac").await.unwrap();
+
+    let (tx, rx) = mpsc::channel();
+    let (closed_tx, closed_rx) = mpsc::channel();
+    let conn = connect(&mac, move |m| { let _ = tx.send(m); }, |_| {}).await.unwrap();
+    let (ptx, prx) = mpsc::channel();
+    let _phone_conn = connect(&phone, move |m| { let _ = ptx.send(m); }, move |r| { let _ = closed_tx.send(r); })
+        .await
+        .unwrap();
+    wait(&prx, |m| matches!(m, DaemonMessage::Hello { .. }).then_some(()));
+
+    // The Mac lists the devices; it is marked as the one asking.
+    conn.send(serde_json::json!({ "type": "list_devices" }).to_string()).await.unwrap();
+    let devices = wait(&rx, |m| match m {
+        DaemonMessage::Devices { devices } => Some(devices),
+        _ => None,
+    });
+    assert_eq!(devices.len(), 2);
+    let me = devices.iter().find(|d| d.this).expect("this device");
+    assert_eq!(me.name, "Mac");
+    let phone_id = devices.iter().find(|d| d.name == "iPhone").unwrap().id.clone();
+    assert!(devices.iter().all(|d| d.connected));
+
+    // Revoked: its connection drops now, and it cannot come back.
+    assert!(daemon.handle(DaemonClientMessage::RevokeDevice { id: phone_id }).is_empty());
+    closed_rx.recv_timeout(Duration::from_secs(10)).expect("revoked device stayed connected");
+    let (again_tx, again_rx) = mpsc::channel();
+    let (closed2_tx, closed2_rx) = mpsc::channel();
+    if let Ok(_c) = connect(&phone, move |m| { let _ = again_tx.send(m); }, move |r| { let _ = closed2_tx.send(r); }).await {
+        closed2_rx.recv_timeout(Duration::from_secs(10)).expect("revoked device got back in");
+    }
+    assert!(again_rx.try_recv().is_err());
 }

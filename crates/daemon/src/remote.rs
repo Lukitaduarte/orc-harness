@@ -77,6 +77,8 @@ pub struct Remote {
     pub endpoint: Endpoint,
     pub devices: Arc<Mutex<Devices>>,
     pairing: Arc<Mutex<Option<(String, Instant)>>>,
+    /// Live connections by device key (closed on revoke).
+    connected: Arc<Mutex<std::collections::HashMap<String, Connection>>>,
 }
 
 impl Remote {
@@ -85,7 +87,38 @@ impl Remote {
             endpoint,
             devices: Arc::new(Mutex::new(devices)),
             pairing: Arc::default(),
+            connected: Arc::default(),
         }
+    }
+
+    /// Paired devices; `asking` is marked as `this`.
+    pub fn device_list(&self, asking: Option<&str>) -> Vec<orc_protocol::DeviceInfo> {
+        let connected = self.connected.lock().unwrap();
+        self.devices
+            .lock()
+            .unwrap()
+            .list()
+            .iter()
+            .map(|(id, d)| orc_protocol::DeviceInfo {
+                id: id.clone(),
+                name: d.name.clone(),
+                paired_at: d.paired_at,
+                connected: connected.contains_key(id),
+                this: asking == Some(id.as_str()),
+            })
+            .collect()
+    }
+
+    /// Unpairs `id` and closes its connection now.
+    pub fn revoke(&self, id: &str) -> std::io::Result<bool> {
+        let removed = self.devices.lock().unwrap().remove(id)?;
+        if let Some(conn) = self.connected.lock().unwrap().remove(id) {
+            conn.close(403u32.into(), b"dispositivo revogado");
+        }
+        if removed {
+            eprintln!("orcd: dispositivo revogado: {id}");
+        }
+        Ok(removed)
     }
 
     /// A fresh one-time ticket; the previous one stops working. Waits (up
@@ -179,12 +212,15 @@ impl Remote {
             return Ok(());
         };
         eprintln!("orcd: {name} conectado");
+        let me = conn.remote_id().to_string();
+        self.connected.lock().unwrap().insert(me.clone(), conn.clone());
         let (mut send, recv) = conn.accept_bi().await.map_err(std::io::Error::other)?;
         let mut events = daemon.events.subscribe();
         for m in daemon.hello() {
             write_line(&mut send, &m).await?;
         }
         let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonMessage>(256);
+        let (remote, me_reader) = (self.clone(), me.clone());
 
         // Requests from the client; replies go to this client only.
         let reader = tokio::spawn(async move {
@@ -192,10 +228,15 @@ impl Remote {
             while let Ok(Some(line)) = lines.next_line().await {
                 if let Ok(msg) = serde_json::from_str::<ClientMessage>(&line) {
                     // Tool calls act as a session: only orc-mcp, locally.
-                    let replies = if matches!(msg, ClientMessage::McpCall { .. }) {
-                        vec![DaemonMessage::Error { message: "McpCall só pelo socket local".into() }]
-                    } else {
-                        daemon.handle(msg)
+                    let replies = match msg {
+                        ClientMessage::McpCall { .. } => {
+                            vec![DaemonMessage::Error { message: "McpCall só pelo socket local".into() }]
+                        }
+                        // The asking device knows which one it is.
+                        ClientMessage::ListDevices => {
+                            vec![DaemonMessage::Devices { devices: remote.device_list(Some(&me_reader)) }]
+                        }
+                        other => daemon.handle(other),
                     };
                     for reply in replies {
                         if tx.send(reply).await.is_err() {
@@ -221,6 +262,7 @@ impl Remote {
             }
         }
         reader.abort();
+        self.connected.lock().unwrap().remove(&me);
         Ok(())
     }
 }
