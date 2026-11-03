@@ -419,6 +419,33 @@ impl Daemon {
                 let _ = self.events.send(DaemonMessage::EnvRequest { id, session_id: me.id, name: name.clone() });
                 Ok(format!("pedido enviado ao usuário; {name} só é gravada se ele aprovar no app (a resposta chega no read_inbox)"))
             }
+            "list_envs" => {
+                // Names and whether they have a value; values never.
+                let mine = self.sessions.lock().unwrap().profile(&me.id).map(|p| p.env_names.clone()).unwrap_or_default();
+                let secrets = self.sessions.lock().unwrap().secrets.clone();
+                let envs: Vec<String> = self
+                    .catalog
+                    .lock()
+                    .unwrap()
+                    .entries(&secrets)
+                    .into_iter()
+                    .filter(|e| e.kind == "env")
+                    .map(|e| {
+                        format!(
+                            "{} · {} · {}{}",
+                            e.name,
+                            if e.has_value { "com valor" } else { "sem valor" },
+                            if mine.contains(&e.name) { "ativa nesta sessão" } else { "não ativa nesta sessão" },
+                            if e.description.is_empty() { String::new() } else { format!(" · {}", e.description) },
+                        )
+                    })
+                    .collect();
+                Ok(if envs.is_empty() {
+                    "nenhuma env no catálogo; peça com request_env_change".into()
+                } else {
+                    envs.join("\n")
+                })
+            }
             "propose_learning" => {
                 let field = |k: &str| arg(k).unwrap_or_default();
                 let plans = self.plans.lock().unwrap();
