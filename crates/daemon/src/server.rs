@@ -147,6 +147,23 @@ impl Daemon {
             ClientMessage::NewPairingTicket => {
                 return vec![DaemonMessage::Error { message: "use orcd pair".into() }];
             }
+            ClientMessage::SetSecret { name, value } => {
+                if !crate::secrets::valid_env_name(&name) {
+                    return vec![DaemonMessage::Error { message: format!("nome de env inválido: {name}") }];
+                }
+                let secrets = self.sessions.lock().unwrap().secrets.clone();
+                if let Err(e) = secrets.set(&crate::secrets::env_key(&name), &value) {
+                    return error(e);
+                }
+                emit(DaemonMessage::Secret { name, stored: true });
+            }
+            ClientMessage::DeleteSecret { name } => {
+                let secrets = self.sessions.lock().unwrap().secrets.clone();
+                if let Err(e) = secrets.delete(&crate::secrets::env_key(&name)) {
+                    return error(e);
+                }
+                emit(DaemonMessage::Secret { name, stored: false });
+            }
             ClientMessage::ListSessions => {
                 return vec![DaemonMessage::Sessions {
                     sessions: self.sessions.lock().unwrap().list(),

@@ -22,6 +22,7 @@ async fn start_daemon(dir: &std::path::Path) -> (Daemon, Remote) {
             socket: dir.join("orcd.sock"),
         },
         vec![Account { id: "work-main".into(), config_dir: None }],
+        std::sync::Arc::new(orc_daemon::secrets::SecretStore::memory()),
     ));
     let key = orc_link::load_or_create_key(&dir.join("daemon.key")).unwrap();
     let endpoint = orc_link::endpoint(key, &[orc_link::ALPN_PAIR, orc_link::ALPN_MAIN])

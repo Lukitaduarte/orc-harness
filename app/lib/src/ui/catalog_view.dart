@@ -262,11 +262,20 @@ class _AddItemFormState extends State<_AddItemForm> {
   void _save() {
     final name = _name.text.trim();
     if (name.isEmpty) return;
-    // An env's value goes to the Keychain; the catalog only keeps where it is.
-    final detail = _kind == CatalogKind.env
-        ? 'Keychain · orc-harness/${widget.store.workspaceId}/$name'
+    // An env's value goes to the daemon's Keychain; the catalog only keeps
+    // where it is.
+    final isEnv = _kind == CatalogKind.env;
+    final detail = isEnv
+        ? 'Keychain do daemon · env/$name'
         : _detail.text.trim();
-    widget.store.addCatalogItem(_kind, name, _description.text.trim(), detail);
+    widget.store.addCatalogItem(
+      _kind,
+      name,
+      _description.text.trim(),
+      detail,
+      secretValue: isEnv ? _detail.text : null,
+    );
+    _detail.clear();
     closeOverlay(context);
   }
 

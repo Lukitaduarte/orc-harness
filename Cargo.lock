@@ -2123,6 +2123,7 @@ dependencies = [
  "orc-link",
  "orc-protocol",
  "portable-pty",
+ "security-framework",
  "serde",
  "serde_json",
  "tempfile",

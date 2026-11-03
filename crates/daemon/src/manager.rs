@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use orc_protocol::{Profile, SessionState, SessionSummary};
 use serde_json::json;
 
+use crate::secrets::{SecretStore, env_key, valid_env_name};
 use crate::session::{Session, SessionSpec};
 
 #[derive(Debug, Clone)]
@@ -48,6 +49,7 @@ struct Managed {
 
 pub struct SessionManager {
     cfg: ManagerConfig,
+    pub secrets: std::sync::Arc<SecretStore>,
     accounts: HashMap<String, Account>,
     sessions: BTreeMap<String, Managed>,
     next: u32,
@@ -63,9 +65,10 @@ const HOOK_EVENTS: [&str; 5] = [
 ];
 
 impl SessionManager {
-    pub fn new(cfg: ManagerConfig, accounts: Vec<Account>) -> Self {
+    pub fn new(cfg: ManagerConfig, accounts: Vec<Account>, secrets: std::sync::Arc<SecretStore>) -> Self {
         Self {
             cfg,
+            secrets,
             accounts: accounts.into_iter().map(|a| (a.id.clone(), a)).collect(),
             sessions: BTreeMap::new(),
             next: 0,
@@ -241,7 +244,16 @@ impl SessionManager {
             args.extend(["--model".into(), model.clone()]);
         }
 
-        let mut env: HashMap<String, String> = profile.env.clone().into_iter().collect();
+        let mut env: HashMap<String, String> = HashMap::new();
+        for name in &profile.env_names {
+            if !valid_env_name(name) {
+                return Err(std::io::Error::other(format!("nome de env inválido: {name}")));
+            }
+            let value = self.secrets.get(&env_key(name)).ok_or_else(|| {
+                std::io::Error::other(format!("{name} não tem valor no Keychain do daemon"))
+            })?;
+            env.insert(name.clone(), value);
+        }
         env.insert("ORC_SOCKET".into(), self.cfg.socket.display().to_string());
         env.insert("ORC_ACCOUNT".into(), account.id.clone());
         env.insert("ORC_SESSION".into(), s.id.clone());
@@ -295,6 +307,8 @@ mod tests {
     }
 
     fn manager(dir: &Path) -> SessionManager {
+        let secrets = SecretStore::memory();
+        secrets.set("env/GREETING", "oi").unwrap();
         SessionManager::new(
             ManagerConfig {
                 claude: fake_claude(dir),
@@ -307,6 +321,7 @@ mod tests {
                 Account { id: "work-main".into(), config_dir: Some("/cfg/work".into()) },
                 Account { id: "personal".into(), config_dir: None },
             ],
+            std::sync::Arc::new(secrets),
         )
     }
 
@@ -322,7 +337,7 @@ mod tests {
         let mut p = Profile { model: Some("opus".into()), ..Profile::default() };
         p.skills.push("/catalog/skills/code-review".into());
         p.mcp_servers.insert("postgres".into(), json!({ "command": "npx", "args": ["pg-mcp"] }));
-        p.env.insert("GREETING".into(), "oi".into());
+        p.env_names.push("GREETING".into());
         p
     }
 
@@ -391,5 +406,16 @@ mod tests {
         assert_eq!(m.on_hook(&s.id, "Stop"), Some(SessionState::Idle));
         assert_eq!(m.on_hook(&s.id, "Unknown"), None);
         assert!(m.create("nope", None, Profile::default(), 80, 24).is_err());
+    }
+
+    #[test]
+    fn env_values_come_from_the_store_and_missing_ones_fail() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut m = manager(tmp.path());
+        let missing = Profile { env_names: vec!["NOT_SET".into()], ..Profile::default() };
+        let err = m.create("work-main", Some(tmp.path().into()), missing, 80, 24).unwrap_err();
+        assert!(err.to_string().contains("NOT_SET"));
+        let bad = Profile { env_names: vec!["A=B".into()], ..Profile::default() };
+        assert!(m.create("work-main", Some(tmp.path().into()), bad, 80, 24).is_err());
     }
 }

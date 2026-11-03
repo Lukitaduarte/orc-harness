@@ -174,9 +174,10 @@ class HarnessStore extends ChangeNotifier {
         for (final i in picked.where((i) => i.kind == CatalogKind.mcp))
           i.name: mcp(i.detail),
       },
-      // Env values live in the Keychain, which arrives with the daemon's
-      // secrets; until then no value is sent.
-      'env': <String, String>{},
+      // Only names: the daemon reads the values from its Keychain.
+      'env_names': [
+        for (final i in picked.where((i) => i.kind == CatalogKind.env)) i.name,
+      ],
       'model': s.model == 'padrão' ? null : s.model,
     };
   }
@@ -343,8 +344,16 @@ class HarnessStore extends ChangeNotifier {
     CatalogKind kind,
     String name,
     String description,
-    String detail,
-  ) {
+    String detail, {
+    String? secretValue,
+  }) {
+    // An env's value goes straight to the daemon's Keychain; the app keeps
+    // only the name.
+    if (kind == CatalogKind.env &&
+        secretValue != null &&
+        secretValue.isNotEmpty) {
+      daemon?.send({'type': 'set_secret', 'name': name, 'value': secretValue});
+    }
     catalog.add(
       CatalogItem(_nextId('item'), kind, name, description, detail: detail),
     );

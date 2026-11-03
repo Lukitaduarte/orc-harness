@@ -8,6 +8,7 @@ use std::time::Duration;
 use orc_daemon::config;
 use orc_daemon::manager::{ManagerConfig, SessionManager};
 use orc_daemon::remote::{Devices, Remote};
+use orc_daemon::secrets::{self, SecretStore};
 use orc_daemon::server::Daemon;
 use orc_protocol::DaemonMessage;
 use orc_daemon::session::{Session, SessionSpec};
@@ -29,6 +30,7 @@ fn main() -> std::io::Result<()> {
             let cfg = config::load(&home.join("config.json"))?;
             // The helpers ship next to orcd.
             let bin_dir = std::env::current_exe()?.parent().map(PathBuf::from).unwrap_or_default();
+            let secrets = std::sync::Arc::new(SecretStore::keychain());
             let manager = SessionManager::new(
                 ManagerConfig {
                     claude: cfg.claude,
@@ -38,10 +40,11 @@ fn main() -> std::io::Result<()> {
                     socket: socket.clone(),
                 },
                 cfg.accounts,
+                secrets.clone(),
             );
             let daemon = Daemon::new(manager);
             tokio::runtime::Runtime::new()?.block_on(async move {
-                let key = orc_link::load_or_create_key(&home.join("daemon.key"))?;
+                let key = secrets::daemon_key(&secrets, &home.join("daemon.key"))?;
                 let endpoint = orc_link::endpoint(key, &[orc_link::ALPN_PAIR, orc_link::ALPN_MAIN]).await?;
                 let remote = Remote::new(endpoint, Devices::load(home.join("devices.json")));
                 let _ = daemon.remote.set(remote.clone());

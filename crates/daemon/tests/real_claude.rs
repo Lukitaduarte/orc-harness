@@ -28,6 +28,7 @@ fn real_claude_accepts_the_generated_session() {
             socket: dir.path().join("orcd.sock"),
         },
         vec![Account { id: "default".into(), config_dir: None }],
+        std::sync::Arc::new(orc_daemon::secrets::SecretStore::memory()),
     );
     let profile = Profile {
         skills: vec![skill.display().to_string()],

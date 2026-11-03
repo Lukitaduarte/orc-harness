@@ -228,8 +228,10 @@ pub struct Profile {
     /// MCP servers in Claude Code's `mcpServers` format.
     #[serde(default)]
     pub mcp_servers: std::collections::BTreeMap<String, serde_json::Value>,
+    /// Env names; the daemon reads the values from the Keychain when it
+    /// starts the session. Values never travel in a profile.
     #[serde(default)]
-    pub env: std::collections::BTreeMap<String, String>,
+    pub env_names: Vec<String>,
     pub model: Option<String>,
 }
 
@@ -270,6 +272,10 @@ pub enum ClientMessage {
     ListSessions,
     /// Mint a pairing ticket. Honored only on the owner-only local socket.
     NewPairingTicket,
+    /// Stores an env value in the daemon's Keychain. The value is never
+    /// sent back to any client.
+    SetSecret { name: String, value: String },
+    DeleteSecret { name: String },
     /// Keystrokes or pasted text for a session's terminal.
     Input { session_id: String, data: String },
     Resize { session_id: String, cols: u16, rows: u16 },
@@ -291,6 +297,8 @@ pub enum DaemonMessage {
     Quota { account_id: String, limits: RateLimits, read_at: i64 },
     SessionExited { session_id: String, code: Option<i32> },
     PairingTicket { ticket: String },
+    /// A secret was stored (or deleted, with `stored: false`); no value.
+    Secret { name: String, stored: bool },
 }
 
 #[cfg(test)]
