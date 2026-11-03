@@ -123,9 +123,10 @@ class _ConnectState extends State<_Connect> {
                         await d.pair(_ticket.text);
                         if (d.status == LinkStatus.connected &&
                             context.mounted) {
-                          widget.store.selectWorkspace(
-                            HarnessStore.liveWorkspace.id,
-                          );
+                          final live = widget.store.liveWorkspaces;
+                          if (live.isNotEmpty) {
+                            widget.store.selectWorkspace(live.first.id);
+                          }
                           closeOverlay(context);
                         }
                       }

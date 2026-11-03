@@ -60,6 +60,9 @@ pub struct Daemon {
     /// reach the page before the typing that follows it).
     browser_queue: Arc<OnceLock<tokio::sync::mpsc::UnboundedSender<(String, BrowserAction)>>>,
     pub language_servers: crate::ide::LanguageServers,
+    pub workspaces: Arc<Mutex<crate::workspaces::Workspaces>>,
+    /// `~/.orc` and its config.json, for new accounts (unset: refused).
+    home: Option<PathBuf>,
 }
 
 /// Playwright MCP, pinned, attached to a workspace browser.
@@ -90,7 +93,22 @@ impl Daemon {
             browser_urls: Arc::default(),
             browser_queue: Arc::default(),
             language_servers: Default::default(),
+            workspaces: Arc::new(Mutex::new(crate::workspaces::Workspaces::load(None))),
+            home: None,
         }
+    }
+
+    /// Keeps workspaces in `home/workspaces.json` and lets the app add
+    /// accounts to `home/config.json`.
+    pub fn with_home(mut self, home: PathBuf) -> Self {
+        self.workspaces = Arc::new(Mutex::new(crate::workspaces::Workspaces::load(Some(home.join("workspaces.json")))));
+        self.home = Some(home);
+        self
+    }
+
+    fn workspaces_message(&self) -> DaemonMessage {
+        let accounts = self.sessions.lock().unwrap().account_ids();
+        DaemonMessage::Workspaces { workspaces: self.workspaces.lock().unwrap().view(&accounts) }
     }
 
     /// Enables workspace browsers (off until set: no browser found).
@@ -245,6 +263,7 @@ impl Daemon {
     pub fn hello(&self) -> Vec<DaemonMessage> {
         // Takes the sessions lock itself: build it before holding that lock.
         let catalog = self.catalog_message();
+        let workspaces = self.workspaces_message();
         let (plan_docs, runs) = {
             let plans = self.plans.lock().unwrap();
             let runs: Vec<_> = plans.runs.iter().map(run_message).collect();
@@ -253,6 +272,7 @@ impl Daemon {
         let sessions = self.sessions.lock().unwrap();
         let mut out = vec![
             DaemonMessage::Hello { accounts: sessions.account_ids() },
+            workspaces,
             DaemonMessage::Sessions { sessions: sessions.list() },
             catalog,
             DaemonMessage::Projects { projects: self.projects.lock().unwrap().list() },
@@ -769,9 +789,42 @@ impl Daemon {
                 let since = day_of(now.saturating_sub(u128::from(days) * 86_400 * 1_000_000_000));
                 return vec![DaemonMessage::UsageReport { rows: self.usage.lock().unwrap().report(&since) }];
             }
-            ClientMessage::AddProject { name, repo, base_branch } => {
+            ClientMessage::UpsertWorkspace { workspace } => {
+                let known = self.sessions.lock().unwrap().account_ids();
+                if let Err(e) = self.workspaces.lock().unwrap().upsert(workspace, &known) {
+                    return error(e);
+                }
+                emit(self.workspaces_message());
+            }
+            ClientMessage::RemoveWorkspace { id } => {
+                let known = self.sessions.lock().unwrap().account_ids();
+                if let Err(e) = self.workspaces.lock().unwrap().remove(&id, &known) {
+                    return error(e);
+                }
+                emit(self.workspaces_message());
+            }
+            ClientMessage::AddAccount { id, workspace_id } => {
+                let Some(home) = &self.home else {
+                    return vec![DaemonMessage::Error { message: "este daemon não aceita contas novas".into() }];
+                };
+                let account = match crate::config::add_account(&home.join("config.json"), home, &id) {
+                    Ok(a) => a,
+                    Err(e) => return error(e),
+                };
+                let known = {
+                    let mut sessions = self.sessions.lock().unwrap();
+                    sessions.add_account(account);
+                    sessions.account_ids()
+                };
+                if let Err(e) = self.workspaces.lock().unwrap().assign(&id, &workspace_id, &known) {
+                    return error(e);
+                }
+                emit(DaemonMessage::Hello { accounts: known });
+                emit(self.workspaces_message());
+            }
+            ClientMessage::AddProject { name, repo, base_branch, workspace_id } => {
                 let mut projects = self.projects.lock().unwrap();
-                if let Err(e) = projects.add(&name, &repo, &base_branch) {
+                if let Err(e) = projects.add(&name, &repo, &base_branch, workspace_id) {
                     return error(e);
                 }
                 emit(DaemonMessage::Projects { projects: projects.list() });

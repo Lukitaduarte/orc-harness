@@ -35,6 +35,37 @@ fn expand(path: &str) -> PathBuf {
     }
 }
 
+/// Adds account `id` to `config.json` with its own Claude Code and gh
+/// folders under `home/accounts/<id>` (owner only). A missing file keeps
+/// the implicit `default` account.
+pub fn add_account(path: &Path, home: &Path, id: &str) -> std::io::Result<Account> {
+    if !crate::workspaces::valid_id(id) {
+        return Err(std::io::Error::other("id de conta: letras, números, - _"));
+    }
+    let mut v: serde_json::Value = match std::fs::read(path) {
+        Ok(raw) => serde_json::from_slice(&raw)?,
+        Err(_) => serde_json::json!({ "accounts": [{ "id": "default" }] }),
+    };
+    if !v["accounts"].is_array() {
+        v["accounts"] = serde_json::json!([{ "id": "default" }]);
+    }
+    let list = v["accounts"].as_array_mut().expect("array");
+    if list.iter().any(|a| a["id"] == id) {
+        return Err(std::io::Error::other(format!("a conta {id} já existe")));
+    }
+    let dir = home.join("accounts").join(id);
+    let gh = dir.join("gh");
+    std::fs::create_dir_all(&gh)?;
+    std::fs::set_permissions(&dir, std::os::unix::fs::PermissionsExt::from_mode(0o700))?;
+    list.push(serde_json::json!({
+        "id": id,
+        "config_dir": dir.display().to_string(),
+        "gh_config_dir": gh.display().to_string(),
+    }));
+    std::fs::write(path, serde_json::to_vec_pretty(&v)?)?;
+    Ok(Account { id: id.into(), config_dir: Some(dir), gh_config_dir: Some(gh) })
+}
+
 pub fn load(path: &Path) -> std::io::Result<Config> {
     let default = || Config {
         claude: "claude".into(),

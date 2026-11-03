@@ -13,15 +13,23 @@ import 'plan_templates.dart';
 /// App state for phase 0, seeded with fake data. In phase 1 the seeds and the
 /// simulated restart give way to the daemon; the screens keep reading this.
 class HarnessStore extends ChangeNotifier {
-  HarnessStore({this.daemon}) : now = DateTime.now() {
+  /// [demo] adds the demonstration workspaces (Trabalho, Pessoal) with
+  /// fake data; by default only when there is no daemon.
+  HarnessStore({this.daemon, bool? demo})
+    : demo = demo ?? daemon == null,
+      now = DateTime.now() {
     daemon?.addListener(_syncLive);
-    accounts = mock.seedAccounts(now);
-    sessions = mock.seedSessions();
-    projects = mock.seedProjects(now);
-    for (final ws in mock.workspaces) {
-      _layouts[ws.id] = mock.seedLayout(ws.id);
-      _focusedLeaf[ws.id] = _firstLeaf(_layouts[ws.id]!).id;
+    accounts = this.demo ? mock.seedAccounts(now) : [];
+    sessions = this.demo ? mock.seedSessions() : [];
+    projects = this.demo ? mock.seedProjects(now) : [];
+    if (this.demo) {
+      for (final ws in mock.workspaces) {
+        _layouts[ws.id] = mock.seedLayout(ws.id);
+        _focusedLeaf[ws.id] = _firstLeaf(_layouts[ws.id]!).id;
+      }
     }
+    workspaceId = this.demo ? mock.workspaces.first.id : liveWorkspace.id;
+    _ensureLayout(workspaceId);
     // Drives reset countdowns and "updated X ago" labels.
     _clock = Timer.periodic(const Duration(seconds: 1), (_) {
       now = DateTime.now();
@@ -38,7 +46,10 @@ class HarnessStore extends ChangeNotifier {
   final _focusedLeaf = <String, String>{};
   int _ids = 0;
 
-  String workspaceId = mock.workspaces.first.id;
+  late String workspaceId;
+
+  /// Shows the demonstration workspaces.
+  final bool demo;
   bool profilePanelOpen = true;
 
   /// Project whose kanban replaces the panes; null shows the panes.
@@ -51,11 +62,105 @@ class HarnessStore extends ChangeNotifier {
   /// The real daemon, when the app runs against one ("Este Mac").
   final DaemonClient? daemon;
 
+  /// The daemon's workspace until it reports its own list.
   static const liveWorkspace = Workspace('live', 'Este Mac', 'EM');
 
+  /// The daemon's workspaces (orc_protocol::WorkspaceInfo).
+  List<Workspace> get liveWorkspaces {
+    final d = daemon;
+    if (d == null || (demo && !d.paired)) return const [];
+    if (d.workspaces.isEmpty) return const [liveWorkspace];
+    return [
+      for (final w in d.workspaces)
+        Workspace(
+          w['id'] as String,
+          w['name'] as String,
+          _initials(w['name'] as String),
+        ),
+    ];
+  }
+
+  static String _initials(String name) {
+    final words = name.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+    final s = words.length > 1
+        ? words.take(2).map((w) => w[0]).join()
+        : name.trim().padRight(2).substring(0, 2);
+    return s.trim().toUpperCase();
+  }
+
+  bool isLiveWorkspace(String id) => liveWorkspaces.any((w) => w.id == id);
+
+  /// Accounts of a live workspace, as the daemon lists them.
+  List<String> liveAccountsOf(String workspaceId) => [
+    for (final a in accounts.where(
+      (a) => a.live && a.workspaceId == workspaceId,
+    ))
+      a.id,
+  ];
+
+  /// Creates (no [id]) or updates a daemon workspace; returns its id.
+  String saveWorkspace(String name, List<String> accountIds, {String? id}) {
+    final wsId = id ?? _freeWorkspaceId(name);
+    daemon!.upsertWorkspace(wsId, name.trim(), accountIds);
+    // Select it once the daemon reports it.
+    if (id == null) _selectWhenLive = wsId;
+    return wsId;
+  }
+
+  String _freeWorkspaceId(String name) {
+    final base = foldAccents(
+      name,
+    ).replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-+|-+$'), '');
+    var id = base.isEmpty ? 'workspace' : base;
+    while (liveWorkspaces.any((w) => w.id == id)) {
+      id = '$id-2';
+    }
+    return id;
+  }
+
+  String? _selectWhenLive;
+
+  /// Daemon repositories of the current workspace.
+  List<Map<String, dynamic>> get workspaceRepos => [
+    for (final r in daemon?.projects ?? const <Map<String, dynamic>>[])
+      if (workspaceOfRepo(r['id'] as String?) == workspaceId) r,
+  ];
+
+  void deleteWorkspace(String id) => daemon!.removeWorkspace(id);
+
+  /// A new Claude Code account in the current workspace; a session opens on
+  /// it so you can log in.
+  void addAccount(String id) {
+    daemon!.addAccount(id, workspaceId);
+    _loginAccount = id;
+  }
+
+  String? _loginAccount;
+
+  /// The live workspace an account is in (the first one by default).
+  String _workspaceOfAccount(String accountId) {
+    final d = daemon!;
+    for (final w in d.workspaces) {
+      if ((w['accounts'] as List).contains(accountId)) return w['id'] as String;
+    }
+    return liveWorkspaces.first.id;
+  }
+
+  /// The live workspace a daemon repository is in.
+  String workspaceOfRepo(String? repoId) {
+    final repo = daemon!.projects.where((r) => r['id'] == repoId).firstOrNull;
+    final ws = repo?['workspace_id'] as String?;
+    return ws != null && isLiveWorkspace(ws) ? ws : liveWorkspaces.first.id;
+  }
+
+  void _ensureLayout(String id) {
+    _layouts.putIfAbsent(id, () => LayoutLeaf('p-$id', null));
+    _focusedLeaf.putIfAbsent(id, () => _firstLeaf(_layouts[id]!).id);
+  }
+
   List<Workspace> get workspaces => [
-    ...mock.workspaces,
-    if (daemon?.paired ?? false) liveWorkspace,
+    if (demo) ...mock.workspaces,
+    ...liveWorkspaces,
   ];
 
   bool _attachNextLive = false;
@@ -65,19 +170,34 @@ class HarnessStore extends ChangeNotifier {
   void _syncLive() {
     final d = daemon!;
     _liveTesting.removeWhere(d.mcpTests.containsKey);
-    _layouts.putIfAbsent(
-      liveWorkspace.id,
-      () => const LayoutLeaf('p-live', null),
-    );
-    _focusedLeaf.putIfAbsent(liveWorkspace.id, () => 'p-live');
+    final live = liveWorkspaces;
+    for (final w in live) {
+      _ensureLayout(w.id);
+    }
+    // A workspace that went away: show the first one there is.
+    if (!workspaces.any((w) => w.id == workspaceId) && workspaces.isNotEmpty) {
+      workspaceId = workspaces.first.id;
+      openProjectId = null;
+    }
+    if (live.isEmpty) return notifyListeners();
+    if (_selectWhenLive case final id? when isLiveWorkspace(id)) {
+      _selectWhenLive = null;
+      workspaceId = id;
+      openProjectId = null;
+    }
+    if (_loginAccount case final id? when d.accounts.contains(id)) {
+      _loginAccount = null;
+      _attachNextLive = true;
+      d.createSession(id);
+    }
 
-    accounts.removeWhere((a) => a.workspaceId == liveWorkspace.id);
+    accounts.removeWhere((a) => a.live);
     for (final id in d.accounts) {
       final q = d.quotas[id];
       accounts.add(
         Account(
           id: id,
-          workspaceId: liveWorkspace.id,
+          workspaceId: _workspaceOfAccount(id),
           email: id,
           plan: 'Claude',
           fiveHour: QuotaWindow(
@@ -92,6 +212,7 @@ class HarnessStore extends ChangeNotifier {
           ),
           readAt: q?.readAt ?? now,
           hasReading: q != null,
+          live: true,
         ),
       );
     }
@@ -112,7 +233,7 @@ class HarnessStore extends ChangeNotifier {
       sessions.add(
         Session(
           id: l.id,
-          workspaceId: liveWorkspace.id,
+          workspaceId: _workspaceOfAccount(l.accountId),
           accountId: l.accountId,
           name: projectName ?? cwdName,
           branch: l.branch ?? l.cwd,
@@ -135,13 +256,12 @@ class HarnessStore extends ChangeNotifier {
     _syncLivePlans(d);
     // Panes showing a session that ended become empty.
     final ids = d.sessions.map((s) => s.id).toSet();
-    _layouts[liveWorkspace.id] = _clearMissing(
-      _layouts[liveWorkspace.id]!,
-      ids,
-    );
+    for (final w in live) {
+      _layouts[w.id] = _clearMissing(_layouts[w.id]!, ids);
+    }
     if (_attachNextLive && added != null) {
       _attachNextLive = false;
-      if (workspaceId == liveWorkspace.id) {
+      if (isLive) {
         showSession(added);
         return;
       }
@@ -155,7 +275,7 @@ class HarnessStore extends ChangeNotifier {
   final _livePlans = <String, (String, Project)>{};
 
   void _syncLivePlans(DaemonClient d) {
-    projects.removeWhere((p) => p.workspaceId == liveWorkspace.id);
+    projects.removeWhere((p) => isLiveWorkspace(p.workspaceId) || p.live);
     final ids = <String>{};
     for (final doc in d.plans) {
       final id = doc['id'] as String;
@@ -173,7 +293,8 @@ class HarnessStore extends ChangeNotifier {
 
   Project _adoptDoc(Map<String, dynamic> doc) {
     final id = doc['id'] as String;
-    final key = canonical(doc);
+    final ws = workspaceOfRepo(doc['project_id'] as String?);
+    final key = '$ws ${canonical(doc)}';
     final known = _livePlans[id];
     if (known != null && known.$1 == key) return known.$2;
     final repoName =
@@ -182,20 +303,14 @@ class HarnessStore extends ChangeNotifier {
             .map((r) => r['name'] as String)
             .firstOrNull ??
         '${doc['project_id']}';
-    final p = projectFromDoc(
-      doc,
-      workspaceId: liveWorkspace.id,
-      repoName: repoName,
-    );
+    final p = projectFromDoc(doc, workspaceId: ws, repoName: repoName);
     _livePlans[id] = (key, p);
     return p;
   }
 
   /// The daemon document of a live plan, if [plan] is one.
   Map<String, dynamic>? _liveDoc(Plan plan) {
-    final p = projects
-        .where((p) => p.plan == plan && p.workspaceId == liveWorkspace.id)
-        .firstOrNull;
+    final p = projects.where((p) => p.plan == plan && p.live).firstOrNull;
     if (p == null) return null;
     return daemon!.plans.where((d) => d['id'] == p.id).firstOrNull;
   }
@@ -207,11 +322,11 @@ class HarnessStore extends ChangeNotifier {
     if (doc == null) return;
     final p = _livePlans[doc['id']]!.$2;
     final saved = {...doc, 'state': planState(p)};
-    _livePlans[p.id] = (canonical(saved), p);
+    _livePlans[p.id] = ('${p.workspaceId} ${canonical(saved)}', p);
     daemon!.savePlan(saved);
   }
 
-  bool isLiveProject(Project p) => p.workspaceId == liveWorkspace.id;
+  bool isLiveProject(Project p) => p.live;
 
   /// Live: puts a failed or stopped card back in line.
   void retryCard(Project p, TaskCard c) {
@@ -256,7 +371,7 @@ class HarnessStore extends ChangeNotifier {
   }
 
   /// "Este Mac" is selected: catalog, templates and sessions are real.
-  bool get isLive => daemon != null && workspaceId == liveWorkspace.id;
+  bool get isLive => daemon != null && isLiveWorkspace(workspaceId);
 
   /// Global catalog, configured once and enabled per session.
   final List<CatalogItem> _mockCatalog = [...mock.catalog];
@@ -485,11 +600,11 @@ class HarnessStore extends ChangeNotifier {
   void prepareLiveAttach() => _attachNextLive = true;
 
   void newSession() {
-    if (workspaceId == liveWorkspace.id) {
-      final d = daemon;
-      if (d == null || d.accounts.isEmpty) return;
+    if (isLive) {
+      final acc = workspaceAccounts.firstOrNull;
+      if (acc == null) return;
       _attachNextLive = true;
-      d.createSession(d.accounts.first);
+      daemon!.createSession(acc.id);
       return;
     }
     final acc = workspaceAccounts.first;
@@ -748,7 +863,7 @@ class HarnessStore extends ChangeNotifier {
 
   /// The account live plans run on: the one with the most 5h room.
   String get _liveAccount {
-    final live = accounts.where((a) => a.workspaceId == liveWorkspace.id);
+    final live = workspaceAccounts.where((a) => a.live);
     return live
         .reduce(
           (a, b) => a.fiveHour.usedPercent <= b.fiveHour.usedPercent ? a : b,

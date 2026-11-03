@@ -75,7 +75,7 @@ fn main() -> std::io::Result<()> {
                 Some(c) => eprintln!("orcd: navegador dos workspaces: {}", c.display()),
                 None => eprintln!("orcd: nenhum Chrome/Chromium/Brave/Edge; navegador dos workspaces desligado"),
             }
-            let daemon = daemon.with_browsers(orc_daemon::browser::Browsers::new(home.join("browsers"), chrome));
+            let daemon = daemon.with_home(home.clone()).with_browsers(orc_daemon::browser::Browsers::new(home.join("browsers"), chrome));
             runtime.block_on(async move {
                 tokio::spawn(daemon.clone().serve_otlp(otlp));
                 let key = secrets::daemon_key(&secrets, &home.join("daemon.key"))?;

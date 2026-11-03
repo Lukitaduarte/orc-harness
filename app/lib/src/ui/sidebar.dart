@@ -5,6 +5,7 @@ import '../model.dart';
 import 'connect_dialog.dart';
 import 'format.dart';
 import 'repos.dart';
+import 'workspace_dialogs.dart';
 import 'new_plan_dialog.dart';
 
 /// Narrow rail with one avatar per workspace, like Slack or Discord.
@@ -29,6 +30,10 @@ class WorkspaceRail extends StatelessWidget {
               anchorAlignment: Alignment.centerRight,
               child: GestureDetector(
                 onTap: () => store.selectWorkspace(ws.id),
+                // Right click: rename, accounts, delete.
+                onSecondaryTap: store.isLiveWorkspace(ws.id)
+                    ? () => showWorkspaceDialog(context, store, editing: ws)
+                    : null,
                 child: Container(
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
@@ -50,6 +55,18 @@ class WorkspaceRail extends StatelessWidget {
             ),
             const Gap(8),
           ],
+          if (store.daemon != null)
+            Tooltip(
+              tooltip: (context) =>
+                  const TooltipContainer(child: Text('Novo workspace')),
+              alignment: Alignment.centerLeft,
+              anchorAlignment: Alignment.centerRight,
+              child: GhostButton(
+                density: ButtonDensity.icon,
+                onPressed: () => showWorkspaceDialog(context, store),
+                child: const Icon(LucideIcons.plus, size: 18),
+              ),
+            ),
           const Spacer(),
           Tooltip(
             tooltip: (context) =>
@@ -112,13 +129,35 @@ class Sidebar extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        Text(store.workspace.name).large().semiBold(),
+        Row(
+          children: [
+            Expanded(child: Text(store.workspace.name).large().semiBold()),
+            if (store.isLive)
+              GhostButton(
+                density: ButtonDensity.icon,
+                size: ButtonSize.small,
+                onPressed: () => showWorkspaceDialog(
+                  context,
+                  store,
+                  editing: store.workspace,
+                ),
+                child: const Icon(LucideIcons.settings2, size: 14),
+              ),
+          ],
+        ),
         Text(
           '${accounts.length} contas · ${sessions.length} sessões',
         ).xSmall().muted(),
         const Gap(16),
         const _SectionLabel('Contas'),
         for (final a in accounts) _AccountCard(a, store.now),
+        if (store.isLive)
+          GhostButton(
+            alignment: Alignment.centerLeft,
+            leading: const Icon(LucideIcons.userPlus, size: 16),
+            onPressed: () => showNewAccountDialog(context, store),
+            child: const Text('Nova conta').small(),
+          ),
         const Gap(8),
         const _SectionLabel('Sessões'),
         for (final s in sessions)

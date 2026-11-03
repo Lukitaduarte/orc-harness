@@ -72,6 +72,7 @@ Project projectFromDoc(
     repo: repoName,
     cards: plan.startedAt == null ? [] : plan.proposedCards,
     plan: plan,
+    live: true,
   );
 }
 

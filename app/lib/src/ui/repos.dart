@@ -14,7 +14,7 @@ class RepoSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final p in d.projects)
+        for (final p in store.workspaceRepos)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             child: Row(
@@ -60,7 +60,8 @@ class RepoSection extends StatelessWidget {
           onPressed: () => _dialog(context, _AddRepo(store)),
           child: const Text('Adicionar repositório').small(),
         ),
-        if (d.projects.isNotEmpty && d.accounts.isNotEmpty)
+        if (store.workspaceRepos.isNotEmpty &&
+            store.workspaceAccounts.isNotEmpty)
           Tooltip(
             tooltip: (context) => const TooltipContainer(
               child: Text(
@@ -76,7 +77,7 @@ class RepoSection extends StatelessWidget {
                 store.prepareLiveAttach();
                 d.send({
                   'type': 'trust_worktrees',
-                  'account_id': d.accounts.first,
+                  'account_id': store.workspaceAccounts.first.id,
                 });
               },
               child: const Text('Confiar nas worktrees').small(),
@@ -178,6 +179,7 @@ class _AddRepoState extends State<_AddRepo> {
                       _name.text.trim(),
                       _path.text.trim(),
                       _base.text.trim(),
+                      workspaceId: widget.store.workspaceId,
                     );
                     closeOverlay(context);
                   },
@@ -254,14 +256,14 @@ class _NewWorktreeState extends State<_NewWorktree> {
             ),
             const Gap(8),
             PrimaryButton(
-              onPressed: !_valid || d.accounts.isEmpty
+              onPressed: !_valid || widget.store.workspaceAccounts.isEmpty
                   ? null
                   : () {
                       widget.store.prepareLiveAttach();
                       d.createWorktreeSession(
                         widget.projectId,
                         _branch.text.trim(),
-                        d.accounts.first,
+                        widget.store.workspaceAccounts.first.id,
                       );
                       closeOverlay(context);
                     },

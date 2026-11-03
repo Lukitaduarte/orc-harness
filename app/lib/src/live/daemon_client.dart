@@ -127,6 +127,20 @@ class DaemonClient extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Workspaces (orc_protocol::WorkspaceInfo JSON); empty until reported.
+  List<Map<String, dynamic>> workspaces = [];
+
+  void upsertWorkspace(String id, String name, List<String> accounts) => send({
+    'type': 'upsert_workspace',
+    'workspace': {'id': id, 'name': name, 'accounts': accounts},
+  });
+
+  void removeWorkspace(String id) =>
+      send({'type': 'remove_workspace', 'id': id});
+
+  void addAccount(String id, String workspaceId) =>
+      send({'type': 'add_account', 'id': id, 'workspace_id': workspaceId});
+
   /// Local repositories the daemon makes worktrees from.
   List<Map<String, dynamic>> projects = [];
 
@@ -227,11 +241,17 @@ class DaemonClient extends ChangeNotifier {
   /// Last search: (query, hits, truncated).
   (String, List<Map<String, dynamic>>, bool)? search;
 
-  void addProject(String name, String repo, String base) => send({
+  void addProject(
+    String name,
+    String repo,
+    String base, {
+    String? workspaceId,
+  }) => send({
     'type': 'add_project',
     'name': name,
     'repo': repo,
     'base_branch': base,
+    'workspace_id': workspaceId,
   });
 
   void createWorktreeSession(
@@ -451,6 +471,9 @@ class DaemonClient extends ChangeNotifier {
         notifyListeners();
       case 'projects':
         projects = (m['projects'] as List).cast<Map<String, dynamic>>();
+        notifyListeners();
+      case 'workspaces':
+        workspaces = (m['workspaces'] as List).cast<Map<String, dynamic>>();
         notifyListeners();
       case 'plans':
         plans = (m['plans'] as List).cast<Map<String, dynamic>>();

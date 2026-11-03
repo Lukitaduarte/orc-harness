@@ -59,7 +59,10 @@ void main() {
       expect(languageOf('lib/main.dart'), 'dart');
       expect(languageOf('ios/Runner/AppDelegate.swift'), 'swift');
       expect(languageOf('README.md'), isNull);
-    expect((symbolKind(5), symbolKind(12), symbolKind(99)), ('classe', 'função', 'símbolo'));
+      expect(
+        (symbolKind(5), symbolKind(12), symbolKind(99)),
+        ('classe', 'função', 'símbolo'),
+      );
     },
   );
 

@@ -29,7 +29,7 @@ impl Projects {
         self.list.iter().find(|p| p.id == id)
     }
 
-    pub fn add(&mut self, name: &str, repo: &str, base_branch: &str) -> std::io::Result<ProjectInfo> {
+    pub fn add(&mut self, name: &str, repo: &str, base_branch: &str, workspace_id: Option<String>) -> std::io::Result<ProjectInfo> {
         let path = crate::catalog::expand(repo);
         if !is_repo(&path) {
             return Err(std::io::Error::other(format!("{} não é um repositório git", path.display())));
@@ -55,6 +55,7 @@ impl Projects {
             name: name.into(),
             repo: path.display().to_string(),
             base_branch: base_branch.into(),
+            workspace_id,
         };
         self.list.push(p.clone());
         self.save()?;

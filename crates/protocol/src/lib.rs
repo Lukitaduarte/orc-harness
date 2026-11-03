@@ -328,6 +328,17 @@ pub struct ProjectInfo {
     /// Path of the main clone.
     pub repo: String,
     pub base_branch: String,
+    /// The workspace it belongs to (none: the first one).
+    #[serde(default)]
+    pub workspace_id: Option<String>,
+}
+
+/// A workspace: a name and the accounts in it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkspaceInfo {
+    pub id: String,
+    pub name: String,
+    pub accounts: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -450,7 +461,18 @@ pub enum ClientMessage {
     RemoveTemplate { id: String },
     /// Usage per day, account and model for the last `days` days.
     UsageReport { days: u32 },
-    AddProject { name: String, repo: String, base_branch: String },
+    AddProject {
+        name: String,
+        repo: String,
+        base_branch: String,
+        #[serde(default)]
+        workspace_id: Option<String>,
+    },
+    UpsertWorkspace { workspace: WorkspaceInfo },
+    RemoveWorkspace { id: String },
+    /// A new Claude Code account with its own config folder (log in from a
+    /// session on it), placed in `workspace_id`.
+    AddAccount { id: String, workspace_id: String },
     RemoveProject { id: String },
     /// A worktree on `branch` (created from the base if new) and a session
     /// in it, with conventional commits enforced.
@@ -531,6 +553,7 @@ pub enum DaemonMessage {
     /// `gh pr view` JSON (number, state, url, checks, review), or `none`.
     Pr { session_id: String, pr: Option<serde_json::Value> },
     Plans { plans: Vec<PlanDoc> },
+    Workspaces { workspaces: Vec<WorkspaceInfo> },
     BrowserState { profile: String, open: bool, url: String },
     DirEntries { session_id: String, path: String, entries: Vec<DirEntry> },
     FileContent { session_id: String, path: String, text: String },

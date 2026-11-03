@@ -65,7 +65,11 @@ class Account {
     required this.sevenDay,
     required this.readAt,
     this.hasReading = true,
+    this.live = false,
   });
+
+  /// An account of the daemon (not demo data).
+  final bool live;
 
   final String id;
   final String workspaceId;
@@ -252,7 +256,11 @@ class Project {
     required this.repo,
     required this.cards,
     this.plan,
+    this.live = false,
   });
+
+  /// A plan kept by the daemon (not demo data).
+  final bool live;
 
   final String id;
   final String workspaceId;

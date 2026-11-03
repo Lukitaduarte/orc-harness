@@ -14,3 +14,4 @@ pub mod secrets;
 pub mod server;
 pub mod session;
 pub mod usage;
+pub mod workspaces;

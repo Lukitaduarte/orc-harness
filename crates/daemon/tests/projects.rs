@@ -60,14 +60,12 @@ fn worktree_session_enforces_conventional_commits() {
     let bad = daemon.handle(ClientMessage::AddProject {
         name: "Não repo".into(),
         repo: dir.display().to_string(),
-        base_branch: "main".into(),
-    });
+        base_branch: "main".into(), workspace_id: None });
     assert!(matches!(&bad[..], [DaemonMessage::Error { .. }]));
     assert!(daemon.handle(ClientMessage::AddProject {
         name: "Plataforma Web".into(),
         repo: r.display().to_string(),
-        base_branch: "main".into(),
-    })
+        base_branch: "main".into(), workspace_id: None })
     .is_empty());
     let project = daemon.projects.lock().unwrap().list()[0].clone();
     assert_eq!(project.id, "plataforma-web");

@@ -83,6 +83,10 @@ impl SessionManager {
         }
     }
 
+    pub fn add_account(&mut self, account: Account) {
+        self.accounts.insert(account.id.clone(), account);
+    }
+
     pub fn account(&self, id: &str) -> Option<&Account> {
         self.accounts.get(id)
     }

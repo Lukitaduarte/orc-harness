@@ -52,7 +52,7 @@ class _NewPlanFormState extends State<_NewPlanForm> {
 
   /// Live: the daemon repository the plan is for.
   late String? _repo =
-      widget.store.daemon?.projects.firstOrNull?['id'] as String?;
+      widget.store.workspaceRepos.firstOrNull?['id'] as String?;
   bool get _live => widget.store.isLive;
 
   @override
@@ -152,7 +152,7 @@ class _NewPlanFormState extends State<_NewPlanForm> {
   /// Live plans belong to a repository: its planning session reads the
   /// code there and its cards run in worktrees of it.
   List<Widget> _repoFields() {
-    final repos = widget.store.daemon!.projects;
+    final repos = widget.store.workspaceRepos;
     return [
       const Text('Repositório').small().medium(),
       const Gap(6),

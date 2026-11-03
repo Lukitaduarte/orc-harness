@@ -94,7 +94,7 @@ fn cards_run_in_order_and_follow_their_prs() {
     );
     let mut events = daemon.events.subscribe();
     assert!(daemon
-        .handle(ClientMessage::AddProject { name: "Web".into(), repo: r.display().to_string(), base_branch: "main".into() })
+        .handle(ClientMessage::AddProject { name: "Web".into(), repo: r.display().to_string(), base_branch: "main".into() , workspace_id: None })
         .is_empty());
     assert!(daemon
         .handle(ClientMessage::SavePlan {
