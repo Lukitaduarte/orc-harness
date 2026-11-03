@@ -2,6 +2,7 @@
 
 pub mod browser;
 pub mod catalog;
+pub mod db;
 pub mod config;
 pub mod gates;
 pub mod git;

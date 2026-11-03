@@ -113,7 +113,8 @@ impl Daemon {
     /// accounts to `home/config.json`.
     pub fn with_home(mut self, home: PathBuf) -> Self {
         self.workspaces = Arc::new(Mutex::new(crate::workspaces::Workspaces::load(Some(home.join("workspaces.json")))));
-        self.memory = Some(Arc::new(crate::memory::Memory::new(home.join("memory"))));
+        let db = self.usage.lock().unwrap().db();
+        self.memory = Some(Arc::new(crate::memory::Memory::open(db, Some(home.join("memory")))));
         self.home = Some(home);
         self.sync_memory_providers();
         self

@@ -2,12 +2,13 @@
 //!
 //! Each session runs with OTLP/HTTP-JSON pointed at the daemon and its
 //! resource tagged `orc.session` / `orc.account`. Metrics are deltas (the
-//! default), so every data point is added. Every point is appended to
-//! `usage.jsonl`, and totals are rebuilt from it on start.
+//! default), so every data point is added. Points are kept in `orc.db`
+//! (table `usage`); per-session totals are rebuilt from it on start.
 
-use std::collections::{BTreeMap, HashMap};
-use std::io::Write;
+use std::collections::HashMap;
 use std::path::PathBuf;
+
+use crate::db::{Db, Value as DbValue, opt, opt_text, real, t, text};
 
 use orc_protocol::{Usage, UsageRow};
 use serde::{Deserialize, Serialize};
@@ -29,13 +30,11 @@ pub struct Point {
     pub branch: Option<String>,
 }
 
-/// Day, account, model, project, branch.
-type DayKey = (String, String, String, Option<String>, Option<String>);
 
 pub struct UsageStore {
-    log: PathBuf,
+    db: Db,
+    /// Totals per session, kept in memory (asked on every export).
     by_session: HashMap<String, Usage>,
-    by_day: BTreeMap<DayKey, Usage>,
 }
 
 fn add(u: &mut Usage, kind: &str, v: f64) {
@@ -49,23 +48,57 @@ fn add(u: &mut Usage, kind: &str, v: f64) {
     }
 }
 
+const SCHEMA: &str = "CREATE TABLE IF NOT EXISTS usage (
+    day TEXT NOT NULL, session TEXT NOT NULL, account TEXT NOT NULL, model TEXT NOT NULL,
+    project TEXT, branch TEXT, kind TEXT NOT NULL, value REAL NOT NULL);
+CREATE INDEX IF NOT EXISTS usage_day ON usage (day);";
+
 impl UsageStore {
+    /// Usage in `orc.db` next to `log`; the points of an old `log`
+    /// (usage.jsonl) move into it once and the file is renamed `.imported`.
     pub fn load(log: PathBuf) -> Self {
-        let mut s = Self { log, by_session: HashMap::new(), by_day: BTreeMap::new() };
-        if let Ok(raw) = std::fs::read_to_string(&s.log) {
-            for line in raw.lines() {
-                if let Ok(p) = serde_json::from_str::<Point>(line) {
-                    s.apply(&p);
-                }
+        let db = Db::open(&log.with_file_name("orc.db")).unwrap_or_else(|e| {
+            eprintln!("orcd: {e}; uso só em memória nesta execução");
+            Db::memory()
+        });
+        Self::open(db, Some(log))
+    }
+
+    pub fn open(db: Db, legacy: Option<PathBuf>) -> Self {
+        if let Err(e) = db.batch(SCHEMA) {
+            eprintln!("orcd: tabela de uso: {e}");
+        }
+        let mut s = Self { db, by_session: HashMap::new() };
+        if let Some(log) = legacy.filter(|l| l.exists()) {
+            let points: Vec<Point> = std::fs::read_to_string(&log)
+                .unwrap_or_default()
+                .lines()
+                .filter_map(|l| serde_json::from_str(l).ok())
+                .collect();
+            if s.insert(&points).is_ok() {
+                let _ = std::fs::rename(&log, log.with_extension("jsonl.imported"));
             }
+        }
+        let rows = s.db.query("SELECT session, kind, SUM(value) FROM usage GROUP BY session, kind", vec![]).unwrap_or_default();
+        for r in rows {
+            add(s.by_session.entry(text(&r[0])).or_default(), &text(&r[1]), real(&r[2]));
         }
         s
     }
 
-    fn apply(&mut self, p: &Point) {
-        add(self.by_session.entry(p.session_id.clone()).or_default(), &p.kind, p.value);
-        let key = (p.day.clone(), p.account_id.clone(), p.model.clone(), p.project.clone(), p.branch.clone());
-        add(self.by_day.entry(key).or_default(), &p.kind, p.value);
+    /// The database, for the other stores that live in it.
+    pub fn db(&self) -> Db {
+        self.db.clone()
+    }
+
+    fn insert(&self, points: &[Point]) -> std::io::Result<()> {
+        for p in points {
+            self.db.exec(
+                "INSERT INTO usage (day, session, account, model, project, branch, kind, value) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                vec![t(&p.day), t(&p.session_id), t(&p.account_id), t(&p.model), opt(&p.project), opt(&p.branch), t(&p.kind), DbValue::Real(p.value)],
+            )?;
+        }
+        Ok(())
     }
 
     /// Records points; returns the sessions whose totals changed.
@@ -73,16 +106,12 @@ impl UsageStore {
         if points.is_empty() {
             return Vec::new();
         }
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&self.log) {
-            for p in points {
-                if let Ok(line) = serde_json::to_string(p) {
-                    let _ = writeln!(f, "{line}");
-                }
-            }
+        if let Err(e) = self.insert(points) {
+            eprintln!("orcd: não gravei uso: {e}");
         }
         let mut changed = Vec::new();
         for p in points {
-            self.apply(p);
+            add(self.by_session.entry(p.session_id.clone()).or_default(), &p.kind, p.value);
             if !changed.contains(&p.session_id) {
                 changed.push(p.session_id.clone());
             }
@@ -94,20 +123,27 @@ impl UsageStore {
         self.by_session.get(id).copied().unwrap_or_default()
     }
 
-    /// Rows from `since_day` (YYYY-MM-DD) on, oldest first.
+    /// Rows from `since_day` (YYYY-MM-DD) on, oldest first: per day,
+    /// account, model, project and branch.
     pub fn report(&self, since_day: &str) -> Vec<UsageRow> {
-        self.by_day
-            .iter()
-            .filter(|((day, ..), _)| day.as_str() >= since_day)
-            .map(|((day, account, model, project, branch), usage)| UsageRow {
-                day: day.clone(),
-                account_id: account.clone(),
-                model: model.clone(),
-                project_id: project.clone(),
-                branch: branch.clone(),
-                usage: *usage,
-            })
-            .collect()
+        let rows = self
+            .db
+            .query(
+                "SELECT day, account, model, project, branch, kind, SUM(value) FROM usage WHERE day >= ?1 \
+                 GROUP BY day, account, model, project, branch, kind ORDER BY day, account, model, project, branch",
+                vec![t(since_day)],
+            )
+            .unwrap_or_default();
+        let mut out: Vec<UsageRow> = Vec::new();
+        for r in rows {
+            let key = (text(&r[0]), text(&r[1]), text(&r[2]), opt_text(&r[3]), opt_text(&r[4]));
+            let same = out.last().is_some_and(|l| (l.day.clone(), l.account_id.clone(), l.model.clone(), l.project_id.clone(), l.branch.clone()) == key);
+            if !same {
+                out.push(UsageRow { day: key.0, account_id: key.1, model: key.2, project_id: key.3, branch: key.4, usage: Usage::default() });
+            }
+            add(&mut out.last_mut().expect("pushed").usage, &text(&r[5]), real(&r[6]));
+        }
+        out
     }
 }
 
@@ -231,7 +267,8 @@ mod tests {
         assert_eq!((u.input, u.output), (2000, 300));
         assert!((u.cost_usd - 0.042).abs() < 1e-9);
 
-        let again = UsageStore::load(log);
+        drop(store); // one daemon at a time on the file
+        let again = UsageStore::load(log.clone());
         assert_eq!(again.session("s1"), u);
         let rows = again.report("2026-11-01");
         assert_eq!(rows.len(), 1);
@@ -249,11 +286,25 @@ mod tests {
         let mut store = UsageStore::load(dir.path().join("u.jsonl"));
         store.record(&parse_otlp(&body));
         store.record(&parse_otlp(&export("s1", "output", "claude_code.token.usage", json!(5.0))));
+        drop(store);
         let again = UsageStore::load(dir.path().join("u.jsonl"));
         let rows = again.report("2026-01-01");
         let labeled: Vec<_> = rows.iter().map(|r| (r.project_id.as_deref(), r.branch.as_deref(), r.usage.output)).collect();
         assert!(labeled.contains(&(Some("web"), Some("feat/1-login"), 30)), "{labeled:?}");
         assert!(labeled.contains(&(None, None, 5)), "{labeled:?}");
+    }
+
+    #[test]
+    fn an_old_usage_log_moves_into_the_database_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("usage.jsonl");
+        let p = Point { day: "2026-11-02".into(), session_id: "s9".into(), account_id: "w".into(), model: "m".into(), kind: "output".into(), value: 7.0, project: None, branch: None };
+        std::fs::write(&log, format!("{}\n{}\n", serde_json::to_string(&p).unwrap(), serde_json::to_string(&p).unwrap())).unwrap();
+        let store = UsageStore::load(log.clone());
+        assert_eq!(store.session("s9").output, 14);
+        assert!(!log.exists() && dir.path().join("usage.jsonl.imported").exists());
+        drop(store);
+        assert_eq!(UsageStore::load(log).session("s9").output, 14, "imported once");
     }
 
     #[test]

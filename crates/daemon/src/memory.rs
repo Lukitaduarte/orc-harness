@@ -1,16 +1,22 @@
 //! The harness's own memory provider: what agents of a workspace learn and
 //! want to keep (decisions, preferences, facts about the projects), shared
 //! by its sessions through `remember` / `recall` / `forget`.
-//! `~/.orc/memory/<workspace>.jsonl`, one entry per line.
+//! Kept in `orc.db` (table `memory`).
 
-use std::io::Write;
 use std::path::PathBuf;
 
 use orc_protocol::MemoryEntry;
 
+use crate::db::{Db, Value, int, t, text};
+
 pub struct Memory {
-    dir: PathBuf,
+    db: Db,
 }
+
+const SCHEMA: &str = "CREATE TABLE IF NOT EXISTS memory (
+    id TEXT PRIMARY KEY, workspace TEXT NOT NULL, at INTEGER NOT NULL,
+    session TEXT NOT NULL, text TEXT NOT NULL, tags TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS memory_workspace ON memory (workspace);";
 
 /// Lowercase words without accents, for matching.
 fn words(s: &str) -> Vec<String> {
@@ -34,27 +40,53 @@ fn words(s: &str) -> Vec<String> {
 }
 
 impl Memory {
-    pub fn new(dir: PathBuf) -> Self {
-        Self { dir }
+    /// The memory in `db`. Entries of an old `legacy` folder
+    /// (`<workspace>.jsonl` files) move in once; the files become `.imported`.
+    pub fn open(db: Db, legacy: Option<PathBuf>) -> Self {
+        if let Err(e) = db.batch(SCHEMA) {
+            eprintln!("orcd: tabela de memória: {e}");
+        }
+        let m = Self { db };
+        for f in legacy.iter().flat_map(|d| std::fs::read_dir(d).into_iter().flatten().flatten()) {
+            let path = f.path();
+            let Some(ws) = path.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_suffix(".jsonl")).map(String::from) else { continue };
+            let entries: Vec<MemoryEntry> = std::fs::read_to_string(&path).unwrap_or_default().lines().filter_map(|l| serde_json::from_str(l).ok()).collect();
+            if entries.iter().all(|e| m.insert(&ws, e).is_ok()) {
+                let _ = std::fs::rename(&path, path.with_extension("jsonl.imported"));
+            }
+        }
+        m
     }
 
-    fn file(&self, workspace: &str) -> std::io::Result<PathBuf> {
-        if !crate::workspaces::valid_id(workspace) {
-            return Err(std::io::Error::other("workspace inválido"));
-        }
-        Ok(self.dir.join(format!("{workspace}.jsonl")))
+    fn insert(&self, workspace: &str, e: &MemoryEntry) -> std::io::Result<()> {
+        self.db.exec(
+            "INSERT OR REPLACE INTO memory (id, workspace, at, session, text, tags) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            vec![t(&e.id), t(workspace), Value::Integer(e.at), t(&e.session), t(&e.text), t(&serde_json::to_string(&e.tags)?)],
+        )?;
+        Ok(())
+    }
+
+    fn check(workspace: &str) -> std::io::Result<()> {
+        if crate::workspaces::valid_id(workspace) { Ok(()) } else { Err(std::io::Error::other("workspace inválido")) }
     }
 
     pub fn list(&self, workspace: &str) -> Vec<MemoryEntry> {
-        let Ok(file) = self.file(workspace) else { return Vec::new() };
-        std::fs::read_to_string(file)
+        self.db
+            .query("SELECT id, at, session, text, tags FROM memory WHERE workspace = ?1 ORDER BY at, id", vec![t(workspace)])
             .unwrap_or_default()
-            .lines()
-            .filter_map(|l| serde_json::from_str(l).ok())
+            .into_iter()
+            .map(|r| MemoryEntry {
+                id: text(&r[0]),
+                at: int(&r[1]),
+                session: text(&r[2]),
+                text: text(&r[3]),
+                tags: serde_json::from_str(&text(&r[4])).unwrap_or_default(),
+            })
             .collect()
     }
 
     pub fn remember(&self, workspace: &str, session: &str, text: &str, tags: Vec<String>) -> std::io::Result<MemoryEntry> {
+        Self::check(workspace)?;
         let text = text.trim();
         if text.is_empty() || text.len() > 4000 {
             return Err(std::io::Error::other("a memória precisa de texto (até 4000 caracteres)"));
@@ -66,9 +98,7 @@ impl Memory {
             text: text.into(),
             tags,
         };
-        std::fs::create_dir_all(&self.dir)?;
-        let mut f = std::fs::OpenOptions::new().create(true).append(true).open(self.file(workspace)?)?;
-        writeln!(f, "{}", serde_json::to_string(&entry)?)?;
+        self.insert(workspace, &entry)?;
         Ok(entry)
     }
 
@@ -92,18 +122,8 @@ impl Memory {
     }
 
     pub fn forget(&self, workspace: &str, id: &str) -> std::io::Result<bool> {
-        let all = self.list(workspace);
-        let kept: Vec<&MemoryEntry> = all.iter().filter(|e| e.id != id).collect();
-        if kept.len() == all.len() {
-            return Ok(false);
-        }
-        let mut out = String::new();
-        for e in kept {
-            out.push_str(&serde_json::to_string(e)?);
-            out.push('\n');
-        }
-        std::fs::write(self.file(workspace)?, out)?;
-        Ok(true)
+        Self::check(workspace)?;
+        Ok(self.db.exec("DELETE FROM memory WHERE workspace = ?1 AND id = ?2", vec![t(workspace), t(id)])? > 0)
     }
 }
 
@@ -113,8 +133,7 @@ mod tests {
 
     #[test]
     fn remembers_recalls_by_words_and_forgets() {
-        let dir = tempfile::tempdir().unwrap();
-        let m = Memory::new(dir.path().to_path_buf());
+        let m = Memory::open(Db::memory(), None);
         m.remember("trabalho", "s1", "O app usa Riverpod, não Bloc, para estado.", vec!["arquitetura".into()]).unwrap();
         let deploy = m.remember("trabalho", "s2", "Deploy da API é no Railway, serviço api-prod.", vec!["deploy".into()]).unwrap();
         m.remember("pessoal", "s3", "Blog em Astro.", vec![]).unwrap();
@@ -130,5 +149,15 @@ mod tests {
         assert_eq!(m.list("trabalho").len(), 1);
         assert!(m.remember("../x", "s", "x", vec![]).is_err());
         assert!(m.remember("trabalho", "s", "  ", vec![]).is_err());
+    }
+
+    #[test]
+    fn old_memory_files_move_in_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let e = MemoryEntry { id: "m1".into(), at: 5, session: "s".into(), text: "Deploy no Railway".into(), tags: vec!["deploy".into()] };
+        std::fs::write(dir.path().join("trabalho.jsonl"), format!("{}\n", serde_json::to_string(&e).unwrap())).unwrap();
+        let m = Memory::open(Db::memory(), Some(dir.path().to_path_buf()));
+        assert_eq!(m.list("trabalho"), [e]);
+        assert!(dir.path().join("trabalho.jsonl.imported").exists());
     }
 }
