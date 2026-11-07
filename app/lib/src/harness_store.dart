@@ -107,6 +107,14 @@ class HarnessStore extends ChangeNotifier {
   final bool demo;
   bool profilePanelOpen = true;
 
+  /// Sidebar shown or hidden by hand; null follows the window width.
+  bool? sidebarOverride;
+
+  void toggleSidebar(bool shownNow) {
+    sidebarOverride = !shownNow;
+    notifyListeners();
+  }
+
   /// Project whose kanban replaces the panes; null shows the panes.
   String? openProjectId;
 

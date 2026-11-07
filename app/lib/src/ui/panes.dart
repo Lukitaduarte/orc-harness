@@ -29,7 +29,7 @@ class PaneTree extends StatelessWidget {
   Widget _split(LayoutSplit n) {
     final panes = [
       for (final c in n.children)
-        ResizablePane.flex(key: ValueKey(c.id), minSize: 160, child: _node(c)),
+        ResizablePane.flex(key: ValueKey(c.id), minSize: 220, child: _node(c)),
     ];
     // A structural change (pane added or removed) rebuilds the panel fresh.
     final key = ValueKey('${n.id}:${n.children.map((c) => c.id).join(',')}');
@@ -120,74 +120,105 @@ class _Pane extends StatelessWidget {
     height: 36,
     child: Padding(
       padding: const EdgeInsets.only(left: 10, right: 4),
-      child: Row(
-        children: [
-          if (s != null) ...[
-            StatusDot(sessionStateColor(context, s.state)),
-            const Gap(8),
-            Text(s.name).small().semiBold(),
-            const Gap(8),
-            const Icon(LucideIcons.gitBranch, size: 12),
-            const Gap(4),
-            Flexible(
-              child: Text(
-                s.branch,
-                overflow: TextOverflow.ellipsis,
-              ).xSmall().muted(),
-            ),
-            const Gap(8),
-            SecondaryBadge(child: Text(s.model)),
-          ] else if (code != null) ...[
-            const Icon(LucideIcons.code, size: 14),
-            const Gap(8),
-            Text(
-              'Código · ${store.sessions.where((x) => x.id == code).map((x) => x.name).firstOrNull ?? code}',
-            ).small().semiBold(),
-          ] else if (browser != null) ...[
-            const Icon(LucideIcons.globe, size: 14),
-            const Gap(8),
-            const Text('Navegador do workspace').small().semiBold(),
-            if (store.daemon?.browserOf(browser).usedBy case final s?) ...[
-              const Gap(8),
-              OutlineBadge(
-                child: Text('em uso por ${store.daemon!.sessionLabel(s)}'),
+      // Narrow panes keep the title and the buttons; details go first.
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final wide = c.maxWidth >= 420;
+          return Row(
+            children: [
+              if (s != null) ...[
+                StatusDot(sessionStateColor(context, s.state)),
+                const Gap(8),
+                Flexible(
+                  child: Text(
+                    s.name,
+                    overflow: TextOverflow.ellipsis,
+                  ).small().semiBold(),
+                ),
+                if (wide) ...[
+                  const Gap(8),
+                  const Icon(LucideIcons.gitBranch, size: 12),
+                  const Gap(4),
+                  Flexible(
+                    child: Text(
+                      s.branch,
+                      overflow: TextOverflow.ellipsis,
+                    ).xSmall().muted(),
+                  ),
+                  const Gap(8),
+                  SecondaryBadge(child: Text(s.model)),
+                ],
+              ] else if (code != null) ...[
+                const Icon(LucideIcons.code, size: 14),
+                const Gap(8),
+                Flexible(
+                  child: Text(
+                    'Código · ${store.sessions.where((x) => x.id == code).map((x) => x.name).firstOrNull ?? code}',
+                    overflow: TextOverflow.ellipsis,
+                  ).small().semiBold(),
+                ),
+              ] else if (browser != null) ...[
+                const Icon(LucideIcons.globe, size: 14),
+                const Gap(8),
+                const Flexible(
+                  child: Text(
+                    'Navegador do workspace',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ).small().semiBold(),
+                if (wide)
+                  if (store.daemon?.browserOf(browser).usedBy
+                      case final s?) ...[
+                    const Gap(8),
+                    OutlineBadge(
+                      child: Text(
+                        'em uso por ${store.daemon!.sessionLabel(s)}',
+                      ),
+                    ),
+                  ],
+              ] else
+                const Flexible(
+                  child: Text('Pane vazio', overflow: TextOverflow.ellipsis),
+                ).small().muted(),
+              const Spacer(),
+              // A worktree session: its changes and PR.
+              if (s != null &&
+                  s.live &&
+                  (store.daemon?.sessions.any(
+                        (l) => l.id == s.id && l.projectId != null,
+                      ) ??
+                      false))
+                Builder(
+                  builder: (context) => _iconButton(
+                    LucideIcons.gitCompare,
+                    'Mudanças e PR',
+                    () => showDiffDialog(context, store, s.id),
+                  ),
+                ),
+              if (s != null && s.live)
+                _iconButton(
+                  LucideIcons.code,
+                  'Código (IDE na pasta da sessão)',
+                  () => store.openCode(leaf.id, s.id),
+                ),
+              _iconButton(
+                LucideIcons.columns2,
+                'Dividir lado a lado',
+                () => store.split(leaf.id, horizontal: true),
+              ),
+              _iconButton(
+                LucideIcons.rows2,
+                'Dividir em cima e embaixo',
+                () => store.split(leaf.id, horizontal: false),
+              ),
+              _iconButton(
+                LucideIcons.x,
+                'Fechar pane',
+                () => store.close(leaf.id),
               ),
             ],
-          ] else
-            const Text('Pane vazio').small().muted(),
-          const Spacer(),
-          // A worktree session: its changes and PR.
-          if (s != null &&
-              s.live &&
-              (store.daemon?.sessions.any(
-                    (l) => l.id == s.id && l.projectId != null,
-                  ) ??
-                  false))
-            Builder(
-              builder: (context) => _iconButton(
-                LucideIcons.gitCompare,
-                'Mudanças e PR',
-                () => showDiffDialog(context, store, s.id),
-              ),
-            ),
-          if (s != null && s.live)
-            _iconButton(
-              LucideIcons.code,
-              'Código (IDE na pasta da sessão)',
-              () => store.openCode(leaf.id, s.id),
-            ),
-          _iconButton(
-            LucideIcons.columns2,
-            'Dividir lado a lado',
-            () => store.split(leaf.id, horizontal: true),
-          ),
-          _iconButton(
-            LucideIcons.rows2,
-            'Dividir em cima e embaixo',
-            () => store.split(leaf.id, horizontal: false),
-          ),
-          _iconButton(LucideIcons.x, 'Fechar pane', () => store.close(leaf.id)),
-        ],
+          );
+        },
       ),
     ),
   );
@@ -276,8 +307,9 @@ class _SessionPicker extends StatelessWidget {
   Widget build(BuildContext context) {
     final hidden = store.hiddenSessions;
     return Center(
-      child: SizedBox(
-        width: 260,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 260),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,

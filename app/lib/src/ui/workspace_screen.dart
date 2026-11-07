@@ -22,16 +22,21 @@ class WorkspaceScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Phones get their own layout.
-    if (MediaQuery.sizeOf(context).width < 700) return MobileShell(store);
+    final width = MediaQuery.sizeOf(context).width;
+    if (width < 700) return MobileShell(store);
     return ListenableBuilder(
       listenable: store,
       builder: (context, _) {
-        // The profile belongs to a session; the kanban gets the full width.
+        // The profile belongs to a session, on wide windows; the kanban
+        // and narrow windows get the space.
         final showProfile =
             store.profilePanelOpen &&
+            width >= 1100 &&
+            store.focusedSession != null &&
             store.openProject == null &&
             !store.catalogOpen &&
             !store.analyticsOpen;
+        final showSidebar = store.sidebarOverride ?? width >= 900;
         return CallbackShortcuts(
           bindings: {
             const SingleActivator(LogicalKeyboardKey.keyK, meta: true): () =>
@@ -55,19 +60,20 @@ class WorkspaceScreen extends StatelessWidget {
                   const VerticalDivider(),
                   Expanded(
                     child: ResizablePanel.horizontal(
-                      key: ValueKey('main:$showProfile'),
+                      key: ValueKey('main:$showSidebar:$showProfile'),
                       children: [
-                        ResizablePane(
-                          initialSize: 280,
-                          minSize: 220,
-                          maxSize: 420,
-                          child: Sidebar(store),
-                        ),
+                        if (showSidebar)
+                          ResizablePane(
+                            initialSize: width < 1000 ? 240 : 280,
+                            minSize: 200,
+                            maxSize: 420,
+                            child: Sidebar(store),
+                          ),
                         ResizablePane.flex(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              _Toolbar(store),
+                              _Toolbar(store, sidebarShown: showSidebar),
                               const Divider(),
                               AgentNotices(store),
                               Expanded(
@@ -114,27 +120,36 @@ class WorkspaceScreen extends StatelessWidget {
 }
 
 class _Toolbar extends StatelessWidget {
-  const _Toolbar(this.store);
+  const _Toolbar(this.store, {required this.sidebarShown});
 
   final HarnessStore store;
+  final bool sidebarShown;
 
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
     child: Row(
       children: [
-        SizedBox(
-          width: 340,
-          child: OutlineButton(
-            alignment: Alignment.centerLeft,
-            leading: const Icon(LucideIcons.search, size: 14),
-            trailing: const Text('⌘K').xSmall().muted(),
-            onPressed: () => openCommandPalette(context, store),
-            child: const Text(
-              'Buscar ou rodar um comando…',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ).small().muted(),
+        GhostButton(
+          density: ButtonDensity.icon,
+          onPressed: () => store.toggleSidebar(sidebarShown),
+          child: const Icon(LucideIcons.panelLeft, size: 16),
+        ),
+        const Gap(4),
+        Flexible(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 340),
+            child: OutlineButton(
+              alignment: Alignment.centerLeft,
+              leading: const Icon(LucideIcons.search, size: 14),
+              trailing: const Text('⌘K').xSmall().muted(),
+              onPressed: () => openCommandPalette(context, store),
+              child: const Text(
+                'Buscar ou rodar um comando…',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ).small().muted(),
+            ),
           ),
         ),
         if (store.openProject case final p?) ...[
