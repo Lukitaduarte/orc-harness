@@ -8,7 +8,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 void main() {
   testWidgets('picks a folder of the Mac through the daemon', (tester) async {
-    final d = DaemonClient();
+    final d = DaemonClient()..status = LinkStatus.connected;
     final store = HarnessStore(daemon: d);
     final sent = <Map<String, Object?>>[];
     d.sendHook = sent.add;

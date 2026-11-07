@@ -1311,5 +1311,6 @@
       }
     }
   },
-  "devBrowserNoDaemon": "The daemon is not connected: the browser runs there. Connect it in ⚙."
+  "devBrowserNoDaemon": "The daemon is not connected: the browser runs there. Connect it in ⚙.",
+  "devFoldersNoDaemon": "The daemon is not connected: the folders come from it. Connect it in ⚙."
 }

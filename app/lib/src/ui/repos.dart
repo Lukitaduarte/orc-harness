@@ -1,6 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../live/daemon_client.dart';
 import '../i18n.dart';
 
 /// "Este Mac": local repositories, each a source of worktree sessions.
@@ -340,6 +341,13 @@ class _FolderPickerState extends State<_FolderPicker> {
       listenable: d,
       builder: (context, _) {
         final f = d.folders;
+        // Folders come from the daemon: say so when it is not there.
+        if (d.status != LinkStatus.connected) {
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(context.l10n.devFoldersNoDaemon).small().muted(),
+          );
+        }
         if (f == null) return Center(child: Text(context.l10n.devLoading));
         final (path, parent, folders) = f;
         final parts = path.split('/').where((p) => p.isNotEmpty).toList();

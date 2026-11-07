@@ -2805,6 +2805,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The daemon is not connected: the browser runs there. Connect it in ⚙.'**
   String get devBrowserNoDaemon;
+
+  /// No description provided for @devFoldersNoDaemon.
+  ///
+  /// In en, this message translates to:
+  /// **'The daemon is not connected: the folders come from it. Connect it in ⚙.'**
+  String get devFoldersNoDaemon;
 }
 
 class _AppLocalizationsDelegate

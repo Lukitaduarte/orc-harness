@@ -449,5 +449,6 @@
   "toolsSymbols": "Símbolos",
   "toolsSearch": "Buscar",
   "toolsResults": "{count} resultado(s) para \"{query}\"",
-  "devBrowserNoDaemon": "O daemon não está conectado: o navegador roda nele. Conecte em ⚙."
+  "devBrowserNoDaemon": "O daemon não está conectado: o navegador roda nele. Conecte em ⚙.",
+  "devFoldersNoDaemon": "O daemon não está conectado: as pastas vêm dele. Conecte em ⚙."
 }

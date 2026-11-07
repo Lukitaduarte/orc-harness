@@ -1626,4 +1626,8 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get devBrowserNoDaemon =>
       'El daemon no está conectado: el navegador corre en él. Conéctalo en ⚙.';
+
+  @override
+  String get devFoldersNoDaemon =>
+      'El daemon no está conectado: las carpetas vienen de él. Conéctalo en ⚙.';
 }
