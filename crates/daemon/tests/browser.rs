@@ -107,6 +107,20 @@ async fn workspace_browser_streams_takes_input_and_keeps_cookies() {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     assert_eq!(value, "ol");
+
+    // The wheel scrolls the page (the pane sends trackpad and mouse wheel
+    // this way).
+    b.evaluate("document.body.style.height = '5000px'; window.scrollTo(0, 0)").await.unwrap();
+    browser(BrowserAction::Input { event: json!({ "kind": "mouse", "type": "mouseWheel", "x": 100, "y": 100, "deltaX": 0, "deltaY": 400 }) });
+    let mut scrolled = json!(0);
+    for _ in 0..50 {
+        scrolled = b.evaluate("window.scrollY").await.unwrap();
+        if scrolled.as_f64().unwrap_or(0.0) > 0.0 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(scrolled.as_f64().unwrap_or(0.0) > 0.0, "page did not scroll: {scrolled}");
     b.evaluate("document.cookie = 'orc=1; max-age=3600'").await.unwrap();
     drop(b);
 

@@ -50,6 +50,7 @@ class _BrowserPaneState extends State<BrowserPane> {
   void dispose() {
     _b.removeListener(_onBrowser);
     _resize?.cancel();
+    _scrollFlush?.cancel();
     _url.dispose();
     _urlFocus.dispose();
     _pageFocus.dispose();
@@ -105,6 +106,25 @@ class _BrowserPaneState extends State<BrowserPane> {
         'deltaX': delta.dx,
         'deltaY': delta.dy,
       },
+    });
+  }
+
+  /// Scroll in page pixels, sent at most once a frame (trackpads report
+  /// far more often than that).
+  Offset _pendingScroll = Offset.zero;
+  Offset _scrollAt = Offset.zero;
+  Timer? _scrollFlush;
+
+  void _scroll(Offset at, Offset delta) {
+    final b = _b;
+    final scale = b.width == 0 || _size.isEmpty ? 1.0 : b.width / _size.width;
+    _pendingScroll += delta * scale;
+    _scrollAt = at;
+    _scrollFlush ??= Timer(const Duration(milliseconds: 16), () {
+      _scrollFlush = null;
+      final d = _pendingScroll;
+      _pendingScroll = Offset.zero;
+      if (d != Offset.zero) _mouse('mouseWheel', _scrollAt, delta: d);
     });
   }
 
@@ -292,15 +312,16 @@ class _BrowserPaneState extends State<BrowserPane> {
                               e.localPosition,
                               button: _button(e.buttons),
                             ),
+                            // Mouse wheel.
                             onPointerSignal: (e) {
                               if (e is PointerScrollEvent) {
-                                _mouse(
-                                  'mouseWheel',
-                                  e.localPosition,
-                                  delta: e.scrollDelta,
-                                );
+                                _scroll(e.localPosition, e.scrollDelta);
                               }
                             },
+                            // Trackpad: two-finger scrolling comes as a
+                            // pan; the page moves opposite to the fingers.
+                            onPointerPanZoomUpdate: (e) =>
+                                _scroll(e.localPosition, -e.panDelta),
                             child: Container(
                               color: scheme.background,
                               child: b.frame == null

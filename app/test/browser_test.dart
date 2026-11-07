@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orc_harness/src/harness_store.dart';
@@ -128,6 +129,32 @@ void main() {
       {'kind': 'key', 'key': 'Enter', 'modifiers': 0},
       {'kind': 'text', 'text': 'a'},
     ]);
+
+    // Trackpad: two fingers moving up scroll the page down.
+    final pad = await tester.createGesture(kind: PointerDeviceKind.trackpad);
+    await pad.panZoomStart(page.center);
+    await pad.panZoomUpdate(page.center, pan: const Offset(0, -60));
+    await pad.panZoomEnd();
+    await tester.pump(const Duration(milliseconds: 50));
+    Map wheel() =>
+        (sent.lastWhere(
+                  (m) =>
+                      ((m['action'] as Map)['event'] as Map?)?['type'] ==
+                      'mouseWheel',
+                )['action']
+                as Map)['event']
+            as Map;
+    expect((wheel()['deltaY'] as double) > 0, isTrue, reason: 'scrolls down');
+    // Mouse wheel.
+    sent.clear();
+    await tester.sendEventToBinding(
+      PointerScrollEvent(
+        position: page.center,
+        scrollDelta: const Offset(0, 120),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    expect((wheel()['deltaY'] as double) > 0, isTrue);
     d.dispose();
   });
 }
