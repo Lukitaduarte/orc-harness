@@ -62,22 +62,25 @@ English · [Português](README.pt-BR.md)
 
 ## Install (macOS)
 
-You need [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`) installed. `gh` and Google Chrome are optional.
-
-**1. The app.** Download `OrcHarness-<version>-macos.dmg` from the [latest release](https://github.com/Lukitaduarte/orc-harness/releases/latest) and drag **Orc Harness** to Applications. Builds are not notarized yet, so the first time macOS blocks it: open **System Settings → Privacy & Security** and click **Open Anyway** (or run `xattr -dr com.apple.quarantine "/Applications/Orc Harness.app"`).
-
-**2. The daemon.** `orcd` owns the sessions and runs in the background:
-
 ```sh
-curl -fsSLO https://github.com/Lukitaduarte/orc-harness/releases/latest/download/orcd-<version>-macos-universal.tar.gz
-tar xzf orcd-*-macos-universal.tar.gz && cd orcd-*-macos-universal
-./orcd install        # copies itself to ~/.orc/bin and starts at login (LaunchAgent)
-~/.orc/bin/orcd pair  # prints a pairing ticket and a QR code
+brew install --cask lukitaduarte/tap/orc-harness
 ```
 
-`orcd install --sign "Apple Development: Your Name (TEAMID)"` signs the copies so the Keychain and firewall don't ask again after each update (`security find-identity -v -p codesigning` lists your identities).
+Open **Orc Harness** and that's it: on first launch the app installs its daemon (`orcd`) as a login service and connects to it. You need [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`); `gh` and Google Chrome are optional.
 
-**3. Connect.** In the app, open ⚙ → **Connect daemon** and paste the `orc1…` ticket, or scan the QR from your phone. Then create a workspace (**+** in the left bar), add an account (**New account** opens a session for `/login`) and add repositories.
+Then create a workspace (**+** in the left bar), add an account (**New account** opens a session for `/login`) and add repositories. To use your phone, run `orcd pair` and scan the QR code, or open ⚙ → **Connect daemon** on a paired device.
+
+<details>
+<summary>Without Homebrew</summary>
+
+Download `OrcHarness-<version>-macos.dmg` from the [latest release](https://github.com/Lukitaduarte/orc-harness/releases/latest) and drag **Orc Harness** to Applications. Builds are not notarized yet, so the first time macOS blocks it: open **System Settings → Privacy & Security** and click **Open Anyway** (or run `xattr -dr com.apple.quarantine "/Applications/Orc Harness.app"`).
+
+For a daemon without the app (e.g. on a Mac you only reach from your phone), use `orcd-<version>-macos-universal.tar.gz`: extract it, run `./orcd install` and then `~/.orc/bin/orcd pair`.
+
+`orcd install --sign "Apple Development: Your Name (TEAMID)"` signs the installed copies so the Keychain and firewall don't ask again after each update.
+</details>
+
+**Uninstall:** `brew uninstall --cask orc-harness` stops and removes the service; add `--zap` to delete `~/.orc` too.
 
 ## Build from source
 

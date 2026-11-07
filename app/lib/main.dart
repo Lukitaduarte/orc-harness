@@ -4,12 +4,14 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 import 'src/harness_store.dart';
 import 'src/i18n.dart';
 import 'src/live/daemon_client.dart';
+import 'src/live/local_daemon.dart';
 import 'src/rust/frb_generated.dart';
 import 'src/ui/workspace_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await RustLib.init();
+  await leaveSandboxContainer();
   await loadLanguage();
   final daemon = DaemonClient()..onAlert = await _systemAlerts();
   daemon.start();

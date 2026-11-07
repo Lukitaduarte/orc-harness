@@ -36,40 +36,8 @@ jobs:
         id: v
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Daemon (orcd and helpers)
-        run: |
-          set -euo pipefail
-          for t in aarch64-apple-darwin x86_64-apple-darwin; do
-            cargo build --release --locked --bins --target "$t"
-          done
-          out="orcd-${{ steps.v.outputs.version }}-macos-universal"
-          mkdir -p "dist/$out"
-          for b in orcd orc-statusline orc-commit-check orc-mcp orc-hook; do
-            lipo -create -output "dist/$out/$b" \
-              "target/aarch64-apple-darwin/release/$b" \
-              "target/x86_64-apple-darwin/release/$b"
-            codesign --force --sign - "dist/$out/$b"
-          done
-          cp LICENSE "dist/$out/"
-          tar -C dist -czf "dist/$out.tar.gz" "$out"
-
-      - name: App
-        working-directory: app
-        run: |
-          flutter pub get
-          flutter build macos --release --build-name "${{ steps.v.outputs.version }}" --build-number "${{ github.run_number }}"
-
-      - name: Package app (dmg and zip)
-        run: |
-          set -euo pipefail
-          app="app/build/macos/Build/Products/Release/Orc Harness.app"
-          name="OrcHarness-${{ steps.v.outputs.version }}-macos"
-          ditto -c -k --keepParent "$app" "dist/$name.zip"
-          mkdir -p dmg
-          cp -R "$app" dmg/
-          ln -s /Applications dmg/Applications
-          hdiutil create -volname "Orc Harness" -srcfolder dmg -ov -format UDZO "dist/$name.dmg"
-          cd dist && shasum -a 256 *.dmg *.zip *.tar.gz > SHA256SUMS.txt
+      - name: Build and package
+        run: scripts/package-macos.sh "${{ steps.v.outputs.version }}" "${{ github.run_number }}"
 
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
@@ -88,3 +56,33 @@ jobs:
           path: |
             dist/*.dmg
             dist/*.tar.gz
+
+  tap:
+    name: Homebrew tap
+    needs: macos
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    env:
+      # Without the deploy key the cask is updated by hand.
+      HAS_KEY: ${{ secrets.TAP_DEPLOY_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.HAS_KEY == 'true'
+        with:
+          repository: Lukitaduarte/homebrew-tap
+          ssh-key: ${{ secrets.TAP_DEPLOY_KEY }}
+      - name: Point the cask at this release
+        if: env.HAS_KEY == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS.txt
+          sha=$(awk -v f="OrcHarness-$version-macos.dmg" '$2 == f { print $1 }' SHA256SUMS.txt)
+          test -n "$sha"
+          sed -i -E "s/^  version \".*\"/  version \"$version\"/; s/^  sha256 \".*\"/  sha256 \"$sha\"/" Casks/orc-harness.rb
+          rm SHA256SUMS.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "orc-harness $version" && git push

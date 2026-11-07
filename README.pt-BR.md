@@ -65,11 +65,16 @@ crates/client-core/ lado do app: parear e conectar
 
 ## Instalar (macOS)
 
-1. Baixe `OrcHarness-<versão>-macos.dmg` da [última release](https://github.com/Lukitaduarte/orc-harness/releases/latest) e arraste o **Orc Harness** para Aplicativos. O app ainda não é notarizado: na primeira vez, vá em **Ajustes do Sistema → Privacidade e Segurança → Abrir Mesmo Assim**.
-2. Baixe `orcd-<versão>-macos-universal.tar.gz`, extraia e rode `./orcd install` e depois `~/.orc/bin/orcd pair`.
-3. No app, ⚙ → **Conectar daemon** e cole o ticket (ou escaneie o QR no celular).
+```sh
+brew install --cask lukitaduarte/tap/orc-harness
+```
 
-## Começando
+Abra o **Orc Harness** e pronto: na primeira vez o app instala o daemon (`orcd`) como serviço do login e se conecta a ele. Precisa do [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`). Para o celular, rode `orcd pair` e escaneie o QR.
+
+Sem o Homebrew: baixe o `.dmg` da [última release](https://github.com/Lukitaduarte/orc-harness/releases/latest), arraste para Aplicativos e, na primeira vez, vá em **Ajustes do Sistema → Privacidade e Segurança → Abrir Mesmo Assim**.
+
+## Desenvolvimento
+
 
 Precisa de: Rust estável, Flutter 3.38+, Claude Code (`claude`) e, opcionalmente, `gh`, Chrome e `dart` ou outros servidores de linguagem.
 

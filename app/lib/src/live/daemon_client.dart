@@ -9,6 +9,7 @@ import '../rust/api/link.dart' as link;
 import '../i18n.dart';
 import '../model.dart';
 import 'grid.dart';
+import 'local_daemon.dart';
 import 'lsp_client.dart';
 
 enum LinkStatus { disconnected, connecting, connected }
@@ -103,6 +104,11 @@ class LiveBrowser extends ChangeNotifier {
 /// The app's connection to orcd: pairing, connecting (with retry), and the
 /// live state it reports. Notifies on session, account and quota changes.
 class DaemonClient extends ChangeNotifier {
+  DaemonClient({LocalDaemon? local}) : local = local ?? LocalDaemon();
+
+  /// The daemon bundled with the macOS app, set up on first launch.
+  final LocalDaemon local;
+
   LinkStatus status = LinkStatus.disconnected;
   String? error;
   List<String> accounts = [];
@@ -413,13 +419,25 @@ class DaemonClient extends ChangeNotifier {
     '${(await getApplicationSupportDirectory()).path}/daemon-identity.json',
   );
 
-  /// Loads a stored pairing and connects, if there is one.
+  /// Loads a stored pairing and connects. Without one, the app's own
+  /// daemon is installed and paired with, so a fresh install just works.
   Future<void> start() async {
     try {
       final f = await _identityFile();
       if (await f.exists()) {
         _identity = await f.readAsString();
+        // A new app version brings its daemon along.
+        try {
+          await local.ensureInstalled(onlyUpdate: true);
+        } catch (e) {
+          debugPrint('$e');
+        }
         await connect();
+      } else if (local.bundled != null) {
+        status = LinkStatus.connecting;
+        notifyListeners();
+        final ticket = await local.ticket();
+        if (ticket != null) await pair(ticket);
       }
     } catch (e) {
       _fail('$e');
