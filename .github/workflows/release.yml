@@ -17,7 +17,7 @@ jobs:
     name: macOS (universal)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin, x86_64-apple-darwin
@@ -66,7 +66,7 @@ jobs:
       # Without the deploy key the cask is updated by hand.
       HAS_KEY: ${{ secrets.TAP_DEPLOY_KEY != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: env.HAS_KEY == 'true'
         with:
           repository: Lukitaduarte/homebrew-tap
