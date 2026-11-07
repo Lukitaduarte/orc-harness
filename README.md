@@ -108,6 +108,18 @@ O resto:
 - `worktrees/`, `browsers/` (perfis do Chrome) e `accounts/` (contas criadas pelo app);
 - segredos (valores de envs e a chave do daemon): no Keychain, serviço `orc-harness`. Em desenvolvimento, `ORC_SECRETS=file` guarda num arquivo 0600.
 
+## Idiomas
+
+O app vem em português, inglês e espanhol e segue o idioma do sistema. Dá para escolher outro em ⚙ → Idioma.
+
+Os textos ficam em `app/lib/l10n/app_<código>.arb`, um arquivo por idioma; o `app_en.arb` é o modelo e traz a descrição e os parâmetros de cada texto. Para adicionar um idioma:
+
+1. Copie `app_en.arb` para `app_<código>.arb` (ex.: `app_fr.arb`), troque o `@@locale` e traduza os valores. Não traduza as chaves nem os `{parâmetros}`.
+2. Acrescente o idioma em `languageNames`, em `app/lib/src/i18n.dart`.
+3. Rode `flutter gen-l10n` (ou só `flutter run`) e `flutter test test/i18n_test.dart`, que confere se nenhuma chave ficou faltando.
+
+As falas do orc ("Work, work.", "Zug zug!") ficam em inglês em todos os idiomas.
+
 ## Testes
 
 ```sh

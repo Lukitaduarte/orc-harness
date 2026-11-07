@@ -1,6 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../i18n.dart';
 import '../model.dart';
 import 'format.dart';
 import 'new_plan_dialog.dart';
@@ -62,116 +63,127 @@ List<_Cmd> _commands(BuildContext context, HarnessStore store) {
   final focused = store.focusedSession;
   final leaf = store.focusedLeafId;
   final project = store.openProject;
+  final t = context.l10n;
   return [
     for (final s in store.workspaceSessions)
       _Cmd(
-        'Sessões',
-        'Ir para ${s.name}',
+        t.toolsGroupSessions,
+        t.toolsGoTo(s.name),
         LucideIcons.terminal,
         () => store.showSession(s.id),
         hint: sessionStateLabel(s.state),
       ),
-    _Cmd('Sessões', 'Nova sessão', LucideIcons.plus, store.newSession),
+    _Cmd(
+      t.toolsGroupSessions,
+      t.toolsNewSession,
+      LucideIcons.plus,
+      store.newSession,
+    ),
     if (project == null) ...[
       _Cmd(
-        'Panes',
-        'Dividir lado a lado',
+        t.toolsGroupPanes,
+        t.toolsSplitSideBySide,
         LucideIcons.columns2,
         () => store.split(leaf, horizontal: true),
       ),
       _Cmd(
-        'Panes',
-        'Dividir em cima e embaixo',
+        t.toolsGroupPanes,
+        t.toolsSplitTopBottom,
         LucideIcons.rows2,
         () => store.split(leaf, horizontal: false),
       ),
-      _Cmd('Panes', 'Fechar pane', LucideIcons.x, () => store.close(leaf)),
+      _Cmd(
+        t.toolsGroupPanes,
+        t.toolsClosePane,
+        LucideIcons.x,
+        () => store.close(leaf),
+      ),
     ],
     _Cmd(
-      'Panes',
+      t.toolsGroupPanes,
       store.profilePanelOpen
-          ? 'Ocultar painel de perfil'
-          : 'Mostrar painel de perfil',
+          ? t.toolsHideProfilePanel
+          : t.toolsShowProfilePanel,
       LucideIcons.panelRight,
       store.toggleProfilePanel,
     ),
     for (final p in store.workspaceProjects) ...[
       _Cmd(
-        'Projetos',
-        p.isPlanning ? 'Abrir plano de ${p.name}' : 'Abrir ${p.name}',
+        t.toolsGroupProjects,
+        p.isPlanning ? t.toolsOpenPlanOf(p.name) : t.toolsOpenNamed(p.name),
         LucideIcons.kanban,
         () => store.openProjectView(p.id),
         hint: p.isPlanning
-            ? '${p.plan!.openThreads} comentários abertos'
+            ? t.toolsOpenComments(p.plan!.openThreads)
             : '${p.doneCount}/${p.cards.length}',
       ),
       if (store.readyCards(p).isNotEmpty && store.canRun(p))
         _Cmd(
-          'Projetos',
-          'Executar cards prontos de ${p.name}',
+          t.toolsGroupProjects,
+          t.toolsRunReadyCards(p.name),
           LucideIcons.play,
           () => store.runReady(p),
-          hint: store.readyCards(p).length == 1
-              ? '1 pronto'
-              : '${store.readyCards(p).length} prontos',
+          hint: t.toolsReadyCount(store.readyCards(p).length),
         ),
     ],
     if (project?.plan case final plan?
         when plan.threads.any((t) => t.awaitingAgent) && !plan.reviewing)
       _Cmd(
-        'Projetos',
-        'Pedir revisão dos comentários ao Claude',
+        t.toolsGroupProjects,
+        t.toolsRequestReview,
         LucideIcons.sparkles,
         () => store.requestPlanReview(plan),
       ),
     _Cmd(
-      'Projetos',
-      'Novo plano a partir de um template',
+      t.toolsGroupProjects,
+      t.toolsNewPlanFromTemplate,
       LucideIcons.sparkles,
       () => showNewPlanDialog(context, store),
     ),
     _Cmd(
-      'Projetos',
-      'Importar plano em markdown',
+      t.toolsGroupProjects,
+      t.toolsImportPlan,
       LucideIcons.fileText,
       () => showNewPlanDialog(context, store, importing: true),
     ),
     _Cmd(
-      'Catálogo',
-      'Novo template de plan mode',
+      t.toolsGroupCatalog,
+      t.toolsNewPlanTemplate,
       LucideIcons.filePlus,
       () => showTemplateEditor(context, store),
     ),
     _Cmd(
-      'Código',
-      'Buscar no código (⌘⇧F)',
+      t.toolsGroupCode,
+      t.toolsSearchCodeCmd,
       LucideIcons.search,
       () => showSearchDialog(context, store),
     ),
     _Cmd(
-      'Uso',
-      'Abrir uso e custo do workspace',
+      t.toolsGroupUsage,
+      t.toolsOpenUsage,
       LucideIcons.chartColumn,
       store.openAnalytics,
     ),
     _Cmd(
-      'Catálogo',
-      'Abrir catálogo de skills, MCPs e envs',
+      t.toolsGroupCatalog,
+      t.toolsOpenCatalog,
       LucideIcons.blocks,
       store.openCatalog,
     ),
     if (project != null)
       _Cmd(
-        'Projetos',
-        'Voltar para as sessões',
+        t.toolsGroupProjects,
+        t.toolsBackToSessions,
         LucideIcons.terminal,
         () => store.openProjectView(null),
       ),
     if (focused != null) ...[
       for (final item in store.catalog)
         _Cmd(
-          'Perfil de ${focused.name}',
-          '${focused.draftItems.contains(item.id) ? 'Desligar' : 'Ligar'} ${item.name}',
+          t.toolsGroupProfileOf(focused.name),
+          focused.draftItems.contains(item.id)
+              ? t.toolsTurnOff(item.name)
+              : t.toolsTurnOn(item.name),
           switch (item.kind) {
             CatalogKind.skill => LucideIcons.sparkles,
             CatalogKind.mcp => LucideIcons.plug,
@@ -186,8 +198,8 @@ List<_Cmd> _commands(BuildContext context, HarnessStore store) {
         ),
       if (focused.hasPendingChanges)
         _Cmd(
-          'Perfil de ${focused.name}',
-          'Aplicar mudanças (reinicia com --resume)',
+          t.toolsGroupProfileOf(focused.name),
+          t.toolsApplyChanges,
           LucideIcons.refreshCw,
           () => store.applyDraft(focused),
         ),
@@ -195,8 +207,8 @@ List<_Cmd> _commands(BuildContext context, HarnessStore store) {
     for (final ws in store.workspaces)
       if (ws.id != store.workspaceId)
         _Cmd(
-          'Workspaces',
-          'Trocar para ${ws.name}',
+          t.toolsGroupWorkspaces,
+          t.toolsSwitchTo(ws.name),
           LucideIcons.arrowLeftRight,
           () => store.selectWorkspace(ws.id),
         ),

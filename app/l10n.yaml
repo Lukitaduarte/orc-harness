@@ -1,0 +1,9 @@
+# Texts of the app, one ARB file per language in lib/l10n.
+# Adding a language: copy app_en.arb to app_<code>.arb, translate the
+# values (keep keys and {placeholders}), and add it to languageNames in
+# lib/src/i18n.dart. The build picks it up.
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+output-class: AppLocalizations
+nullable-getter: false

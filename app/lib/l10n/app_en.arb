@@ -1,0 +1,1314 @@
+{
+  "@@locale": "en",
+  "languageSystem": "System language",
+  "language": "Language",
+  "orcReady": "Ready to work!",
+  "@orcReady": {
+    "description": "Peon line (Warcraft homage); keep in English in every language"
+  },
+  "orcWorkWork": "Work, work.",
+  "@orcWorkWork": {
+    "description": "Peon line; keep in English"
+  },
+  "orcZugZug": "Zug zug!",
+  "@orcZugZug": {
+    "description": "Peon line; keep in English"
+  },
+  "orcNeedDoing": "Something need doing?",
+  "@orcNeedDoing": {
+    "description": "Peon line; keep in English"
+  },
+  "orcNotThatKind": "Me not that kind of orc!",
+  "@orcNotThatKind": {
+    "description": "Peon line; keep in English"
+  },
+  "orcJobsDone": "Job's done!",
+  "@orcJobsDone": {
+    "description": "Peasant line; keep in English"
+  },
+  "coreHaltFailed": "Didn't start: {note}",
+  "@coreHaltFailed": {
+    "placeholders": {
+      "note": {
+        "type": "String"
+      }
+    }
+  },
+  "coreHaltStopped": "Stopped: {note}",
+  "@coreHaltStopped": {
+    "placeholders": {
+      "note": {
+        "type": "String"
+      }
+    }
+  },
+  "coreUnknownError": "error",
+  "coreSessionEnded": "session ended",
+  "corePromptCard": "Card #{number} of plan \"{plan}\": {title} ({type})",
+  "@corePromptCard": {
+    "description": "Sent to Claude: write it as an instruction",
+    "placeholders": {
+      "number": {
+        "type": "String"
+      },
+      "plan": {
+        "type": "String"
+      },
+      "title": {
+        "type": "String"
+      },
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "corePromptPlan": "Plan: {summary}",
+  "@corePromptPlan": {
+    "description": "Sent to Claude: write it as an instruction",
+    "placeholders": {
+      "summary": {
+        "type": "String"
+      }
+    }
+  },
+  "corePromptCriteria": "Acceptance criteria:",
+  "@corePromptCriteria": {
+    "description": "Sent to Claude: write it as an instruction"
+  },
+  "corePromptTasks": "Tasks, by group (subagents, with skill and model):",
+  "@corePromptTasks": {
+    "description": "Sent to Claude: write it as an instruction"
+  },
+  "corePromptTask": "- group {group}: {title} · {skill} · {model}",
+  "@corePromptTask": {
+    "description": "Sent to Claude: write it as an instruction",
+    "placeholders": {
+      "group": {
+        "type": "String"
+      },
+      "title": {
+        "type": "String"
+      },
+      "skill": {
+        "type": "String"
+      },
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "corePromptNeedsOk": " — ask the user for OK first",
+  "@corePromptNeedsOk": {
+    "description": "Sent to Claude: write it as an instruction"
+  },
+  "corePromptNotes": "Notes:",
+  "@corePromptNotes": {
+    "description": "Sent to Claude: write it as an instruction"
+  },
+  "corePromptDraft": "Write the plan \"{name}\" filling in each section of the template as its instruction says.",
+  "@corePromptDraft": {
+    "description": "Sent to Claude: write it as an instruction",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "corePromptBuild": "What to build: {description}",
+  "@corePromptBuild": {
+    "description": "Sent to Claude: write it as an instruction",
+    "placeholders": {
+      "description": {
+        "type": "String"
+      }
+    }
+  },
+  "corePromptSources": "Sources:",
+  "@corePromptSources": {
+    "description": "Sent to Claude: write it as an instruction"
+  },
+  "corePromptReview": "Revise the plan from these comments and save it with save_plan, answering each one in replies:",
+  "@corePromptReview": {
+    "description": "Sent to Claude: write it as an instruction"
+  },
+  "corePromptLocked": " (approved: do not change it, record it in amendments)",
+  "@corePromptLocked": {
+    "description": "Sent to Claude: write it as an instruction"
+  },
+  "coreAlertWaitingTitle": "Waiting for you",
+  "coreAlertWaitingBody": "{session} needs an answer.",
+  "@coreAlertWaitingBody": {
+    "placeholders": {
+      "session": {
+        "type": "String"
+      }
+    }
+  },
+  "coreAlertEnvTitle": "An agent asks for an env",
+  "coreAlertEnvBody": "{session} wants to store {name}. Approve or refuse it in the app.",
+  "@coreAlertEnvBody": {
+    "placeholders": {
+      "session": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "coreAlertApprovalTitle": "Needs your OK",
+  "coreAlertPrTitle": "PR opened",
+  "coreAlertPrBody": "{plan} · card #{number} is in review.",
+  "@coreAlertPrBody": {
+    "placeholders": {
+      "plan": {
+        "type": "String"
+      },
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "coreAlertMergedTitle": "Card merged",
+  "coreAlertMergedBody": "{plan} · card #{number} is done.",
+  "@coreAlertMergedBody": {
+    "placeholders": {
+      "plan": {
+        "type": "String"
+      },
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "coreAlertStoppedTitle": "Card stopped",
+  "coreAlertStoppedBody": "{plan} · card #{number}: {note}.",
+  "@coreAlertStoppedBody": {
+    "placeholders": {
+      "plan": {
+        "type": "String"
+      },
+      "number": {
+        "type": "String"
+      },
+      "note": {
+        "type": "String"
+      }
+    }
+  },
+  "coreBudgetOverTitle": "Budget exceeded",
+  "coreBudget80Title": "Budget at 80%",
+  "coreBudgetBody": "{workspace}: US${spent} of US${budget} this month.",
+  "@coreBudgetBody": {
+    "placeholders": {
+      "workspace": {
+        "type": "String"
+      },
+      "spent": {
+        "type": "String"
+      },
+      "budget": {
+        "type": "String"
+      }
+    }
+  },
+  "coreEnvWithValue": "daemon Keychain · has a value",
+  "coreEnvNoValue": "daemon Keychain · no value yet",
+  "coreAmendment": "Amendment: {text}",
+  "@coreAmendment": {
+    "placeholders": {
+      "text": {
+        "type": "String"
+      }
+    }
+  },
+  "coreCommentOn": "Comment on {section}: {text}",
+  "@coreCommentOn": {
+    "placeholders": {
+      "section": {
+        "type": "String"
+      },
+      "text": {
+        "type": "String"
+      }
+    }
+  },
+  "coreImportedPlan": "Imported plan",
+  "devRepoBase": "base {branch}",
+  "@devRepoBase": {
+    "placeholders": {
+      "branch": {
+        "type": "String"
+      }
+    }
+  },
+  "devNewWorktreeSession": "New session in a worktree",
+  "devTrustWorktreesHint": "Claude Code asks whether it trusts each new folder. Answer \"Yes\" once in this session and all of the harness's worktrees become trusted.",
+  "devTrustWorktrees": "Trust the worktrees",
+  "devAddRepository": "Add repository",
+  "devAddRepositoryHint": "A local clone. Sessions work in its worktrees, one per branch.",
+  "devName": "Name",
+  "devClonePath": "Clone path",
+  "devClonePathPlaceholder": "~/Project/my-repo",
+  "devChoose": "Choose…",
+  "devBaseBranch": "Base branch",
+  "devCancel": "Cancel",
+  "devAdd": "Add",
+  "devNewSessionIn": "New session in {project}",
+  "@devNewSessionIn": {
+    "placeholders": {
+      "project": {
+        "type": "String"
+      }
+    }
+  },
+  "devNewWorktreeHint": "Creates (or reuses) the branch's worktree. Commits that don't follow conventional commits are rejected there.",
+  "devBranch": "Branch",
+  "devBranchRule": "Use letters, numbers, . _ / -; e.g. feat/12-login",
+  "devCreateSession": "Create session",
+  "devLoading": "Loading…",
+  "devChooseFolder": "Choose folder",
+  "devFolderUp": "Up",
+  "devFolderHome": "Home",
+  "devHideHidden": "Hide hidden",
+  "devShowHidden": "Show hidden",
+  "devNoSubfolders": "No subfolders.",
+  "devUseThisFolder": "Use this folder",
+  "devCommitPlaceholder": "feat(scope): what changes",
+  "devCommit": "Commit",
+  "devPush": "Push",
+  "devMergeSquash": "Merge (squash)",
+  "devGitResultOk": "{op}: ok",
+  "@devGitResultOk": {
+    "description": "op is the git operation name from the daemon",
+    "placeholders": {
+      "op": {
+        "type": "String"
+      }
+    }
+  },
+  "devGitResultFailed": "{op}: failed",
+  "@devGitResultFailed": {
+    "description": "op is the git operation name from the daemon",
+    "placeholders": {
+      "op": {
+        "type": "String"
+      }
+    }
+  },
+  "devSessionChanges": "Session changes",
+  "devDiffSummary": "{count} file(s) against {base}, including what is not committed yet",
+  "@devDiffSummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "base": {
+        "type": "String"
+      }
+    }
+  },
+  "devNoPr": "no PR",
+  "devNoChangesYet": "No changes yet.",
+  "devPrDraft": "draft",
+  "devPrChip": "PR #{number} · {state}",
+  "@devPrChip": {
+    "placeholders": {
+      "number": {
+        "type": "String"
+      },
+      "state": {
+        "type": "String"
+      }
+    }
+  },
+  "devPrChecksFailing": "{count} check(s) failing",
+  "@devPrChecksFailing": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "devPrChecksOk": "checks ok",
+  "devUntrackedFile": "New file, not tracked by git yet.",
+  "devDefinitionNotFound": "Definition not found.",
+  "devDefinedOutside": "Defined outside the project: {location}",
+  "@devDefinedOutside": {
+    "placeholders": {
+      "location": {
+        "type": "String"
+      }
+    }
+  },
+  "devNothingAboutSymbol": "Nothing about this symbol.",
+  "devPickFile": "Pick a file on the left.",
+  "devGoToDefinition": "Go to definition (F12)",
+  "devAboutSymbol": "About the symbol (⌘I)",
+  "devFormat": "Format (⇧⌥F)",
+  "devSeverityError": "error",
+  "devSeverityWarning": "warning",
+  "devDiagnostic": "{severity} · line {line}: {message}",
+  "@devDiagnostic": {
+    "placeholders": {
+      "severity": {
+        "type": "String"
+      },
+      "line": {
+        "type": "int"
+      },
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "devBack": "Back",
+  "devForward": "Forward",
+  "devReload": "Reload",
+  "devAddress": "Address",
+  "devCloseBrowser": "Close the browser (cookies stay in the profile)",
+  "devOpenWorkspaceBrowser": "Open the workspace browser",
+  "devConnectingTerminal": "Connecting to the terminal…",
+  "devMessageClaude": "Message to Claude",
+  "devNoQuotaReading": "no quota reading yet",
+  "devSessions": "Sessions",
+  "devPlans": "Plans",
+  "devDeleteSessionTitle": "Delete session {name}?",
+  "@devDeleteSessionTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "devDeleteSessionBody": "Ends the process. The worktree, the commits and the conversation stay.",
+  "devDelete": "Delete",
+  "devNoSessions": "No sessions in this workspace.",
+  "devNewSession": "New session",
+  "devPlanReviewProgress": "{approved}/{total} sections approved · {comments} comments",
+  "@devPlanReviewProgress": {
+    "placeholders": {
+      "approved": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "comments": {
+        "type": "int"
+      }
+    }
+  },
+  "devCardsDone": "{done}/{total} cards done",
+  "@devCardsDone": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "devDeletePlanTitle": "Delete plan {name}?",
+  "@devDeletePlanTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "devDeletePlanBody": "Sessions of running cards are ended. Branches, worktrees and PRs stay.",
+  "devNoPlans": "No plans in this workspace.",
+  "devRetry": "Try again",
+  "devColumnBlocked": "blocked",
+  "devColumnReady": "ready",
+  "devColumnRunning": "running",
+  "devColumnReview": "review",
+  "devColumnDone": "done",
+  "plansVersion": "plan v{version}",
+  "@plansVersion": {
+    "placeholders": {
+      "version": {
+        "type": "int"
+      }
+    }
+  },
+  "plansRunningSince": "running since {time}",
+  "@plansRunningSince": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "plansApprovedCount": "{approved}/{total} sections approved",
+  "@plansApprovedCount": {
+    "placeholders": {
+      "approved": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "plansPlanningSession": "Planning session",
+  "plansClaudeReviewing": "Claude reviewing…",
+  "plansAskClaudeReview": "Ask Claude for a review",
+  "plansAskClaudeReviewCount": "Ask Claude for a review ({count})",
+  "@plansAskClaudeReviewCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "plansDrafting": "Claude is reading {count} sources and writing the sections…",
+  "@plansDrafting": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "plansStartLoops": "Start execution · {count} loops",
+  "@plansStartLoops": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "plansChangedAfterApprovalCount": "{count, plural, =1{1 section changed after approval} other{{count} sections changed after approval}}",
+  "@plansChangedAfterApprovalCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "plansStartApproved": "Start execution · {approved}/{total} approved",
+  "@plansStartApproved": {
+    "placeholders": {
+      "approved": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "plansTemplateInstruction": "Template instruction: {instruction}",
+  "@plansTemplateInstruction": {
+    "placeholders": {
+      "instruction": {
+        "type": "String"
+      }
+    }
+  },
+  "plansChangedAfterApproval": "changed after approval",
+  "plansOpenCount": "{count, plural, =1{1 open} other{{count} open}}",
+  "@plansOpenCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "plansComment": "Comment",
+  "plansApprove": "Approve",
+  "plansApprovedSectionPlaceholder": "Approved section: the comment becomes an amendment to the first loop…",
+  "plansCommentOn": "Comment on {section}…",
+  "@plansCommentOn": {
+    "placeholders": {
+      "section": {
+        "type": "String"
+      }
+    }
+  },
+  "plansApprovedAt": "Approved {time} · digest {digest}",
+  "@plansApprovedAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      },
+      "digest": {
+        "type": "String"
+      }
+    }
+  },
+  "plansApproved": "approved",
+  "plansCanStartNow": "can start now",
+  "plansAfterLoops": "after {loops}",
+  "@plansAfterLoops": {
+    "placeholders": {
+      "loops": {
+        "type": "String",
+        "example": "loop 1 and loop 2"
+      }
+    }
+  },
+  "plansLoopRef": "loop {number}",
+  "@plansLoopRef": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "plansListAnd": " and ",
+  "@plansListAnd": {
+    "description": "Joins items of a list (loop 1 and loop 2); keep the surrounding spaces"
+  },
+  "plansTableTask": "Task",
+  "plansTableModel": "Model",
+  "plansTableGroup": "Group",
+  "plansTaskAfter": "after {tasks}",
+  "@plansTaskAfter": {
+    "placeholders": {
+      "tasks": {
+        "type": "String"
+      }
+    }
+  },
+  "plansYourOk": "your OK",
+  "@plansYourOk": {
+    "description": "Badge: the task needs the user's approval"
+  },
+  "plansComments": "Comments",
+  "plansHideResolved": "Hide resolved",
+  "plansShowResolved": "Show resolved",
+  "plansFiltering": "Filtering: {section}",
+  "@plansFiltering": {
+    "placeholders": {
+      "section": {
+        "type": "String"
+      }
+    }
+  },
+  "plansShowAll": "Show all",
+  "plansNoCommentsHere": "No comments here.\nUse \"Comment\" on any section.",
+  "plansAmendmentsHeader": "AMENDMENTS FOR THE FIRST LOOP",
+  "plansClaudeReviewingComments": "Claude is reviewing the comments…",
+  "plansReviewHint": "On an open section, Claude adjusts the section. On an approved section, nothing changes: the request becomes an amendment to the first loop.",
+  "plansResolved": "resolved",
+  "plansAwaitingClaude": "waiting for Claude",
+  "plansReopen": "Reopen",
+  "plansResolve": "Resolve",
+  "plansReply": "Reply…",
+  "plansBoardSummary": "{repo} · {done}/{total} done · {running}/{max} running",
+  "@plansBoardSummary": {
+    "placeholders": {
+      "repo": {
+        "type": "String"
+      },
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "running": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "plansRunReady": "Run ready ({count})",
+  "@plansRunReady": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "plansBoardHint": "Each card runs in its own worktree and session, on the account with the most headroom ({email}).",
+  "@plansBoardHint": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "plansColumnBlocked": "Blocked",
+  "plansColumnReady": "Ready",
+  "plansColumnRunning": "Running",
+  "plansColumnReview": "In review",
+  "plansColumnDone": "Done",
+  "plansWaitingFor": "waiting for {cards}",
+  "@plansWaitingFor": {
+    "placeholders": {
+      "cards": {
+        "type": "String",
+        "example": "#1, #2"
+      }
+    }
+  },
+  "plansNoDependencies": "no dependencies",
+  "plansDependsOn": "depends on {cards}",
+  "@plansDependsOn": {
+    "placeholders": {
+      "cards": {
+        "type": "String",
+        "example": "#1, #2"
+      }
+    }
+  },
+  "plansRun": "Run",
+  "plansOpenSession": "Open session",
+  "plansSimulatePr": "Simulate PR",
+  "plansSimulateMerge": "Simulate merge",
+  "plansPrMerged": "PR #{number} merged",
+  "@plansPrMerged": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "plansRetry": "Try again",
+  "plansQueued": "Queued: starts when a slot frees up",
+  "plansMerged": "merged",
+  "plansPhaseZeroSimulation": "Phase 0 simulation",
+  "plansAcceptanceCriteria": "Acceptance criteria",
+  "plansNoCriteria": "No criteria defined.",
+  "plansTasksHeader": "Tasks · subagents per group",
+  "plansGroupParallel": "Group {group} · in parallel",
+  "@plansGroupParallel": {
+    "placeholders": {
+      "group": {
+        "type": "int"
+      }
+    }
+  },
+  "plansGroup": "Group {group}",
+  "@plansGroup": {
+    "placeholders": {
+      "group": {
+        "type": "int"
+      }
+    }
+  },
+  "plansLoopResult": "Loop result",
+  "plansDependencies": "Dependencies",
+  "plansNoDependenciesLong": "None: can run in parallel with other ready cards.",
+  "plansSession": "Session",
+  "plansCommentsAndNotes": "Comments and notes",
+  "plansNoCommentsYet": "No comments yet.",
+  "plansAddNote": "Add a note…",
+  "plansStateDone": "done",
+  "plansStatePending": "pending",
+  "plansStateBlocked": "blocked",
+  "plansStateReady": "ready",
+  "plansStateRunning": "running",
+  "plansStateReview": "in review",
+  "plansLearnIntro": "Each comment on the cards becomes a change to the skill with the gap. You approve before it is applied.",
+  "plansLearnEmptyLive": "Claude is reading the comments and skills of the cards.\nProposals show up here; nothing changes without your OK.",
+  "plansLearnEmpty": "No new comments on the cards.\nComment in a card's dialog and run Learn again.",
+  "plansLearnNotApplied": "Not applied: {error}",
+  "@plansLearnNotApplied": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "plansDiscard": "Discard",
+  "plansApplyToSkill": "Apply to skill",
+  "plansAppliedToSkill": "Applied to skill",
+  "plansDiscarded": "Discarded",
+  "plansImportedPlan": "Imported plan",
+  "@plansImportedPlan": {
+    "description": "Name of a pasted plan without a # title"
+  },
+  "plansNewPlan": "New plan",
+  "plansFromTemplate": "From a template",
+  "plansPasteMarkdown": "Paste markdown",
+  "plansCancel": "Cancel",
+  "plansImportPlan": "Import plan",
+  "plansCreatePlan": "Create plan",
+  "plansRepository": "Repository",
+  "plansAddRepoFirst": "Add a repository in the sidebar (This Mac) first.",
+  "plansTemplate": "Template",
+  "plansFeatureName": "Feature name",
+  "plansSources": "Sources (Jira, Confluence, Figma), one per line",
+  "plansWhatToBuild": "What to build",
+  "plansImportHint": "Any markdown in plan format: each ## becomes an approvable section, tables and lists become widgets, ```mermaid becomes a diagram and ```loops defines the execution.",
+  "plansImportPlaceholder": "# Plan name\n\n## Sources\n…",
+  "plansAgo": "{duration} ago",
+  "@plansAgo": {
+    "placeholders": {
+      "duration": {
+        "type": "String"
+      }
+    }
+  },
+  "plansYouInitial": "Y",
+  "@plansYouInitial": {
+    "description": "Avatar initial for comments written by the user (You)"
+  },
+  "plansWriteComment": "Write a comment…",
+  "shellNewWorkspace": "New workspace",
+  "shellUsageAndCost": "Usage and cost",
+  "shellCatalogTip": "Catalog of skills, MCPs and envs",
+  "shellSidebarCounts": "{accounts} accounts · {sessions} sessions",
+  "@shellSidebarCounts": {
+    "placeholders": {
+      "accounts": {
+        "type": "int"
+      },
+      "sessions": {
+        "type": "int"
+      }
+    }
+  },
+  "shellAccounts": "Accounts",
+  "shellNewAccount": "New account",
+  "shellSessions": "Sessions",
+  "shellNewSession": "New session",
+  "shellDeleteSession": "Delete session",
+  "shellDeleteSessionTitle": "Delete the session {name}?",
+  "@shellDeleteSessionTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shellDeleteSessionBody": "Ends the process and removes it from the list. The worktree, the commits and the conversation (claude --resume) stay.",
+  "shellDelete": "Delete",
+  "shellRepositories": "Repositories",
+  "shellAddRepository": "Add repository",
+  "shellPlans": "Plans",
+  "shellNewPlan": "New plan",
+  "shellDeletePlan": "Delete plan",
+  "shellDeletePlanTitle": "Delete the plan {name}?",
+  "@shellDeletePlanTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shellDeletePlanBodyRunning": "It has cards running: their sessions are ended. Branches, worktrees and PRs stay.",
+  "shellDeletePlanBody": "Branches, worktrees and PRs stay.",
+  "shellAccountTitle": "Account {email}",
+  "@shellAccountTitle": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "shellLogoutButton": "Log out (/logout)",
+  "shellLogoutHint": "Opens a session in it and runs Claude Code's /logout.",
+  "shellRemoveFromHarness": "Remove from the harness",
+  "shellRemoveHint": "Ends its sessions and takes it out of the accounts. The folder and the conversations stay on disk.",
+  "shellCancel": "Cancel",
+  "shellLogoutTitle": "Log out of {email}?",
+  "@shellLogoutTitle": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "shellLogoutDefaultBody": "It is Claude Code's default account on this Mac: the login ends outside the harness too.",
+  "shellLogoutBody": "This account's login leaves Claude Code.",
+  "shellLogout": "Log out",
+  "shellRemoveTitle": "Remove {email} from the harness?",
+  "@shellRemoveTitle": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "shellRemoveBody": "Its sessions are ended.",
+  "shellRemove": "Remove",
+  "shellNoReadingYet": "no reading yet: the quota arrives with Claude's first reply",
+  "shellUpdatedAgo": "updated {duration} ago",
+  "@shellUpdatedAgo": {
+    "placeholders": {
+      "duration": {
+        "type": "String"
+      }
+    }
+  },
+  "shellResetIn": "resets in {duration}",
+  "@shellResetIn": {
+    "placeholders": {
+      "duration": {
+        "type": "String"
+      }
+    }
+  },
+  "shellExhaustsIn": "at this pace, runs out in ~{duration}",
+  "@shellExhaustsIn": {
+    "placeholders": {
+      "duration": {
+        "type": "String"
+      }
+    }
+  },
+  "shellPlanBadge": "plan",
+  "@shellPlanBadge": {
+    "description": "Badge on a project still being planned"
+  },
+  "shellSearchOrRun": "Search or run a command…",
+  "shellExecution": "Execution",
+  "shellPlan": "Plan",
+  "shellUsage": "Usage",
+  "shellCatalog": "Catalog",
+  "shellWorkspaceBrowser": "Workspace browser",
+  "shellToolInUse": "{tool} · in use by {session}",
+  "@shellToolInUse": {
+    "placeholders": {
+      "tool": {
+        "type": "String"
+      },
+      "session": {
+        "type": "String"
+      }
+    }
+  },
+  "shellInUseBy": "in use by {session}",
+  "@shellInUseBy": {
+    "placeholders": {
+      "session": {
+        "type": "String"
+      }
+    }
+  },
+  "shellCodePaneTitle": "Code · {session}",
+  "@shellCodePaneTitle": {
+    "placeholders": {
+      "session": {
+        "type": "String"
+      }
+    }
+  },
+  "shellEmptyPane": "Empty pane",
+  "shellChangesAndPr": "Changes and PR",
+  "shellCodeTip": "Code (IDE in the session's folder)",
+  "shellSplitSideBySide": "Split side by side",
+  "shellSplitTopBottom": "Split top and bottom",
+  "shellClosePane": "Close pane",
+  "shellTokensCost": "{tokens} tokens · {cost}",
+  "@shellTokensCost": {
+    "placeholders": {
+      "tokens": {
+        "type": "String"
+      },
+      "cost": {
+        "type": "String"
+      }
+    }
+  },
+  "shellFiveHourShare": "{percent}% of the 5h window",
+  "@shellFiveHourShare": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "shellRestartingResumeLine": "↻ restarting with --resume…",
+  "shellOpenInPane": "Open in this pane",
+  "shellSessionMemory": "Session memory",
+  "shellSessionMemoryHint": "What the agents store (decisions, preferences, project facts) and the workspace's other sessions find.",
+  "shellMemoryHarness": "The harness's",
+  "shellMemoryOff": "Off",
+  "shellWorkspace": "Workspace",
+  "shellWorkspaceHint": "A workspace brings together accounts, sessions, repositories, plans and a browser with its own logins (e.g. Work, Personal).",
+  "shellName": "Name",
+  "shellWorkspaceAccounts": "Accounts in this workspace",
+  "shellWorkspaceAccountsHint": "An account lives in one workspace only; checking it here takes it out of the other.",
+  "shellAccountInWorkspace": "{email} (in {workspace})",
+  "@shellAccountInWorkspace": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      },
+      "workspace": {
+        "type": "String"
+      }
+    }
+  },
+  "shellMonthlyBudget": "Monthly budget (US$)",
+  "shellBudgetHint": "Optional. The app warns at 80% and when the limit is passed.",
+  "shellBudgetExample": "e.g. 200",
+  "shellDeleteWorkspace": "Delete",
+  "shellCreate": "Create",
+  "shellSave": "Save",
+  "shellNewAccountBody": "A Claude Code account with its own config folder (~/.orc/accounts/<name>) in the workspace {workspace}. Opens a session in it: log in with /login.",
+  "@shellNewAccountBody": {
+    "placeholders": {
+      "workspace": {
+        "type": "String"
+      }
+    }
+  },
+  "shellAccountName": "Account name",
+  "shellAccountNameExample": "work-2",
+  "shellAccountTaken": "An account with that name already exists.",
+  "shellAccountRule": "Use letters, numbers, - and _.",
+  "shellCreateAndLogin": "Create and log in",
+  "shellApprovalRequest": "{session} wants: {action}. It stays blocked until you decide (10 min).",
+  "@shellApprovalRequest": {
+    "placeholders": {
+      "session": {
+        "type": "String"
+      },
+      "action": {
+        "type": "String"
+      }
+    }
+  },
+  "shellDecline": "Decline",
+  "shellApprove": "Approve",
+  "shellEnvRequest": "{session} asks to store {env} in the daemon's Keychain. The value does not show here.",
+  "@shellEnvRequest": {
+    "placeholders": {
+      "session": {
+        "type": "String"
+      },
+      "env": {
+        "type": "String"
+      }
+    }
+  },
+  "shellDismiss": "Dismiss",
+  "shellSelectSession": "Select a session",
+  "shellSessionProfile": "Session profile",
+  "shellRestartingWithResume": "Restarting with --resume…",
+  "shellApplyHint": "Applying restarts the session with --resume. The context is kept.",
+  "shellDiscard": "Discard",
+  "shellApply": "Apply",
+  "shellPairAnother": "Pair another device",
+  "shellShowPairingQr": "Show pairing QR",
+  "shellPairQrHint": "On the phone: Connect daemon → Scan the QR. Valid once, for 10 minutes.",
+  "shellCopy": "Copy",
+  "shellPairedDevices": "Paired devices",
+  "shellThisDevice": "{name} (this one)",
+  "@shellThisDevice": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shellRevoke": "Revoke",
+  "shellNoDaemon": "This app was started without the daemon.",
+  "shellConnectDaemon": "Connect daemon",
+  "shellConnectedCounts": "Connected: {accounts} account(s), {sessions} session(s).",
+  "@shellConnectedCounts": {
+    "placeholders": {
+      "accounts": {
+        "type": "int"
+      },
+      "sessions": {
+        "type": "int"
+      }
+    }
+  },
+  "shellConnecting": "Connecting…",
+  "shellPairedOffline": "Paired, not connected right now.",
+  "shellNotPaired": "Not paired yet.",
+  "shellPairInstructions": "On the Mac where orcd runs: `orcd serve` and, in another terminal, `orcd pair`. Paste the ticket here (valid for 10 minutes, once).",
+  "shellScanPairQr": "Scan the `orcd pair` QR",
+  "shellClose": "Close",
+  "shellPairAndConnect": "Pair and connect",
+  "shellPointAtQr": "Point at the orcd pair QR",
+  "toolsSessionRunning": "running",
+  "@toolsSessionRunning": {
+    "description": "Session state label"
+  },
+  "toolsSessionWaiting": "waiting for you",
+  "@toolsSessionWaiting": {
+    "description": "Session state label"
+  },
+  "toolsSessionStarting": "restarting",
+  "@toolsSessionStarting": {
+    "description": "Session state label"
+  },
+  "toolsSessionIdle": "idle",
+  "@toolsSessionIdle": {
+    "description": "Session state label"
+  },
+  "toolsCatalogTitle": "Catalog",
+  "toolsCatalogSubtitle": "Configure once; each session turns on what it needs in the profile panel.",
+  "toolsAdd": "Add",
+  "toolsPlanTemplatesHeader": "PLAN MODE TEMPLATES",
+  "toolsNewTemplate": "New template",
+  "toolsPlanTemplatesHelp": "Markdown with the sections of each kind of work and the instruction for each. Picked in \"New plan\".",
+  "toolsSectionCount": "{count} sections",
+  "@toolsSectionCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "toolsEditMarkdown": "Edit markdown",
+  "toolsKindSkills": "Skills",
+  "toolsKindMcps": "MCPs",
+  "toolsKindEnvs": "Envs",
+  "toolsUnused": "unused",
+  "toolsUsedInSessions": "{count, plural, =1{in 1 session} other{in {count} sessions}}",
+  "@toolsUsedInSessions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "toolsMcpTesting": "testing…",
+  "toolsMcpConnected": "connected · {count} tools",
+  "@toolsMcpConnected": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "toolsMcpFailed": "failed: {reason}",
+  "@toolsMcpFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "toolsTestConnection": "Test connection",
+  "toolsSkillFolder": "Skill folder",
+  "toolsCommandOrUrl": "Command or URL",
+  "toolsEnvValue": "Value (kept in the Keychain)",
+  "toolsAddToCatalog": "Add to catalog",
+  "toolsName": "Name",
+  "toolsDescription": "Description",
+  "toolsCancel": "Cancel",
+  "toolsNewPlanTemplate": "New plan mode template",
+  "toolsEditTemplate": "Edit template",
+  "toolsTemplateNameHint": "Name, e.g.: Back end with deploy",
+  "toolsTemplateDescriptionHint": "When to use this template",
+  "toolsDeleteTemplate": "Delete template",
+  "toolsSave": "Save",
+  "toolsHarnessUnderstood": "WHAT THE HARNESS UNDERSTOOD",
+  "toolsReadError": "Error reading: {error}",
+  "@toolsReadError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "toolsSectionsAndLoops": "{sections} sections · {loops} loops",
+  "@toolsSectionsAndLoops": {
+    "placeholders": {
+      "sections": {
+        "type": "int"
+      },
+      "loops": {
+        "type": "int"
+      }
+    }
+  },
+  "toolsInstruction": "instruction: {text}",
+  "@toolsInstruction": {
+    "placeholders": {
+      "text": {
+        "type": "String"
+      }
+    }
+  },
+  "toolsBlockText": "text",
+  "toolsBlockList": "list",
+  "toolsBlockTable": "table",
+  "toolsBlockCode": "code",
+  "toolsBlockFlowchart": "flowchart",
+  "toolsBlockSequence": "sequence",
+  "toolsBlockLoops": "loops",
+  "toolsSectionEmpty": "empty",
+  "toolsUsageTitle": "Usage · {workspace}",
+  "@toolsUsageTitle": {
+    "placeholders": {
+      "workspace": {
+        "type": "String"
+      }
+    }
+  },
+  "toolsUsageLiveSubtitle": "Claude Code's own metrics (OpenTelemetry), by session, account and model.",
+  "toolsUsageDemoSubtitle": "Demo data; the This Mac workspace shows the real ones.",
+  "toolsDays": "{count} days",
+  "@toolsDays": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "toolsCost": "Cost",
+  "toolsTokens": "Tokens",
+  "toolsDailyAverage": "Daily average",
+  "toolsCacheRead": "Read from cache",
+  "toolsThisMonth": "This month",
+  "toolsBudgetShare": "{percent}% of {workspace}'s monthly budget",
+  "@toolsBudgetShare": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "workspace": {
+        "type": "String"
+      }
+    }
+  },
+  "toolsTokensByType": "Tokens by type",
+  "toolsInput": "Input",
+  "toolsOutput": "Output",
+  "toolsCacheWrite": "Written to cache",
+  "toolsCostPerDay": "Cost per day (US$)",
+  "toolsShowChart": "Show chart",
+  "toolsShowTable": "Show table",
+  "toolsByAccountModel": "By account and model",
+  "toolsAccount": "Account",
+  "toolsModel": "Model",
+  "toolsNoUsage": "No usage recorded in this period.",
+  "toolsByPlan": "By plan",
+  "toolsPlan": "Plan",
+  "toolsCardsDone": "Cards done",
+  "toolsNoPlans": "No plan running in this period.",
+  "toolsByProjectBranch": "By project and branch (cards)",
+  "toolsProject": "Project",
+  "toolsBranch": "Branch",
+  "toolsLooseSessions": "standalone sessions",
+  "toolsNoTokens": "No tokens in this period.",
+  "toolsGroupSessions": "Sessions",
+  "toolsGroupPanes": "Panes",
+  "toolsGroupProjects": "Projects",
+  "toolsGroupCatalog": "Catalog",
+  "toolsGroupCode": "Code",
+  "toolsGroupUsage": "Usage",
+  "toolsGroupWorkspaces": "Workspaces",
+  "toolsGroupProfileOf": "{name}'s profile",
+  "@toolsGroupProfileOf": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "toolsGoTo": "Go to {name}",
+  "@toolsGoTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "toolsNewSession": "New session",
+  "toolsSplitSideBySide": "Split side by side",
+  "toolsSplitTopBottom": "Split top and bottom",
+  "toolsClosePane": "Close pane",
+  "toolsHideProfilePanel": "Hide profile panel",
+  "toolsShowProfilePanel": "Show profile panel",
+  "toolsOpenPlanOf": "Open {name}'s plan",
+  "@toolsOpenPlanOf": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "toolsOpenNamed": "Open {name}",
+  "@toolsOpenNamed": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "toolsOpenComments": "{count} open comments",
+  "@toolsOpenComments": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "toolsRunReadyCards": "Run {name}'s ready cards",
+  "@toolsRunReadyCards": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "toolsReadyCount": "{count, plural, =1{1 ready} other{{count} ready}}",
+  "@toolsReadyCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "toolsRequestReview": "Ask Claude to review the comments",
+  "toolsNewPlanFromTemplate": "New plan from a template",
+  "toolsImportPlan": "Import plan in markdown",
+  "toolsSearchCodeCmd": "Search code (⌘⇧F)",
+  "toolsOpenUsage": "Open workspace usage and cost",
+  "toolsOpenCatalog": "Open catalog of skills, MCPs and envs",
+  "toolsBackToSessions": "Back to sessions",
+  "toolsTurnOff": "Turn off {name}",
+  "@toolsTurnOff": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "toolsTurnOn": "Turn on {name}",
+  "@toolsTurnOn": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "toolsApplyChanges": "Apply changes (restarts with --resume)",
+  "toolsSwitchTo": "Switch to {name}",
+  "@toolsSwitchTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "toolsNothingOpen": "nothing open",
+  "toolsSearchNeedsDaemon": "Code search needs the daemon connected.",
+  "toolsSearchIn": "Search in {label}…",
+  "@toolsSearchIn": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "toolsSymbols": "Symbols",
+  "toolsSearch": "Search",
+  "toolsResults": "{count} result(s) for \"{query}\"",
+  "@toolsResults": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      },
+      "query": {
+        "type": "String"
+      }
+    }
+  }
+}

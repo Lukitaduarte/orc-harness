@@ -18,7 +18,7 @@ void main() {
       '{"type":"session_state","session_id":"s1","state":"waiting_input"}',
     );
     expect(alerts, [
-      ('Esperando você', 'feat/1-login precisa de uma resposta.'),
+      ('Something need doing?', 'feat/1-login precisa de uma resposta.'),
     ]);
 
     d.handle(
@@ -57,7 +57,7 @@ void main() {
     expect(alerts.length, count, reason: 'the first report is a replay');
     run([card(1, 'done'), card(2, 'failed')]);
     expect(alerts.sublist(count), [
-      ('Card mergeado', 'Push · card #1 foi feito.'),
+      ("Job's done!", 'Push · card #1 foi feito.'),
       ('Card parou', 'Push · card #2: branch existe.'),
     ]);
     d.dispose();

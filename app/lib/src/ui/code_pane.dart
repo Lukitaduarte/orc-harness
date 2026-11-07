@@ -16,6 +16,7 @@ import 'package:re_highlight/styles/atom-one-dark.dart';
 import 'package:re_highlight/styles/atom-one-light.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
+import '../i18n.dart';
 import '../live/daemon_client.dart';
 import '../live/lsp_client.dart';
 
@@ -154,14 +155,15 @@ class _CodePaneState extends State<CodePane> {
       sel.extentOffset,
     );
     if (found.isEmpty) {
-      return setState(() => _info = 'Definição não encontrada.');
+      return setState(() => _info = context.l10n.devDefinitionNotFound);
     }
     final (uri, line, character) = found.first;
     final rel = l.$2.relativeOf(uri);
     if (rel == null) {
       return setState(
-        () => _info =
-            'Definido fora do projeto: ${Uri.parse(uri).path}:${line + 1}',
+        () => _info = context.l10n.devDefinedOutside(
+          '${Uri.parse(uri).path}:${line + 1}',
+        ),
       );
     }
     await _open(rel);
@@ -181,7 +183,8 @@ class _CodePaneState extends State<CodePane> {
     if (f == null || l == null) return;
     final sel = f.controller.selection;
     final text = await l.$2.hover(f.path, sel.extentIndex, sel.extentOffset);
-    if (mounted) setState(() => _info = text ?? 'Nada sobre este símbolo.');
+    if (!mounted) return;
+    setState(() => _info = text ?? context.l10n.devNothingAboutSymbol);
   }
 
   /// ⇧⌥F: formats the file with the language server.
@@ -314,7 +317,7 @@ class _CodePaneState extends State<CodePane> {
           ),
         Expanded(
           child: f == null
-              ? const Center(child: Text('Escolha um arquivo à esquerda.'))
+              ? Center(child: Text(context.l10n.devPickFile))
               : _editor(context, f),
         ),
         if (_info != null)
@@ -401,11 +404,11 @@ class _CodePaneState extends State<CodePane> {
         if (f != null && languageOf(f.path) != null) ...[
           _langTool(
             LucideIcons.squareArrowOutUpRight,
-            'Ir para definição (F12)',
+            context.l10n.devGoToDefinition,
             _definition,
           ),
-          _langTool(LucideIcons.info, 'Sobre o símbolo (⌘I)', _hover),
-          _langTool(LucideIcons.wandSparkles, 'Formatar (⇧⌥F)', _format),
+          _langTool(LucideIcons.info, context.l10n.devAboutSymbol, _hover),
+          _langTool(LucideIcons.wandSparkles, context.l10n.devFormat, _format),
         ],
         if (has('ios')) item('Xcode', 'ios/Runner.xcworkspace', 'xcode'),
         if (has('android')) item('Android Studio', 'android', 'android-studio'),
@@ -485,8 +488,13 @@ class _CodePaneState extends State<CodePane> {
             children: [
               for (final g in list)
                 Text(
-                  '${g['severity'] == 1 ? 'erro' : 'aviso'} · '
-                  'linha ${(g['range']['start']['line'] as int) + 1}: ${g['message']}',
+                  context.l10n.devDiagnostic(
+                    g['severity'] == 1
+                        ? context.l10n.devSeverityError
+                        : context.l10n.devSeverityWarning,
+                    (g['range']['start']['line'] as int) + 1,
+                    '${g['message']}',
+                  ),
                 ).xSmall(),
             ],
           ),

@@ -2,6 +2,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../i18n.dart';
 import '../model.dart';
 import 'card_dialog.dart';
 import 'learn_dialog.dart';
@@ -19,6 +20,7 @@ class KanbanView extends StatelessWidget {
     final p = project;
     final ready = store.readyCards(p);
     final running = store.runningCount(p);
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -32,8 +34,13 @@ class KanbanView extends StatelessWidget {
                   children: [
                     Text(p.name).large().semiBold(),
                     Text(
-                      '${p.repo} · ${p.doneCount}/${p.cards.length} feitos · '
-                      '$running/${HarnessStore.maxRunningCards} em execução',
+                      l10n.plansBoardSummary(
+                        p.repo,
+                        p.doneCount,
+                        p.cards.length,
+                        running,
+                        HarnessStore.maxRunningCards,
+                      ),
                     ).xSmall().muted(),
                   ],
                 ),
@@ -55,7 +62,7 @@ class KanbanView extends StatelessWidget {
                 PrimaryButton(
                   leading: const Icon(LucideIcons.play, size: 14),
                   onPressed: store.canRun(p) ? () => store.runReady(p) : null,
-                  child: Text('Executar prontos (${ready.length})'),
+                  child: Text(l10n.plansRunReady(ready.length)),
                 ),
             ],
           ),
@@ -63,8 +70,7 @@ class KanbanView extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
-            'Cada card roda na própria worktree e sessão, na conta com mais '
-            'folga (${store.freestAccount.email}).',
+            l10n.plansBoardHint(store.freestAccount.email),
           ).xSmall().muted(),
         ),
         const Gap(12),
@@ -98,12 +104,13 @@ class _Column extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final title = switch (column) {
-      KanbanColumn.blocked => 'Bloqueados',
-      KanbanColumn.ready => 'Prontos',
-      KanbanColumn.running => 'Em execução',
-      KanbanColumn.review => 'Em review',
-      KanbanColumn.done => 'Feitos',
+      KanbanColumn.blocked => l10n.plansColumnBlocked,
+      KanbanColumn.ready => l10n.plansColumnReady,
+      KanbanColumn.running => l10n.plansColumnRunning,
+      KanbanColumn.review => l10n.plansColumnReview,
+      KanbanColumn.done => l10n.plansColumnDone,
     };
     return Container(
       width: 272,
@@ -153,10 +160,11 @@ class _CardTile extends StatelessWidget {
     final pending = c.dependsOn
         .where((d) => project.card(d).state != CardState.done)
         .toList();
+    final l10n = context.l10n;
     final deps = switch (column) {
-      KanbanColumn.blocked => 'aguardando ${_refs(pending)}',
-      _ when c.dependsOn.isEmpty => 'sem dependências',
-      _ => 'depende de ${_refs(c.dependsOn)}',
+      KanbanColumn.blocked => l10n.plansWaitingFor(_refs(pending)),
+      _ when c.dependsOn.isEmpty => l10n.plansNoDependencies,
+      _ => l10n.plansDependsOn(_refs(c.dependsOn)),
     };
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -199,7 +207,7 @@ class _CardTile extends StatelessWidget {
                     ],
                   ),
                 ],
-                ..._actions(),
+                ..._actions(l10n),
                 if (c.notes.isNotEmpty) ...[
                   const Gap(8),
                   Row(
@@ -218,9 +226,9 @@ class _CardTile extends StatelessWidget {
     );
   }
 
-  List<Widget> _actions() {
+  List<Widget> _actions(AppLocalizations l10n) {
     final c = card;
-    if (store.isLiveProject(project)) return _liveActions(c);
+    if (store.isLiveProject(project)) return _liveActions(c, l10n);
     final row = switch (column) {
       KanbanColumn.blocked => null,
       KanbanColumn.ready => [
@@ -230,17 +238,17 @@ class _CardTile extends StatelessWidget {
           onPressed: store.canRun(project)
               ? () => store.runCard(project, c)
               : null,
-          child: const Text('Executar'),
+          child: Text(l10n.plansRun),
         ),
       ],
       KanbanColumn.running => [
         OutlineButton(
           size: ButtonSize.small,
           onPressed: () => store.showSession(c.sessionId!),
-          child: const Text('Abrir sessão'),
+          child: Text(l10n.plansOpenSession),
         ),
         const Gap(4),
-        _simulate('Simular PR', () => store.simulatePr(c)),
+        _simulate(l10n.plansSimulatePr, () => store.simulatePr(c)),
       ],
       KanbanColumn.review => [
         OutlineButton(
@@ -250,19 +258,19 @@ class _CardTile extends StatelessWidget {
           child: Text('PR #${c.pr}'),
         ),
         const Gap(4),
-        _simulate('Simular merge', () => store.simulateMerge(c)),
+        _simulate(l10n.plansSimulateMerge, () => store.simulateMerge(c)),
       ],
       KanbanColumn.done => [
         const Icon(LucideIcons.check, size: 12),
         const Gap(4),
-        Text('PR #${c.pr} mergeado').xSmall().muted(),
+        Text(l10n.plansPrMerged(c.pr!)).xSmall().muted(),
       ],
     };
     return row == null ? const [] : [const Gap(10), Row(children: row)];
   }
 
   /// Live cards: the daemon starts them and GitHub moves them.
-  List<Widget> _liveActions(TaskCard c) {
+  List<Widget> _liveActions(TaskCard c, AppLocalizations l10n) {
     final hasSession = store.sessions.any((s) => s.id == c.sessionId);
     final pr = c.prUrl == null
         ? null
@@ -287,13 +295,13 @@ class _CardTile extends StatelessWidget {
           size: ButtonSize.small,
           leading: const Icon(LucideIcons.rotateCcw, size: 12),
           onPressed: () => store.retryCard(project, c),
-          child: const Text('Tentar de novo'),
+          child: Text(l10n.plansRetry),
         ),
       ],
       KanbanColumn.ready => [
         Expanded(
           child: Text(
-            c.waiting ?? 'Na fila: começa quando houver vaga',
+            c.waiting ?? l10n.plansQueued,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
           ).xSmall().muted(),
@@ -308,7 +316,7 @@ class _CardTile extends StatelessWidget {
           OutlineButton(
             size: ButtonSize.small,
             onPressed: () => store.showSession(c.sessionId!),
-            child: const Text('Abrir sessão'),
+            child: Text(l10n.plansOpenSession),
           ),
         if (hasSession && pr != null) const Gap(4),
         ?pr,
@@ -316,7 +324,7 @@ class _CardTile extends StatelessWidget {
       KanbanColumn.done => [
         const Icon(LucideIcons.check, size: 12),
         const Gap(4),
-        if (pr != null) pr else const Text('mergeado').xSmall().muted(),
+        if (pr != null) pr else Text(l10n.plansMerged).xSmall().muted(),
       ],
     };
     return row == null ? const [] : [const Gap(10), Row(children: row)];
@@ -325,7 +333,7 @@ class _CardTile extends StatelessWidget {
   /// Stand-in for events the daemon will report (PR opened, PR merged).
   Widget _simulate(String label, VoidCallback onPressed) => Tooltip(
     tooltip: (context) =>
-        const TooltipContainer(child: Text('Simulação da fase 0')),
+        TooltipContainer(child: Text(context.l10n.plansPhaseZeroSimulation)),
     child: GhostButton(
       size: ButtonSize.small,
       onPressed: onPressed,

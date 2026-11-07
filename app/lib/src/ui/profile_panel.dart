@@ -1,6 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../i18n.dart';
 import '../model.dart';
 
 /// Skills, MCPs and envs of the focused session, picked from the global
@@ -14,7 +15,9 @@ class ProfilePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = store.focusedSession;
     if (s == null) {
-      return Center(child: Text('Selecione uma sessão').small().muted());
+      return Center(
+        child: Text(context.l10n.shellSelectSession).small().muted(),
+      );
     }
     final restarting = s.state == SessionState.starting;
     return Column(
@@ -24,7 +27,9 @@ class ProfilePanel extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.all(12),
             children: [
-              const Text('Perfil da sessão').xSmall().semiBold().muted(),
+              Text(
+                context.l10n.shellSessionProfile,
+              ).xSmall().semiBold().muted(),
               Text(s.name).large().semiBold(),
               Text(
                 '${store.account(s.accountId).email} · ${s.model}',
@@ -42,20 +47,18 @@ class ProfilePanel extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.all(12),
             child: restarting
-                ? const Text('Reiniciando com --resume…').small().muted()
+                ? Text(context.l10n.shellRestartingWithResume).small().muted()
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Text(
-                        'Aplicar reinicia a sessão com --resume. O contexto é mantido.',
-                      ).xSmall().muted(),
+                      Text(context.l10n.shellApplyHint).xSmall().muted(),
                       const Gap(8),
                       Row(
                         children: [
                           Expanded(
                             child: OutlineButton(
                               onPressed: () => store.discardDraft(s),
-                              child: const Text('Descartar'),
+                              child: Text(context.l10n.shellDiscard),
                             ),
                           ),
                           const Gap(8),
@@ -66,7 +69,7 @@ class ProfilePanel extends StatelessWidget {
                                 size: 14,
                               ),
                               onPressed: () => store.applyDraft(s),
-                              child: const Text('Aplicar'),
+                              child: Text(context.l10n.shellApply),
                             ),
                           ),
                         ],

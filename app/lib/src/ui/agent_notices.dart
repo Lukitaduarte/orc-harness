@@ -1,6 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../i18n.dart';
 
 /// Above the panes: env values agents ask to store (your call) and the
 /// latest messages between sessions.
@@ -17,6 +18,7 @@ class AgentNotices extends StatelessWidget {
       return const SizedBox.shrink();
     }
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
     String name(String id) {
       final s = d.sessions.where((x) => x.id == id).firstOrNull;
       return s == null ? id : '${s.branch ?? s.cwd.split('/').last} ($id)';
@@ -41,19 +43,19 @@ class AgentNotices extends StatelessWidget {
                   const Gap(8),
                   Expanded(
                     child: Text(
-                      '${name(session)} quer: $action. Fica bloqueado até você decidir (10 min).',
+                      l10n.shellApprovalRequest(name(session), action),
                     ).small(),
                   ),
                   OutlineButton(
                     size: ButtonSize.small,
                     onPressed: () => d.resolveApproval(id, false),
-                    child: const Text('Recusar'),
+                    child: Text(l10n.shellDecline),
                   ),
                   const Gap(6),
                   PrimaryButton(
                     size: ButtonSize.small,
                     onPressed: () => d.resolveApproval(id, true),
-                    child: const Text('Aprovar'),
+                    child: Text(l10n.shellApprove),
                   ),
                 ],
               ),
@@ -67,20 +69,19 @@ class AgentNotices extends StatelessWidget {
                   const Gap(8),
                   Expanded(
                     child: Text(
-                      '${name(session)} pede para gravar $env no Keychain do daemon. '
-                      'O valor não aparece aqui.',
+                      l10n.shellEnvRequest(name(session), env),
                     ).small(),
                   ),
                   OutlineButton(
                     size: ButtonSize.small,
                     onPressed: () => d.resolveEnvRequest(id, false),
-                    child: const Text('Recusar'),
+                    child: Text(l10n.shellDecline),
                   ),
                   const Gap(6),
                   PrimaryButton(
                     size: ButtonSize.small,
                     onPressed: () => d.resolveEnvRequest(id, true),
-                    child: const Text('Aprovar'),
+                    child: Text(l10n.shellApprove),
                   ),
                 ],
               ),
@@ -107,7 +108,7 @@ class AgentNotices extends StatelessWidget {
                 GhostButton(
                   size: ButtonSize.small,
                   onPressed: d.dismissMessages,
-                  child: const Text('Dispensar'),
+                  child: Text(l10n.shellDismiss),
                 ),
               ],
             ),

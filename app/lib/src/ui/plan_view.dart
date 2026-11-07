@@ -1,6 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../i18n.dart';
 import '../model.dart';
 import 'comments.dart';
 import 'diagrams.dart';
@@ -76,18 +77,19 @@ class _PlanViewState extends State<PlanView> {
   Widget _header() {
     final total = plan.sections.length;
     final review = plan.threads.any((t) => t.awaitingAgent);
+    final t = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _line([
           Flexible(child: Text(widget.project.name).large().semiBold()),
           const Gap(8),
-          OutlineBadge(child: Text('plano v${plan.version}')),
+          OutlineBadge(child: Text(t.plansVersion(plan.version))),
           const Gap(8),
           Text(
             started
-                ? 'em execução desde ${_time(plan.startedAt!)}'
-                : '${plan.approvedCount}/$total seções aprovadas',
+                ? t.plansRunningSince(_time(plan.startedAt!))
+                : t.plansApprovedCount(plan.approvedCount, total),
           ).xSmall().muted(),
           const Spacer(),
           if (plan.plannerSession case final id?
@@ -96,7 +98,7 @@ class _PlanViewState extends State<PlanView> {
               size: ButtonSize.small,
               leading: const Icon(LucideIcons.terminal, size: 12),
               onPressed: () => store.showSession(id),
-              child: const Text('Sessão de planejamento'),
+              child: Text(t.plansPlanningSession),
             ),
           // On the phone the review panel is not there: ask from here.
           if (widget.compact && review && !started)
@@ -107,8 +109,8 @@ class _PlanViewState extends State<PlanView> {
                   : () => store.requestPlanReview(plan),
               child: Text(
                 plan.reviewing
-                    ? 'Claude revisando…'
-                    : 'Pedir revisão ao Claude',
+                    ? t.plansClaudeReviewing
+                    : t.plansAskClaudeReview,
               ),
             ),
         ]),
@@ -131,9 +133,7 @@ class _PlanViewState extends State<PlanView> {
               children: [
                 const Icon(LucideIcons.loader, size: 14),
                 const Gap(8),
-                Text(
-                  'Claude está lendo ${plan.sources.length} fontes e escrevendo as seções…',
-                ).small().muted(),
+                Text(t.plansDrafting(plan.sources.length)).small().muted(),
               ],
             ),
           ),
@@ -145,11 +145,12 @@ class _PlanViewState extends State<PlanView> {
   Widget _startButton() {
     final total = plan.sections.length;
     final changed = plan.sections.where((s) => s.changedAfterApproval).length;
+    final t = context.l10n;
     final label = plan.canStart
-        ? 'Iniciar execução · ${plan.proposedCards.length} loops'
+        ? t.plansStartLoops(plan.proposedCards.length)
         : changed > 0
-        ? '$changed seção alterada após aprovação'
-        : 'Iniciar execução · ${plan.approvedCount}/$total aprovadas';
+        ? t.plansChangedAfterApprovalCount(changed)
+        : t.plansStartApproved(plan.approvedCount, total);
     return PrimaryButton(
       leading: const Icon(LucideIcons.play, size: 14),
       onPressed: plan.canStart
@@ -161,6 +162,7 @@ class _PlanViewState extends State<PlanView> {
 
   Widget _section(PlanSection s) {
     final open = plan.threadsOn(s.id).where((t) => !t.resolved).length;
+    final l10n = context.l10n;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: OutlinedContainer(
@@ -179,7 +181,7 @@ class _PlanViewState extends State<PlanView> {
                   tooltip: (context) => TooltipContainer(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 360),
-                      child: Text('Instrução do template: ${s.instruction}'),
+                      child: Text(l10n.plansTemplateInstruction(s.instruction)),
                     ),
                   ),
                   child: const Icon(LucideIcons.info, size: 14),
@@ -187,7 +189,7 @@ class _PlanViewState extends State<PlanView> {
               ],
               const Gap(8),
               if (s.changedAfterApproval)
-                const DestructiveBadge(child: Text('alterada após aprovação'))
+                DestructiveBadge(child: Text(l10n.plansChangedAfterApproval))
               else if (s.approved)
                 _approvedTag(s),
               const Spacer(),
@@ -195,9 +197,7 @@ class _PlanViewState extends State<PlanView> {
                 GhostButton(
                   size: ButtonSize.small,
                   onPressed: () => setState(() => _filter = s.id),
-                  child: SecondaryBadge(
-                    child: Text('$open aberto${open > 1 ? 's' : ''}'),
-                  ),
+                  child: SecondaryBadge(child: Text(l10n.plansOpenCount(open))),
                 ),
               if (!started)
                 GhostButton(
@@ -206,7 +206,7 @@ class _PlanViewState extends State<PlanView> {
                   onPressed: () => setState(
                     () => _composing = _composing == s.id ? null : s.id,
                   ),
-                  child: const Text('Comentar'),
+                  child: Text(l10n.plansComment),
                 ),
               if (!s.approved && !started) ...[
                 const Gap(4),
@@ -216,7 +216,7 @@ class _PlanViewState extends State<PlanView> {
                   onPressed: plan.drafting
                       ? null
                       : () => store.approveSection(s),
-                  child: const Text('Aprovar'),
+                  child: Text(l10n.plansApprove),
                 ),
               ],
             ]),
@@ -230,8 +230,8 @@ class _PlanViewState extends State<PlanView> {
               CommentComposer(
                 autofocus: true,
                 placeholder: s.approved
-                    ? 'Seção aprovada: o comentário vira emenda do primeiro loop…'
-                    : 'Comentar em ${s.title}…',
+                    ? l10n.plansApprovedSectionPlaceholder
+                    : l10n.plansCommentOn(s.title),
                 onSend: (text) {
                   store.comment(plan, s.id, s.title, text);
                   setState(() {
@@ -265,7 +265,7 @@ class _PlanViewState extends State<PlanView> {
   Widget _approvedTag(PlanSection s) => Tooltip(
     tooltip: (context) => TooltipContainer(
       child: Text(
-        'Aprovada ${_time(s.approvedAt!)} · digest ${s.approvedDigest}',
+        context.l10n.plansApprovedAt(_time(s.approvedAt!), s.approvedDigest!),
       ),
     ),
     child: Row(
@@ -273,7 +273,7 @@ class _PlanViewState extends State<PlanView> {
       children: [
         const Icon(LucideIcons.circleCheck, size: 14, color: Colors.emerald),
         const Gap(4),
-        const Text('aprovada').xSmall().medium(color: Colors.emerald),
+        Text(context.l10n.plansApproved).xSmall().medium(color: Colors.emerald),
       ],
     ),
   );
@@ -369,50 +369,62 @@ class _PlanViewState extends State<PlanView> {
   };
 
   /// Each loop is one PR; its tasks run in parallel groups.
-  Widget _loops(List<TaskCard> loops) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      for (final l in loops)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: OutlinedContainer(
-            padding: const EdgeInsets.all(10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Text('Loop ${l.number}').xSmall().muted(),
-                    const Gap(6),
-                    Expanded(child: Text(l.title).small().semiBold()),
-                    Text(
-                      l.dependsOn.isEmpty
-                          ? 'pode começar já'
-                          : 'depois do ${l.dependsOn.map((d) => 'loop $d').join(' e ')}',
-                    ).xSmall().muted(),
-                  ],
-                ),
-                const Gap(6),
-                _table(
-                  TableBlock(
-                    ['Tarefa', 'Skill', 'Modelo', 'Grupo'],
-                    [
-                      for (final t in l.tasks)
-                        [
-                          '${t.id} ${t.title}',
-                          t.skill,
-                          t.model,
-                          'G${t.group}${t.dependsOn.isEmpty ? '' : ' · após ${t.dependsOn.join(', ')}'}${t.needsOk ? ' · seu OK' : ''}',
-                        ],
+  Widget _loops(List<TaskCard> loops) {
+    final l10n = context.l10n;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final l in loops)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: OutlinedContainer(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Text('Loop ${l.number}').xSmall().muted(),
+                      const Gap(6),
+                      Expanded(child: Text(l.title).small().semiBold()),
+                      Text(
+                        l.dependsOn.isEmpty
+                            ? l10n.plansCanStartNow
+                            : l10n.plansAfterLoops(
+                                l.dependsOn
+                                    .map(l10n.plansLoopRef)
+                                    .join(l10n.plansListAnd),
+                              ),
+                      ).xSmall().muted(),
                     ],
                   ),
-                ),
-              ],
+                  const Gap(6),
+                  _table(
+                    TableBlock(
+                      [
+                        l10n.plansTableTask,
+                        'Skill',
+                        l10n.plansTableModel,
+                        l10n.plansTableGroup,
+                      ],
+                      [
+                        for (final t in l.tasks)
+                          [
+                            '${t.id} ${t.title}',
+                            t.skill,
+                            t.model,
+                            'G${t.group}${t.dependsOn.isEmpty ? '' : ' · ${l10n.plansTaskAfter(t.dependsOn.join(', '))}'}${t.needsOk ? ' · ${l10n.plansYourOk}' : ''}',
+                          ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-    ],
-  );
+      ],
+    );
+  }
 
   static String _time(DateTime t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
@@ -453,6 +465,7 @@ class _ReviewPanelState extends State<_ReviewPanel> {
         .toList();
     final awaiting = plan.threads.where((t) => t.awaitingAgent).length;
     final open = plan.openThreads;
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -460,15 +473,17 @@ class _ReviewPanelState extends State<_ReviewPanel> {
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
           child: Row(
             children: [
-              const Text('Comentários').semiBold(),
+              Text(l10n.plansComments).semiBold(),
               const Gap(6),
-              Text(open == 1 ? '1 aberto' : '$open abertos').xSmall().muted(),
+              Text(l10n.plansOpenCount(open)).xSmall().muted(),
               const Spacer(),
               GhostButton(
                 size: ButtonSize.small,
                 onPressed: () => setState(() => _showResolved = !_showResolved),
                 child: Text(
-                  _showResolved ? 'Ocultar resolvidos' : 'Ver resolvidos',
+                  _showResolved
+                      ? l10n.plansHideResolved
+                      : l10n.plansShowResolved,
                 ),
               ),
             ],
@@ -480,13 +495,13 @@ class _ReviewPanelState extends State<_ReviewPanel> {
             child: Row(
               children: [
                 Text(
-                  'Filtrando: ${plan.section(widget.filter!).title}',
+                  l10n.plansFiltering(plan.section(widget.filter!).title),
                 ).xSmall().muted(),
                 const Spacer(),
                 GhostButton(
                   size: ButtonSize.small,
                   onPressed: widget.onClearFilter,
-                  child: const Text('Ver todos'),
+                  child: Text(l10n.plansShowAll),
                 ),
               ],
             ),
@@ -498,17 +513,15 @@ class _ReviewPanelState extends State<_ReviewPanel> {
               if (threads.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: const Text(
-                    'Nenhum comentário aqui.\nUse "Comentar" em qualquer seção.',
+                  child: Text(
+                    l10n.plansNoCommentsHere,
                     textAlign: TextAlign.center,
                   ).small().muted(),
                 ),
               for (final t in threads) _thread(t),
               if (plan.amendments.isNotEmpty) ...[
                 const Gap(4),
-                const Text(
-                  'EMENDAS PARA O PRIMEIRO LOOP',
-                ).xSmall().semiBold().muted(),
+                Text(l10n.plansAmendmentsHeader).xSmall().semiBold().muted(),
                 const Gap(6),
                 for (final a in plan.amendments)
                   Padding(
@@ -524,9 +537,7 @@ class _ReviewPanelState extends State<_ReviewPanel> {
           Padding(
             padding: const EdgeInsets.all(12),
             child: plan.reviewing
-                ? const Text(
-                    'Claude está revisando os comentários…',
-                  ).small().muted()
+                ? Text(l10n.plansClaudeReviewingComments).small().muted()
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -535,13 +546,10 @@ class _ReviewPanelState extends State<_ReviewPanel> {
                         onPressed: awaiting == 0
                             ? null
                             : () => store.requestPlanReview(plan),
-                        child: Text('Pedir revisão ao Claude ($awaiting)'),
+                        child: Text(l10n.plansAskClaudeReviewCount(awaiting)),
                       ),
                       const Gap(6),
-                      const Text(
-                        'Em seção aberta, Claude ajusta a seção. Em seção aprovada, '
-                        'nada muda: o pedido vira emenda do primeiro loop.',
-                      ).xSmall().muted(),
+                      Text(l10n.plansReviewHint).xSmall().muted(),
                     ],
                   ),
           ),
@@ -555,38 +563,45 @@ class _ReviewPanelState extends State<_ReviewPanel> {
 
 /// A comment thread with replies and resolve (review panel and phone).
 Widget threadCard(HarnessStore store, CommentThread t) {
-  return Padding(
-    padding: const EdgeInsets.only(bottom: 10),
-    child: OutlinedContainer(
-      padding: const EdgeInsets.all(10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
+  return Builder(
+    builder: (context) {
+      final l10n = context.l10n;
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: OutlinedContainer(
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              OutlineBadge(child: Text(t.anchorLabel)),
-              const Gap(6),
-              if (t.resolved)
-                const Text('resolvido').xSmall().muted()
-              else if (t.awaitingAgent)
-                const Text('aguardando Claude').xSmall().muted(),
-              const Spacer(),
-              GhostButton(
-                size: ButtonSize.small,
-                onPressed: () => store.setResolved(t, !t.resolved),
-                child: Text(t.resolved ? 'Reabrir' : 'Resolver'),
+              Row(
+                children: [
+                  OutlineBadge(child: Text(t.anchorLabel)),
+                  const Gap(6),
+                  if (t.resolved)
+                    Text(l10n.plansResolved).xSmall().muted()
+                  else if (t.awaitingAgent)
+                    Text(l10n.plansAwaitingClaude).xSmall().muted(),
+                  const Spacer(),
+                  GhostButton(
+                    size: ButtonSize.small,
+                    onPressed: () => store.setResolved(t, !t.resolved),
+                    child: Text(
+                      t.resolved ? l10n.plansReopen : l10n.plansResolve,
+                    ),
+                  ),
+                ],
               ),
+              const Gap(8),
+              CommentList(t.messages, now: store.now),
+              if (!t.resolved)
+                CommentComposer(
+                  placeholder: l10n.plansReply,
+                  onSend: (text) => store.reply(t, text),
+                ),
             ],
           ),
-          const Gap(8),
-          CommentList(t.messages, now: store.now),
-          if (!t.resolved)
-            CommentComposer(
-              placeholder: 'Responder…',
-              onSend: (text) => store.reply(t, text),
-            ),
-        ],
-      ),
-    ),
+        ),
+      );
+    },
   );
 }

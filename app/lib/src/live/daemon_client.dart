@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../rust/api/link.dart' as link;
+import '../i18n.dart';
 import '../model.dart';
 import 'grid.dart';
 import 'lsp_client.dart';
@@ -492,8 +493,8 @@ class DaemonClient extends ChangeNotifier {
             ?.state;
         if (m['state'] == 'waiting_input' && before != 'waiting_input') {
           onAlert?.call(
-            'Esperando você',
-            '${sessionLabel(m['session_id'] as String)} precisa de uma resposta.',
+            l10n.orcNeedDoing,
+            l10n.coreAlertWaitingBody(sessionLabel(m['session_id'] as String)),
           );
         }
         sessions = [
@@ -566,8 +567,11 @@ class DaemonClient extends ChangeNotifier {
         notifyListeners();
       case 'env_request':
         onAlert?.call(
-          'Um agente pede uma env',
-          '${sessionLabel(m['session_id'] as String)} quer gravar ${m['name']}. Aprove ou recuse no app.',
+          l10n.coreAlertEnvTitle,
+          l10n.coreAlertEnvBody(
+            sessionLabel(m['session_id'] as String),
+            '${m['name']}',
+          ),
         );
         envRequests = [
           ...envRequests,
@@ -578,7 +582,7 @@ class DaemonClient extends ChangeNotifier {
         final id = m['id'] as String;
         if (!approvals.any((a) => a.$1 == id)) {
           onAlert?.call(
-            'Precisa do seu OK',
+            l10n.coreAlertApprovalTitle,
             '${sessionLabel(m['session_id'] as String)}: ${m['action']}',
           );
           approvals = [
@@ -668,16 +672,20 @@ class DaemonClient extends ChangeNotifier {
             if (state == previous[c['number']]) continue;
             final msg = switch (state) {
               'review' => (
-                'PR aberto',
-                '$name · card #${c['number']} está em review.',
+                l10n.coreAlertPrTitle,
+                l10n.coreAlertPrBody('$name', '${c['number']}'),
               ),
               'done' => (
-                'Card mergeado',
-                '$name · card #${c['number']} foi feito.',
+                l10n.orcJobsDone,
+                l10n.coreAlertMergedBody('$name', '${c['number']}'),
               ),
               'failed' || 'stopped' => (
-                'Card parou',
-                '$name · card #${c['number']}: ${c['note'] ?? state}.',
+                l10n.coreAlertStoppedTitle,
+                l10n.coreAlertStoppedBody(
+                  '$name',
+                  '${c['number']}',
+                  '${c['note'] ?? state}',
+                ),
               ),
               _ => null,
             };

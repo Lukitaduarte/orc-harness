@@ -1,6 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../i18n.dart';
 import '../model.dart';
 import 'connect_dialog.dart';
 import 'format.dart';
@@ -59,7 +60,7 @@ class WorkspaceRail extends StatelessWidget {
           if (store.daemon != null)
             Tooltip(
               tooltip: (context) =>
-                  const TooltipContainer(child: Text('Novo workspace')),
+                  TooltipContainer(child: Text(context.l10n.shellNewWorkspace)),
               alignment: Alignment.centerLeft,
               anchorAlignment: Alignment.centerRight,
               child: GhostButton(
@@ -71,7 +72,7 @@ class WorkspaceRail extends StatelessWidget {
           const Spacer(),
           Tooltip(
             tooltip: (context) =>
-                const TooltipContainer(child: Text('Uso e custo')),
+                TooltipContainer(child: Text(context.l10n.shellUsageAndCost)),
             alignment: Alignment.centerLeft,
             anchorAlignment: Alignment.centerRight,
             child: store.analyticsOpen
@@ -88,9 +89,8 @@ class WorkspaceRail extends StatelessWidget {
           ),
           const Gap(4),
           Tooltip(
-            tooltip: (context) => const TooltipContainer(
-              child: Text('Catálogo de skills, MCPs e envs'),
-            ),
+            tooltip: (context) =>
+                TooltipContainer(child: Text(context.l10n.shellCatalogTip)),
             alignment: Alignment.centerLeft,
             anchorAlignment: Alignment.centerRight,
             child: store.catalogOpen
@@ -127,6 +127,7 @@ class Sidebar extends StatelessWidget {
     final accounts = store.workspaceAccounts;
     final sessions = store.workspaceSessions;
     final focused = store.focusedSession;
+    final l10n = context.l10n;
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
@@ -147,12 +148,12 @@ class Sidebar extends StatelessWidget {
           ],
         ),
         Text(
-          '${accounts.length} contas · ${sessions.length} sessões',
+          l10n.shellSidebarCounts(accounts.length, sessions.length),
         ).xSmall().muted(),
         const Gap(16),
         _SectionLabel(
-          'Contas',
-          addTip: 'Nova conta',
+          l10n.shellAccounts,
+          addTip: l10n.shellNewAccount,
           onAdd: store.isLive
               ? () => showNewAccountDialog(context, store)
               : null,
@@ -165,21 +166,20 @@ class Sidebar extends StatelessWidget {
           ),
         const Gap(8),
         _SectionLabel(
-          'Sessões',
-          addTip: 'Nova sessão',
+          l10n.shellSessions,
+          addTip: l10n.shellNewSession,
           onAdd: store.newSession,
         ),
         for (final s in sessions)
           _RowActions(
-            tip: 'Apagar sessão',
+            tip: l10n.shellDeleteSession,
             icon: LucideIcons.trash2,
             onAction: () async {
               if (await confirm(
                 context,
-                'Apagar a sessão ${s.name}?',
-                'Encerra o processo e tira da lista. A worktree, os commits e '
-                    'a conversa (claude --resume) ficam.',
-                'Apagar',
+                l10n.shellDeleteSessionTitle(s.name),
+                l10n.shellDeleteSessionBody,
+                l10n.shellDelete,
               )) {
                 store.deleteSession(s.id);
               }
@@ -193,21 +193,21 @@ class Sidebar extends StatelessWidget {
         const Gap(16),
         if (store.isLive) ...[
           _SectionLabel(
-            'Repositórios',
-            addTip: 'Adicionar repositório',
+            l10n.shellRepositories,
+            addTip: l10n.shellAddRepository,
             onAdd: () => showAddRepo(context, store),
           ),
           RepoSection(store),
           const Gap(16),
         ],
         _SectionLabel(
-          'Planos',
-          addTip: 'Novo plano',
+          l10n.shellPlans,
+          addTip: l10n.shellNewPlan,
           onAdd: () => showNewPlanDialog(context, store),
         ),
         for (final p in store.workspaceProjects)
           _RowActions(
-            tip: 'Apagar plano',
+            tip: l10n.shellDeletePlan,
             icon: LucideIcons.trash2,
             onAction: () async {
               final running = p.cards.any(
@@ -216,12 +216,11 @@ class Sidebar extends StatelessWidget {
               );
               if (await confirm(
                 context,
-                'Apagar o plano ${p.name}?',
+                l10n.shellDeletePlanTitle(p.name),
                 running
-                    ? 'Ele tem cards em execução: as sessões deles são encerradas. '
-                          'Branches, worktrees e PRs ficam.'
-                    : 'Branches, worktrees e PRs ficam.',
-                'Apagar',
+                    ? l10n.shellDeletePlanBodyRunning
+                    : l10n.shellDeletePlanBody,
+                l10n.shellDelete,
               )) {
                 store.deleteProject(p);
               }
@@ -238,6 +237,7 @@ class Sidebar extends StatelessWidget {
 
   /// What you can do with an account: log out, take it out.
   Future<void> _accountActions(BuildContext context, Account a) async {
+    final l10n = context.l10n;
     final choice = await showOverlay<String>(
       context,
       DialogConfiguration<String>(
@@ -254,32 +254,27 @@ class Sidebar extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('Conta ${a.email}').large().semiBold(),
+                    Text(l10n.shellAccountTitle(a.email)).large().semiBold(),
                     const Gap(12),
                     OutlineButton(
                       leading: const Icon(LucideIcons.logOut, size: 14),
                       onPressed: () => closeOverlay(context, 'logout'),
-                      child: const Text('Sair da conta (/logout)'),
+                      child: Text(l10n.shellLogoutButton),
                     ),
                     const Gap(4),
-                    const Text(
-                      'Abre uma sessão nela e roda o /logout do Claude Code.',
-                    ).xSmall().muted(),
+                    Text(l10n.shellLogoutHint).xSmall().muted(),
                     const Gap(12),
                     DestructiveButton(
                       leading: const Icon(LucideIcons.userMinus, size: 14),
                       onPressed: () => closeOverlay(context, 'remove'),
-                      child: const Text('Remover do harness'),
+                      child: Text(l10n.shellRemoveFromHarness),
                     ),
                     const Gap(4),
-                    const Text(
-                      'Encerra as sessões dela e a tira das contas. A pasta e as '
-                      'conversas ficam no disco.',
-                    ).xSmall().muted(),
+                    Text(l10n.shellRemoveHint).xSmall().muted(),
                     const Gap(16),
                     OutlineButton(
                       onPressed: () => closeOverlay(context, null),
-                      child: const Text('Cancelar'),
+                      child: Text(l10n.shellCancel),
                     ),
                   ],
                 ),
@@ -294,21 +289,20 @@ class Sidebar extends StatelessWidget {
       case 'logout':
         if (await confirm(
           context,
-          'Sair da conta ${a.email}?',
+          l10n.shellLogoutTitle(a.email),
           a.id == 'default'
-              ? 'É a conta padrão do Claude Code neste Mac: o login sai também '
-                    'fora do harness.'
-              : 'O login dessa conta sai do Claude Code.',
-          'Sair',
+              ? l10n.shellLogoutDefaultBody
+              : l10n.shellLogoutBody,
+          l10n.shellLogout,
         )) {
           store.logoutAccount(a.id);
         }
       case 'remove':
         if (await confirm(
           context,
-          'Remover ${a.email} do harness?',
-          'As sessões dela são encerradas.',
-          'Remover',
+          l10n.shellRemoveTitle(a.email),
+          l10n.shellRemoveBody,
+          l10n.shellRemove,
         )) {
           store.removeAccount(a.id);
         }
@@ -456,9 +450,7 @@ class _AccountCard extends StatelessWidget {
             ),
             const Gap(10),
             if (!account.hasReading)
-              const Text(
-                'sem leitura ainda: a quota chega com a primeira resposta do Claude',
-              ).xSmall().muted()
+              Text(context.l10n.shellNoReadingYet).xSmall().muted()
             else ...[
               QuotaMeter('5h', account.fiveHour, now),
               const Gap(8),
@@ -467,7 +459,9 @@ class _AccountCard extends StatelessWidget {
             // Idle accounts keep their last reading instead of dropping to zero.
             if (account.hasReading && age.inMinutes >= 5) ...[
               const Gap(6),
-              Text('atualizado há ${formatDuration(age)}').xSmall().muted(),
+              Text(
+                context.l10n.shellUpdatedAgo(formatDuration(age)),
+              ).xSmall().muted(),
             ],
           ],
         ),
@@ -515,10 +509,12 @@ class QuotaMeter extends StatelessWidget {
           padding: const EdgeInsets.only(left: 22),
           child: exhaust == null
               ? Text(
-                  'reset em ${formatDuration(window.resetsAt.difference(now))}',
+                  context.l10n.shellResetIn(
+                    formatDuration(window.resetsAt.difference(now)),
+                  ),
                 ).xSmall().muted()
               : Text(
-                  'nesse ritmo, esgota em ~${formatDuration(exhaust)}',
+                  context.l10n.shellExhaustsIn(formatDuration(exhaust)),
                 ).xSmall().medium(color: color),
         ),
       ],
@@ -605,7 +601,7 @@ class _ProjectRow extends StatelessWidget {
               ).small(),
             ),
             project.isPlanning
-                ? const OutlineBadge(child: Text('plano'))
+                ? OutlineBadge(child: Text(context.l10n.shellPlanBadge))
                 : Text(
                     '${project.doneCount}/${project.cards.length}',
                   ).xSmall().muted(),

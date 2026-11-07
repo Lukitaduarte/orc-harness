@@ -1,6 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../i18n.dart';
 import '../model.dart';
 import 'template_editor.dart';
 
@@ -22,23 +23,23 @@ class CatalogView extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Catálogo').large().semiBold(),
-                  const Text(
-                    'Configure uma vez; cada sessão liga o que precisa no painel de perfil.',
-                  ).xSmall().muted(),
+                  Text(context.l10n.toolsCatalogTitle).large().semiBold(),
+                  Text(context.l10n.toolsCatalogSubtitle).xSmall().muted(),
                 ],
               ),
             ),
             PrimaryButton(
               leading: const Icon(LucideIcons.plus, size: 14),
               onPressed: () => _showAddDialog(context, store),
-              child: const Text('Adicionar'),
+              child: Text(context.l10n.toolsAdd),
             ),
           ],
         ),
         const Gap(16),
         for (final kind in CatalogKind.values) ...[
-          Text(_kindTitle(kind).toUpperCase()).xSmall().semiBold().muted(),
+          Text(
+            _kindTitle(context, kind).toUpperCase(),
+          ).xSmall().semiBold().muted(),
           const Gap(8),
           for (final item in store.catalog.where((i) => i.kind == kind))
             _ItemRow(store, item),
@@ -46,22 +47,19 @@ class CatalogView extends StatelessWidget {
         ],
         Row(
           children: [
-            const Expanded(
-              child: Text('TEMPLATES DE PLAN MODE'),
+            Expanded(
+              child: Text(context.l10n.toolsPlanTemplatesHeader),
             ).xSmall().semiBold().muted(),
             GhostButton(
               size: ButtonSize.small,
               leading: const Icon(LucideIcons.plus, size: 12),
               onPressed: () => showTemplateEditor(context, store),
-              child: const Text('Novo template'),
+              child: Text(context.l10n.toolsNewTemplate),
             ),
           ],
         ),
         const Gap(4),
-        const Text(
-          'Markdown com as seções de cada tipo de trabalho e a instrução de cada uma. '
-          'Escolhido no "Novo plano".',
-        ).xSmall().muted(),
+        Text(context.l10n.toolsPlanTemplatesHelp).xSmall().muted(),
         const Gap(8),
         for (final t in store.planTemplates) _TemplateRow(store, t),
       ],
@@ -98,13 +96,13 @@ class _TemplateRow extends StatelessWidget {
                 ],
               ),
             ),
-            Text('$sections seções').xSmall().muted(),
+            Text(context.l10n.toolsSectionCount(sections)).xSmall().muted(),
             const Gap(12),
             OutlineButton(
               size: ButtonSize.small,
               onPressed: () =>
                   showTemplateEditor(context, store, template: template),
-              child: const Text('Editar markdown'),
+              child: Text(context.l10n.toolsEditMarkdown),
             ),
           ],
         ),
@@ -113,10 +111,10 @@ class _TemplateRow extends StatelessWidget {
   }
 }
 
-String _kindTitle(CatalogKind k) => switch (k) {
-  CatalogKind.skill => 'Skills',
-  CatalogKind.mcp => 'MCPs',
-  CatalogKind.env => 'Envs',
+String _kindTitle(BuildContext context, CatalogKind k) => switch (k) {
+  CatalogKind.skill => context.l10n.toolsKindSkills,
+  CatalogKind.mcp => context.l10n.toolsKindMcps,
+  CatalogKind.env => context.l10n.toolsKindEnvs,
 };
 
 class _ItemRow extends StatelessWidget {
@@ -159,8 +157,8 @@ class _ItemRow extends StatelessWidget {
             ),
             Text(
               using == 0
-                  ? 'sem uso'
-                  : 'em $using sess${using > 1 ? 'ões' : 'ão'}',
+                  ? context.l10n.toolsUnused
+                  : context.l10n.toolsUsedInSessions(using),
             ).xSmall().muted(),
             const Gap(12),
             if (item.kind == CatalogKind.mcp) ...[
@@ -185,14 +183,14 @@ class _ItemRow extends StatelessWidget {
     final result = store.mcpResult(item.id);
     final status = switch (check) {
       McpCheck.untested => null,
-      McpCheck.testing => const Text('testando…').xSmall().muted(),
+      McpCheck.testing => Text(context.l10n.toolsMcpTesting).xSmall().muted(),
       McpCheck.ok => Text(
-        'conectado · ${result?.$2 ?? 12} tools',
+        context.l10n.toolsMcpConnected('${result?.$2 ?? 12}'),
       ).xSmall().medium(color: Colors.emerald),
       McpCheck.failed => ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 260),
         child: Text(
-          'falhou: ${result?.$3 ?? 'token expirado'}',
+          context.l10n.toolsMcpFailed(result?.$3 ?? 'token expirado'),
           overflow: TextOverflow.ellipsis,
         ).xSmall().medium(color: scheme.destructive),
       ),
@@ -207,7 +205,7 @@ class _ItemRow extends StatelessWidget {
           onPressed: check == McpCheck.testing
               ? null
               : () => store.testMcp(item),
-          child: const Text('Testar conexão'),
+          child: Text(context.l10n.toolsTestConnection),
         ),
       ],
     );
@@ -288,15 +286,15 @@ class _AddItemFormState extends State<_AddItemForm> {
   @override
   Widget build(BuildContext context) {
     final detailLabel = switch (_kind) {
-      CatalogKind.skill => 'Pasta da skill',
-      CatalogKind.mcp => 'Comando ou URL',
-      CatalogKind.env => 'Valor (guardado no Keychain)',
+      CatalogKind.skill => context.l10n.toolsSkillFolder,
+      CatalogKind.mcp => context.l10n.toolsCommandOrUrl,
+      CatalogKind.env => context.l10n.toolsEnvValue,
     };
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text('Adicionar ao catálogo').large().semiBold(),
+        Text(context.l10n.toolsAddToCatalog).large().semiBold(),
         const Gap(16),
         Row(
           children: [
@@ -305,11 +303,11 @@ class _AddItemFormState extends State<_AddItemForm> {
                 child: k == _kind
                     ? PrimaryButton(
                         onPressed: () {},
-                        child: Text(_kindTitle(k)),
+                        child: Text(_kindTitle(context, k)),
                       )
                     : OutlineButton(
                         onPressed: () => setState(() => _kind = k),
-                        child: Text(_kindTitle(k)),
+                        child: Text(_kindTitle(context, k)),
                       ),
               ),
               if (k != CatalogKind.values.last) const Gap(8),
@@ -317,11 +315,11 @@ class _AddItemFormState extends State<_AddItemForm> {
           ],
         ),
         const Gap(16),
-        const Text('Nome').small().medium(),
+        Text(context.l10n.toolsName).small().medium(),
         const Gap(6),
         TextField(controller: _name, autofocus: true),
         const Gap(12),
-        const Text('Descrição').small().medium(),
+        Text(context.l10n.toolsDescription).small().medium(),
         const Gap(6),
         TextField(controller: _description),
         const Gap(12),
@@ -334,12 +332,12 @@ class _AddItemFormState extends State<_AddItemForm> {
           children: [
             OutlineButton(
               onPressed: () => closeOverlay(context),
-              child: const Text('Cancelar'),
+              child: Text(context.l10n.toolsCancel),
             ),
             const Gap(8),
             PrimaryButton(
               onPressed: _name.text.trim().isEmpty ? null : _save,
-              child: const Text('Adicionar'),
+              child: Text(context.l10n.toolsAdd),
             ),
           ],
         ),

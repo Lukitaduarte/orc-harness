@@ -1,6 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../i18n.dart';
 import '../model.dart';
 import '../plan_markdown.dart';
 import '../plan_templates.dart';
@@ -94,8 +95,8 @@ class _EditorState extends State<_Editor> {
       children: [
         Text(
           widget.template == null
-              ? 'Novo template de plan mode'
-              : 'Editar template',
+              ? context.l10n.toolsNewPlanTemplate
+              : context.l10n.toolsEditTemplate,
         ).large().semiBold(),
         const Gap(12),
         Row(
@@ -103,7 +104,7 @@ class _EditorState extends State<_Editor> {
             Expanded(
               child: TextField(
                 controller: _name,
-                placeholder: const Text('Nome, ex.: Back end com deploy'),
+                placeholder: Text(context.l10n.toolsTemplateNameHint),
               ),
             ),
             const Gap(8),
@@ -111,7 +112,7 @@ class _EditorState extends State<_Editor> {
               flex: 2,
               child: TextField(
                 controller: _description,
-                placeholder: const Text('Quando usar este template'),
+                placeholder: Text(context.l10n.toolsTemplateDescriptionHint),
               ),
             ),
           ],
@@ -145,17 +146,17 @@ class _EditorState extends State<_Editor> {
                   widget.store.removeTemplate(widget.template!);
                   closeOverlay(context);
                 },
-                child: const Text('Excluir template').muted(),
+                child: Text(context.l10n.toolsDeleteTemplate).muted(),
               ),
             const Spacer(),
             OutlineButton(
               onPressed: () => closeOverlay(context),
-              child: const Text('Cancelar'),
+              child: Text(context.l10n.toolsCancel),
             ),
             const Gap(8),
             PrimaryButton(
               onPressed: _name.text.trim().isEmpty ? null : _save,
-              child: const Text('Salvar'),
+              child: Text(context.l10n.toolsSave),
             ),
           ],
         ),
@@ -183,15 +184,18 @@ class _Reading extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       child: ListView(
         children: [
-          const Text('O QUE O HARNESS ENTENDEU').xSmall().semiBold().muted(),
+          Text(context.l10n.toolsHarnessUnderstood).xSmall().semiBold().muted(),
           const Gap(8),
           if (error != null)
             Text(
-              'Erro ao ler: $error',
+              context.l10n.toolsReadError(error),
             ).xSmall().medium(color: Theme.of(context).colorScheme.destructive)
           else ...[
             Text(
-              '${plan!.sections.length} seções · ${plan.proposedCards.length} loops',
+              context.l10n.toolsSectionsAndLoops(
+                plan!.sections.length,
+                plan.proposedCards.length,
+              ),
             ).small().semiBold(),
             const Gap(8),
             for (final s in plan.sections) ...[
@@ -201,10 +205,10 @@ class _Reading extends StatelessWidget {
                   Text('#${s.id}').mono().xSmall().muted(),
                 ],
               ),
-              Text(_kinds(s)).xSmall().muted(),
+              Text(_kinds(context, s)).xSmall().muted(),
               if (s.instruction.isNotEmpty)
                 Text(
-                  'instrução: ${s.instruction}',
+                  context.l10n.toolsInstruction(s.instruction),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ).xSmall().muted(),
@@ -216,18 +220,19 @@ class _Reading extends StatelessWidget {
     );
   }
 
-  static String _kinds(PlanSection s) {
+  static String _kinds(BuildContext context, PlanSection s) {
+    final t = context.l10n;
     final names = s.blocks.map(
       (b) => switch (b) {
-        TextBlock() => 'texto',
-        BulletsBlock() => 'lista',
-        TableBlock() => 'tabela',
-        CodeBlock() => 'código',
-        FlowchartBlock() => 'flowchart',
-        SequenceBlock() => 'sequência',
-        LoopsBlock() => 'loops',
+        TextBlock() => t.toolsBlockText,
+        BulletsBlock() => t.toolsBlockList,
+        TableBlock() => t.toolsBlockTable,
+        CodeBlock() => t.toolsBlockCode,
+        FlowchartBlock() => t.toolsBlockFlowchart,
+        SequenceBlock() => t.toolsBlockSequence,
+        LoopsBlock() => t.toolsBlockLoops,
       },
     );
-    return names.isEmpty ? 'vazia' : names.join(' · ');
+    return names.isEmpty ? t.toolsSectionEmpty : names.join(' · ');
   }
 }

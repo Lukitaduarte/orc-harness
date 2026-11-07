@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../i18n.dart';
 import 'agent_notices.dart';
 import 'analytics_view.dart';
 import 'catalog_view.dart';
@@ -144,8 +145,8 @@ class _Toolbar extends StatelessWidget {
               leading: const Icon(LucideIcons.search, size: 14),
               trailing: const Text('⌘K').xSmall().muted(),
               onPressed: () => openCommandPalette(context, store),
-              child: const Text(
-                'Buscar ou rodar um comando…',
+              child: Text(
+                context.l10n.shellSearchOrRun,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ).small().muted(),
@@ -157,24 +158,24 @@ class _Toolbar extends StatelessWidget {
           GhostButton(
             leading: const Icon(LucideIcons.arrowLeft, size: 14),
             onPressed: () => store.openProjectView(null),
-            child: const Text('Sessões').small(),
+            child: Text(context.l10n.shellSessions).small(),
           ),
           const Text('/').small().muted(),
           const Gap(8),
           Text(p.name).small().semiBold(),
           if (p.isPlanning) ...[
             const Gap(8),
-            const OutlineBadge(child: Text('plano')),
+            OutlineBadge(child: Text(context.l10n.shellPlanBadge)),
           ] else if (p.plan != null) ...[
             const Gap(12),
             _Toggle(
-              'Execução',
+              context.l10n.shellExecution,
               selected: !store.viewingPlan,
               onPressed: () => store.setViewingPlan(false),
             ),
             const Gap(4),
             _Toggle(
-              'Plano',
+              context.l10n.shellPlan,
               selected: store.viewingPlan,
               onPressed: () => store.setViewingPlan(true),
             ),
@@ -185,29 +186,29 @@ class _Toolbar extends StatelessWidget {
           GhostButton(
             leading: const Icon(LucideIcons.arrowLeft, size: 14),
             onPressed: () => store.openProjectView(null),
-            child: const Text('Sessões').small(),
+            child: Text(context.l10n.shellSessions).small(),
           ),
           const Text('/').small().muted(),
           const Gap(8),
-          const Text('Uso').small().semiBold(),
+          Text(context.l10n.shellUsage).small().semiBold(),
         ],
         if (store.catalogOpen) ...[
           const Gap(8),
           GhostButton(
             leading: const Icon(LucideIcons.arrowLeft, size: 14),
             onPressed: () => store.openProjectView(null),
-            child: const Text('Sessões').small(),
+            child: Text(context.l10n.shellSessions).small(),
           ),
           const Text('/').small().muted(),
           const Gap(8),
-          const Text('Catálogo').small().semiBold(),
+          Text(context.l10n.shellCatalog).small().semiBold(),
         ],
         const Spacer(),
         // The workspace's tools, lit while an agent uses them.
         if (store.isLive && store.daemon != null)
           _ToolIcon(
             icon: LucideIcons.globe,
-            name: 'Navegador do workspace',
+            name: context.l10n.shellWorkspaceBrowser,
             usedBy: store.daemon!.browserOf(store.workspaceId).usedBy,
             label: store.daemon!.sessionLabel,
             onPressed: () => store.openBrowser(store.focusedLeafId),
@@ -266,7 +267,9 @@ class _ToolIcon extends StatelessWidget {
     final busy = usedBy;
     return Tooltip(
       tooltip: (context) => TooltipContainer(
-        child: Text(busy == null ? name : '$name · em uso por ${label(busy)}'),
+        child: Text(
+          busy == null ? name : context.l10n.shellToolInUse(name, label(busy)),
+        ),
       ),
       child: GhostButton(
         density: ButtonDensity.icon,

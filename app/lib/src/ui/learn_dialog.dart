@@ -1,6 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../i18n.dart';
 import '../model.dart';
 
 /// Learn: comments on the cards turned into proposed skill changes. Nothing
@@ -42,6 +43,7 @@ class _Learnings extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = store.learningsOf(project).reversed.toList();
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -54,10 +56,7 @@ class _Learnings extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('Learn').large().semiBold(),
-                    const Text(
-                      'Cada comentário nos cards vira uma mudança na skill que tem a lacuna. '
-                      'Você aprova antes de aplicar.',
-                    ).xSmall().muted(),
+                    Text(l10n.plansLearnIntro).xSmall().muted(),
                   ],
                 ),
               ),
@@ -75,10 +74,8 @@ class _Learnings extends StatelessWidget {
               ? Center(
                   child: Text(
                     project.live
-                        ? 'O Claude está lendo os comentários e as skills dos cards.\n'
-                              'As propostas aparecem aqui; nada muda sem o seu OK.'
-                        : 'Nenhum comentário novo nos cards.\n'
-                              'Comente no dialog de um card e rode o Learn de novo.',
+                        ? l10n.plansLearnEmptyLive
+                        : l10n.plansLearnEmpty,
                     textAlign: TextAlign.center,
                   ).small().muted(),
                 )
@@ -91,68 +88,71 @@ class _Learnings extends StatelessWidget {
     );
   }
 
-  Widget _item(BuildContext context, Learning l) => Padding(
-    padding: const EdgeInsets.only(bottom: 10),
-    child: OutlinedContainer(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              OutlineBadge(child: Text(l.skill)),
-              const Gap(6),
-              Text(l.file).mono().xSmall().muted(),
-              const Spacer(),
-              Text(l.source).xSmall().muted(),
-            ],
-          ),
-          const Gap(8),
-          Text(l.summary).small(),
-          if (l.replacement.isNotEmpty) ...[
-            const Gap(8),
-            if (l.old.isNotEmpty)
-              _passage(
-                context,
-                '−',
-                l.old,
-                Theme.of(context).colorScheme.destructive,
-              ),
-            _passage(context, '+', l.replacement, Colors.emerald),
-          ],
-          if (l.error != null) ...[
-            const Gap(6),
-            Text(
-              'Não aplicou: ${l.error}',
-            ).xSmall().medium(color: Theme.of(context).colorScheme.destructive),
-          ],
-          const Gap(10),
-          switch (l.accepted) {
-            null => Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+  Widget _item(BuildContext context, Learning l) {
+    final l10n = context.l10n;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: OutlinedContainer(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
               children: [
-                OutlineButton(
-                  size: ButtonSize.small,
-                  onPressed: () => store.decideLearning(project, l, false),
-                  child: const Text('Descartar'),
-                ),
-                const Gap(8),
-                PrimaryButton(
-                  size: ButtonSize.small,
-                  onPressed: () => store.decideLearning(project, l, true),
-                  child: const Text('Aplicar na skill'),
-                ),
+                OutlineBadge(child: Text(l.skill)),
+                const Gap(6),
+                Text(l.file).mono().xSmall().muted(),
+                const Spacer(),
+                Text(l.source).xSmall().muted(),
               ],
             ),
-            true => const Text(
-              'Aplicado na skill',
-            ).xSmall().medium(color: Colors.emerald),
-            false => const Text('Descartado').xSmall().muted(),
-          },
-        ],
+            const Gap(8),
+            Text(l.summary).small(),
+            if (l.replacement.isNotEmpty) ...[
+              const Gap(8),
+              if (l.old.isNotEmpty)
+                _passage(
+                  context,
+                  '−',
+                  l.old,
+                  Theme.of(context).colorScheme.destructive,
+                ),
+              _passage(context, '+', l.replacement, Colors.emerald),
+            ],
+            if (l.error != null) ...[
+              const Gap(6),
+              Text(l10n.plansLearnNotApplied(l.error!)).xSmall().medium(
+                color: Theme.of(context).colorScheme.destructive,
+              ),
+            ],
+            const Gap(10),
+            switch (l.accepted) {
+              null => Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  OutlineButton(
+                    size: ButtonSize.small,
+                    onPressed: () => store.decideLearning(project, l, false),
+                    child: Text(l10n.plansDiscard),
+                  ),
+                  const Gap(8),
+                  PrimaryButton(
+                    size: ButtonSize.small,
+                    onPressed: () => store.decideLearning(project, l, true),
+                    child: Text(l10n.plansApplyToSkill),
+                  ),
+                ],
+              ),
+              true => Text(
+                l10n.plansAppliedToSkill,
+              ).xSmall().medium(color: Colors.emerald),
+              false => Text(l10n.plansDiscarded).xSmall().muted(),
+            },
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   /// One side of the edit, marked − (removed) or + (added).
   Widget _passage(

@@ -1,6 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../i18n.dart';
 import '../live/lsp_client.dart';
 
 /// ⌘⇧F: text search in the focused session's folder, or the first
@@ -59,7 +60,7 @@ class _SearchState extends State<_Search> {
     if (repo != null) {
       return (null, repo['id'] as String, repo['name'] as String);
     }
-    return (null, null, 'nada aberto');
+    return (null, null, context.l10n.toolsNothingOpen);
   }
 
   /// The session's main language: TypeScript with a package.json, else Dart.
@@ -125,9 +126,7 @@ class _SearchState extends State<_Search> {
     final (_, _, label) = _scope();
     if (d == null) {
       return Center(
-        child: const Text(
-          'Busca no código precisa do daemon conectado.',
-        ).small().muted(),
+        child: Text(context.l10n.toolsSearchNeedsDaemon).small().muted(),
       );
     }
     return ListenableBuilder(
@@ -145,7 +144,7 @@ class _SearchState extends State<_Search> {
                     child: TextField(
                       controller: _query,
                       autofocus: true,
-                      placeholder: Text('Buscar em $label…'),
+                      placeholder: Text(context.l10n.toolsSearchIn(label)),
                       onSubmitted: (_) => _run(),
                     ),
                   ),
@@ -164,14 +163,17 @@ class _SearchState extends State<_Search> {
                     _symbols
                         ? SecondaryButton(
                             onPressed: () => setState(() => _symbols = false),
-                            child: const Text('Símbolos'),
+                            child: Text(context.l10n.toolsSymbols),
                           )
                         : GhostButton(
                             onPressed: () => setState(() => _symbols = true),
-                            child: const Text('Símbolos'),
+                            child: Text(context.l10n.toolsSymbols),
                           ),
                   const Gap(4),
-                  PrimaryButton(onPressed: _run, child: const Text('Buscar')),
+                  PrimaryButton(
+                    onPressed: _run,
+                    child: Text(context.l10n.toolsSearch),
+                  ),
                 ],
               ),
             ),
@@ -180,7 +182,10 @@ class _SearchState extends State<_Search> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
                 child: Text(
-                  '${result.$2.length}${result.$3 ? '+' : ''} resultado(s) para "${result.$1}"',
+                  context.l10n.toolsResults(
+                    '${result.$2.length}${result.$3 ? '+' : ''}',
+                    result.$1,
+                  ),
                 ).xSmall().muted(),
               ),
             Expanded(

@@ -1,5 +1,6 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
+import '../i18n.dart';
 import '../model.dart';
 
 String formatDuration(Duration d) {
@@ -36,10 +37,10 @@ Color sessionStateColor(BuildContext context, SessionState s) => switch (s) {
 };
 
 String sessionStateLabel(SessionState s) => switch (s) {
-  SessionState.running => 'rodando',
-  SessionState.waitingInput => 'esperando você',
-  SessionState.starting => 'reiniciando',
-  SessionState.idle => 'ociosa',
+  SessionState.running => l10n.toolsSessionRunning,
+  SessionState.waitingInput => l10n.toolsSessionWaiting,
+  SessionState.starting => l10n.toolsSessionStarting,
+  SessionState.idle => l10n.toolsSessionIdle,
 };
 
 class StatusDot extends StatelessWidget {

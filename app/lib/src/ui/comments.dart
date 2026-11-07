@@ -1,5 +1,6 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
+import '../i18n.dart';
 import '../model.dart';
 import 'format.dart';
 
@@ -13,6 +14,7 @@ class CommentList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -23,7 +25,7 @@ class CommentList extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Avatar(
-                  initials: c.byAgent ? 'C' : 'V',
+                  initials: c.byAgent ? 'C' : l10n.plansYouInitial,
                   size: 22,
                   backgroundColor: c.byAgent ? Colors.orange : scheme.muted,
                 ),
@@ -37,7 +39,7 @@ class CommentList extends StatelessWidget {
                           Text(c.author).xSmall().semiBold(),
                           const Gap(6),
                           Text(
-                            'há ${formatDuration(now.difference(c.at))}',
+                            l10n.plansAgo(formatDuration(now.difference(c.at))),
                           ).xSmall().muted(),
                         ],
                       ),
@@ -58,13 +60,15 @@ class CommentList extends StatelessWidget {
 class CommentComposer extends StatefulWidget {
   const CommentComposer({
     required this.onSend,
-    this.placeholder = 'Escreva um comentário…',
+    this.placeholder,
     this.autofocus = false,
     super.key,
   });
 
   final ValueChanged<String> onSend;
-  final String placeholder;
+
+  /// Defaults to "Escreva um comentário…" in the current language.
+  final String? placeholder;
   final bool autofocus;
 
   @override
@@ -101,7 +105,9 @@ class _CommentComposerState extends State<CommentComposer> {
         child: TextField(
           controller: _controller,
           autofocus: widget.autofocus,
-          placeholder: Text(widget.placeholder),
+          placeholder: Text(
+            widget.placeholder ?? context.l10n.plansWriteComment,
+          ),
           minLines: 1,
           maxLines: 4,
           onSubmitted: (_) => _send(),

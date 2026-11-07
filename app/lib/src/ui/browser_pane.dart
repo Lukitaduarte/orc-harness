@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
+import '../i18n.dart';
 import '../live/daemon_client.dart';
 
 /// A workspace browser in a pane: the daemon's headless Chrome as a stream
@@ -197,17 +198,17 @@ class _BrowserPaneState extends State<BrowserPane> {
                 children: [
                   _tool(
                     LucideIcons.arrowLeft,
-                    'Voltar',
+                    context.l10n.devBack,
                     b.open ? () => _send({'action': 'back'}) : null,
                   ),
                   _tool(
                     LucideIcons.arrowRight,
-                    'Avançar',
+                    context.l10n.devForward,
                     b.open ? () => _send({'action': 'forward'}) : null,
                   ),
                   _tool(
                     LucideIcons.rotateCw,
-                    'Recarregar',
+                    context.l10n.devReload,
                     b.open ? () => _send({'action': 'reload'}) : null,
                   ),
                   const Gap(4),
@@ -215,7 +216,7 @@ class _BrowserPaneState extends State<BrowserPane> {
                     child: TextField(
                       controller: _url,
                       focusNode: _urlFocus,
-                      placeholder: const Text('Endereço'),
+                      placeholder: Text(context.l10n.devAddress),
                       style: const TextStyle(fontSize: 12),
                       onSubmitted: (u) {
                         if (u.trim().isEmpty) return;
@@ -227,7 +228,7 @@ class _BrowserPaneState extends State<BrowserPane> {
                   const Gap(4),
                   _tool(
                     LucideIcons.power,
-                    'Fechar o navegador (cookies ficam no perfil)',
+                    context.l10n.devCloseBrowser,
                     b.open ? () => _send({'action': 'close'}) : null,
                   ),
                 ],
@@ -240,7 +241,7 @@ class _BrowserPaneState extends State<BrowserPane> {
                       child: PrimaryButton(
                         leading: const Icon(LucideIcons.globe, size: 14),
                         onPressed: () => _send({'action': 'open', 'url': null}),
-                        child: const Text('Abrir navegador do workspace'),
+                        child: Text(context.l10n.devOpenWorkspaceBrowser),
                       ),
                     )
                   : LayoutBuilder(
@@ -292,7 +293,7 @@ class _BrowserPaneState extends State<BrowserPane> {
                             child: Container(
                               color: scheme.background,
                               child: b.frame == null
-                                  ? const Center(child: Text('Carregando…'))
+                                  ? Center(child: Text(context.l10n.devLoading))
                                   : Image.memory(
                                       b.frame!,
                                       gaplessPlayback: true,

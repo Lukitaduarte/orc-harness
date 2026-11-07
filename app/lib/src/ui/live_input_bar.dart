@@ -1,5 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
+import '../i18n.dart';
+
 /// Typing into a session from a phone: the soft keyboard cannot type into
 /// the terminal itself, so text goes from this field, plus the keys the
 /// Claude Code TUI needs (Esc, Tab, arrows, Ctrl-C).
@@ -74,7 +76,7 @@ class _LiveInputBarState extends State<LiveInputBar> {
                 controller: _text,
                 minLines: 1,
                 maxLines: 4,
-                placeholder: const Text('Mensagem para o Claude'),
+                placeholder: Text(context.l10n.devMessageClaude),
                 onSubmitted: (_) => _send(),
               ),
             ),

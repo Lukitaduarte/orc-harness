@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'i18n.dart';
 import 'live/daemon_client.dart';
 import 'live/live_plans.dart';
 
@@ -76,14 +77,18 @@ class HarnessStore extends ChangeNotifier {
       if (budget == null || budget <= 0) continue;
       final share = monthCost(w.id) / budget;
       for (final (limit, title) in [
-        (1.0, 'Orçamento estourado'),
-        (0.8, 'Orçamento em 80%'),
+        (1.0, l10n.coreBudgetOverTitle),
+        (0.8, l10n.coreBudget80Title),
       ]) {
         final key = '${w.id} $month $limit';
         if (share >= limit && _budgetWarned.add(key)) {
           daemon?.onAlert?.call(
             title,
-            '${w.name}: US\$${monthCost(w.id).toStringAsFixed(2)} de US\$${budget.toStringAsFixed(0)} este mês.',
+            l10n.coreBudgetBody(
+              w.name,
+              monthCost(w.id).toStringAsFixed(2),
+              budget.toStringAsFixed(0),
+            ),
           );
           if (limit == 1.0) _budgetWarned.add('${w.id} $month 0.8');
           break;
@@ -575,8 +580,8 @@ class HarnessStore extends ChangeNotifier {
           'mcp' => _mcpText(e['mcp']),
           _ =>
             e['has_value'] == true
-                ? 'Keychain do daemon · com valor'
-                : 'Keychain do daemon · sem valor ainda',
+                ? l10n.coreEnvWithValue
+                : l10n.coreEnvNoValue,
         },
       ),
   ];
@@ -970,9 +975,9 @@ class HarnessStore extends ChangeNotifier {
     if (plan == null || !plan.canStart || plan.startedAt != null) return;
     final now = DateTime.now();
     final carried = [
-      ...plan.amendments.map((a) => 'Emenda: $a'),
+      ...plan.amendments.map(l10n.coreAmendment),
       for (final t in plan.threads.where((t) => !t.resolved))
-        'Comentário em ${t.anchorLabel}: ${t.messages.last.body}',
+        l10n.coreCommentOn(t.anchorLabel, t.messages.last.body),
     ];
     p.cards.addAll(plan.proposedCards);
     if (p.cards.isNotEmpty) {
@@ -1099,7 +1104,7 @@ class HarnessStore extends ChangeNotifier {
     final p = Project(
       id: _nextId('plano'),
       workspaceId: workspaceId,
-      name: parsed.title.isEmpty ? 'Plano importado' : parsed.title,
+      name: parsed.title.isEmpty ? l10n.coreImportedPlan : parsed.title,
       repo: parsed.repo.isEmpty ? 'a definir' : parsed.repo,
       cards: [],
       plan: parsed.plan,

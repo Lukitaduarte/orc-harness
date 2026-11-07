@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
+import '../i18n.dart';
 import 'grid.dart';
 
 /// A session's terminal, live: draws the daemon's grid, sends keys as
@@ -89,7 +90,7 @@ class _LiveTerminalState extends State<LiveTerminal> {
               color: Theme.of(context).colorScheme.background,
               padding: const EdgeInsets.all(8),
               child: widget.grid == null
-                  ? const Center(child: Text('Conectando ao terminal…'))
+                  ? Center(child: Text(context.l10n.devConnectingTerminal))
                   : CustomPaint(
                       painter: _GridPainter(
                         widget.grid!,

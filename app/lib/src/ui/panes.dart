@@ -1,11 +1,13 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../i18n.dart';
 import '../model.dart';
 import '../live/grid.dart';
 import '../live/live_terminal.dart';
 import 'browser_pane.dart';
 import 'code_pane.dart';
+import 'orc_sprite.dart';
 import 'diff_dialog.dart';
 import 'format.dart';
 
@@ -153,16 +155,22 @@ class _Pane extends StatelessWidget {
                 const Gap(8),
                 Flexible(
                   child: Text(
-                    'Código · ${store.sessions.where((x) => x.id == code).map((x) => x.name).firstOrNull ?? code}',
+                    context.l10n.shellCodePaneTitle(
+                      store.sessions
+                              .where((x) => x.id == code)
+                              .map((x) => x.name)
+                              .firstOrNull ??
+                          code,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ).small().semiBold(),
                 ),
               ] else if (browser != null) ...[
                 const Icon(LucideIcons.globe, size: 14),
                 const Gap(8),
-                const Flexible(
+                Flexible(
                   child: Text(
-                    'Navegador do workspace',
+                    context.l10n.shellWorkspaceBrowser,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ).small().semiBold(),
@@ -172,13 +180,18 @@ class _Pane extends StatelessWidget {
                     const Gap(8),
                     OutlineBadge(
                       child: Text(
-                        'em uso por ${store.daemon!.sessionLabel(s)}',
+                        context.l10n.shellInUseBy(
+                          store.daemon!.sessionLabel(s),
+                        ),
                       ),
                     ),
                   ],
               ] else
-                const Flexible(
-                  child: Text('Pane vazio', overflow: TextOverflow.ellipsis),
+                Flexible(
+                  child: Text(
+                    context.l10n.shellEmptyPane,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ).small().muted(),
               const Spacer(),
               // A worktree session: its changes and PR.
@@ -191,29 +204,29 @@ class _Pane extends StatelessWidget {
                 Builder(
                   builder: (context) => _iconButton(
                     LucideIcons.gitCompare,
-                    'Mudanças e PR',
+                    context.l10n.shellChangesAndPr,
                     () => showDiffDialog(context, store, s.id),
                   ),
                 ),
               if (s != null && s.live)
                 _iconButton(
                   LucideIcons.code,
-                  'Código (IDE na pasta da sessão)',
+                  context.l10n.shellCodeTip,
                   () => store.openCode(leaf.id, s.id),
                 ),
               _iconButton(
                 LucideIcons.columns2,
-                'Dividir lado a lado',
+                context.l10n.shellSplitSideBySide,
                 () => store.split(leaf.id, horizontal: true),
               ),
               _iconButton(
                 LucideIcons.rows2,
-                'Dividir em cima e embaixo',
+                context.l10n.shellSplitTopBottom,
                 () => store.split(leaf.id, horizontal: false),
               ),
               _iconButton(
                 LucideIcons.x,
-                'Fechar pane',
+                context.l10n.shellClosePane,
                 () => store.close(leaf.id),
               ),
             ],
@@ -225,6 +238,11 @@ class _Pane extends StatelessWidget {
 
   Widget _footer(BuildContext context, Session s) {
     final acc = store.account(s.accountId);
+    final l10n = context.l10n;
+    final tokensCost = l10n.shellTokensCost(
+      formatTokens(s.tokens),
+      formatUsd(s.costUsd),
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Row(
@@ -233,7 +251,7 @@ class _Pane extends StatelessWidget {
             child: Text(
               s.live
                   ? '${acc.email} · ${s.branch}'
-                  : '${acc.email} · ${formatTokens(s.tokens)} tokens · ${formatUsd(s.costUsd)}',
+                  : '${acc.email} · $tokensCost',
               overflow: TextOverflow.ellipsis,
             ).xSmall().muted(),
           ),
@@ -241,8 +259,8 @@ class _Pane extends StatelessWidget {
           // Live: tokens and cost from Claude Code's metrics.
           Text(
             s.live
-                ? '${formatTokens(s.tokens)} tokens · ${formatUsd(s.costUsd)}'
-                : '${s.fiveHourShare.round()}% da janela de 5h',
+                ? tokensCost
+                : l10n.shellFiveHourShare(s.fiveHourShare.round()),
           ).xSmall().muted(),
         ],
       ),
@@ -290,7 +308,9 @@ class TerminalView extends StatelessWidget {
           for (final l in session.lines)
             Padding(padding: const EdgeInsets.only(bottom: 2), child: line(l)),
           if (session.state == SessionState.starting)
-            const Text('↻ reiniciando com --resume…').mono().xSmall().muted(),
+            Text(
+              context.l10n.shellRestartingResumeLine,
+            ).mono().xSmall().muted(),
         ],
       ),
     );
@@ -314,7 +334,10 @@ class _SessionPicker extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('Abrir neste pane').small().semiBold(),
+            // The orc, ready for the next job.
+            Center(child: OrcSprite(scale: 3, says: context.l10n.orcReady)),
+            const Gap(16),
+            Text(context.l10n.shellOpenInPane).small().semiBold(),
             const Gap(8),
             for (final s in hidden)
               OutlineButton(
@@ -327,14 +350,14 @@ class _SessionPicker extends StatelessWidget {
             PrimaryButton(
               leading: const Icon(LucideIcons.plus, size: 16),
               onPressed: store.newSession,
-              child: const Text('Nova sessão'),
+              child: Text(context.l10n.shellNewSession),
             ),
             if (store.isLive) ...[
               const Gap(4),
               OutlineButton(
                 leading: const Icon(LucideIcons.globe, size: 16),
                 onPressed: () => store.openBrowser(leafId),
-                child: const Text('Navegador do workspace'),
+                child: Text(context.l10n.shellWorkspaceBrowser),
               ),
             ],
           ],

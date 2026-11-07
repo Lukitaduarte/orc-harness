@@ -1,6 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../i18n.dart';
 import '../model.dart';
 import 'comments.dart';
 
@@ -46,6 +47,7 @@ class _CardDetails extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = card;
     final column = project.columnOf(c);
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -66,7 +68,7 @@ class _CardDetails extends StatelessWidget {
                         const Gap(6),
                         SecondaryBadge(child: Text(c.model)),
                         const Gap(6),
-                        Text(_columnLabel(column)).xSmall().muted(),
+                        Text(_columnLabel(column, l10n)).xSmall().muted(),
                       ],
                     ),
                     const Gap(6),
@@ -91,9 +93,9 @@ class _CardDetails extends StatelessWidget {
                 Text(c.description).small(),
                 const Gap(16),
               ],
-              _label('Critérios de aceite'),
+              _label(l10n.plansAcceptanceCriteria),
               if (c.criteria.isEmpty)
-                const Text('Nenhum critério definido.').small().muted()
+                Text(l10n.plansNoCriteria).small().muted()
               else
                 for (final item in c.criteria)
                   Padding(
@@ -114,12 +116,12 @@ class _CardDetails extends StatelessWidget {
                   ),
               const Gap(16),
               if (c.tasks.isNotEmpty) ...[
-                _label('Tarefas · subagentes por grupo'),
+                _label(l10n.plansTasksHeader),
                 for (final g in {for (final t in c.tasks) t.group}) ...[
                   Text(
                     c.tasks.where((t) => t.group == g).length > 1
-                        ? 'Grupo $g · em paralelo'
-                        : 'Grupo $g',
+                        ? l10n.plansGroupParallel(g)
+                        : l10n.plansGroup(g),
                   ).xSmall().semiBold().muted(),
                   const Gap(4),
                   for (final t in c.tasks.where((t) => t.group == g))
@@ -135,7 +137,7 @@ class _CardDetails extends StatelessWidget {
                           Text(t.skill).mono().xSmall().muted(),
                           if (t.needsOk) ...[
                             const Gap(8),
-                            const PrimaryBadge(child: Text('seu OK')),
+                            PrimaryBadge(child: Text(l10n.plansYourOk)),
                           ],
                           const Gap(8),
                           SecondaryBadge(child: Text(t.model)),
@@ -149,7 +151,7 @@ class _CardDetails extends StatelessWidget {
               if (c.delivered.isNotEmpty ||
                   c.problems.isNotEmpty ||
                   c.gates.isNotEmpty) ...[
-                _label('Resultado do loop'),
+                _label(l10n.plansLoopResult),
                 for (final d in c.delivered) Text('✓  $d').small(),
                 for (final p in c.problems) Text('!  $p').small().muted(),
                 if (c.gates.isNotEmpty) ...[
@@ -165,11 +167,9 @@ class _CardDetails extends StatelessWidget {
                 ],
                 const Gap(16),
               ],
-              _label('Dependências'),
+              _label(l10n.plansDependencies),
               if (c.dependsOn.isEmpty)
-                const Text(
-                  'Nenhuma: pode rodar em paralelo com outros cards prontos.',
-                ).small().muted()
+                Text(l10n.plansNoDependenciesLong).small().muted()
               else
                 for (final d in c.dependsOn)
                   _dependency(context, project.card(d)),
@@ -177,19 +177,19 @@ class _CardDetails extends StatelessWidget {
               _label('Git'),
               _row('Branch', c.branch, mono: true),
               if (c.sessionId != null)
-                _row('Sessão', store.session(c.sessionId!).name),
+                _row(l10n.plansSession, store.session(c.sessionId!).name),
               if (c.pr != null) _row('PR', '#${c.pr}'),
               const Gap(16),
-              _label('Comentários e observações'),
+              _label(l10n.plansCommentsAndNotes),
               if (c.notes.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 8),
-                  child: Text('Nenhum comentário ainda.'),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(l10n.plansNoCommentsYet),
                 ).small().muted()
               else
                 CommentList(c.notes, now: store.now),
               CommentComposer(
-                placeholder: 'Adicionar observação…',
+                placeholder: l10n.plansAddNote,
                 onSend: (text) => store.addCardNote(c, text),
               ),
             ],
@@ -208,7 +208,7 @@ class _CardDetails extends StatelessWidget {
                     store.retryCard(project, c);
                     closeOverlay(context);
                   },
-                  child: const Text('Tentar de novo'),
+                  child: Text(l10n.plansRetry),
                 ),
               if (column == KanbanColumn.ready && !store.isLiveProject(project))
                 PrimaryButton(
@@ -216,7 +216,7 @@ class _CardDetails extends StatelessWidget {
                   onPressed: store.canRun(project)
                       ? () => store.runCard(project, c)
                       : null,
-                  child: const Text('Executar'),
+                  child: Text(l10n.plansRun),
                 ),
               if (c.sessionId != null &&
                   column == KanbanColumn.running &&
@@ -226,7 +226,7 @@ class _CardDetails extends StatelessWidget {
                     closeOverlay(context);
                     store.showSession(c.sessionId!);
                   },
-                  child: const Text('Abrir sessão'),
+                  child: Text(l10n.plansOpenSession),
                 ),
             ],
           ),
@@ -266,16 +266,21 @@ class _CardDetails extends StatelessWidget {
         Text('#${d.number}').small().muted(),
         const Gap(6),
         Expanded(child: Text(d.title).small()),
-        Text(d.state == CardState.done ? 'feito' : 'pendente').xSmall().muted(),
+        Text(
+          d.state == CardState.done
+              ? context.l10n.plansStateDone
+              : context.l10n.plansStatePending,
+        ).xSmall().muted(),
       ],
     ),
   );
 
-  static String _columnLabel(KanbanColumn c) => switch (c) {
-    KanbanColumn.blocked => 'bloqueado',
-    KanbanColumn.ready => 'pronto',
-    KanbanColumn.running => 'em execução',
-    KanbanColumn.review => 'em review',
-    KanbanColumn.done => 'feito',
-  };
+  static String _columnLabel(KanbanColumn c, AppLocalizations l10n) =>
+      switch (c) {
+        KanbanColumn.blocked => l10n.plansStateBlocked,
+        KanbanColumn.ready => l10n.plansStateReady,
+        KanbanColumn.running => l10n.plansStateRunning,
+        KanbanColumn.review => l10n.plansStateReview,
+        KanbanColumn.done => l10n.plansStateDone,
+      };
 }

@@ -1,6 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../i18n.dart';
 import '../model.dart';
 
 /// "Novo plano": from a plan mode template (Claude reads the sources and
@@ -83,7 +84,9 @@ class _NewPlanFormState extends State<_NewPlanForm> {
       ).firstMatch(_markdown.text)?.group(1);
       widget.store.createLivePlan(
         repoId: _repo!,
-        name: _importing ? (title ?? 'Plano importado') : _name.text.trim(),
+        name: _importing
+            ? (title ?? context.l10n.plansImportedPlan)
+            : _name.text.trim(),
         description: _description.text.trim(),
         links: _linkList,
         template: _importing ? null : _template,
@@ -117,13 +120,13 @@ class _NewPlanFormState extends State<_NewPlanForm> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text('Novo plano').large().semiBold(),
+        Text(context.l10n.plansNewPlan).large().semiBold(),
         const Gap(12),
         Row(
           children: [
-            Expanded(child: _modeButton('A partir de um template', false)),
+            Expanded(child: _modeButton(context.l10n.plansFromTemplate, false)),
             const Gap(8),
-            Expanded(child: _modeButton('Colar markdown', true)),
+            Expanded(child: _modeButton(context.l10n.plansPasteMarkdown, true)),
           ],
         ),
         const Gap(16),
@@ -135,13 +138,17 @@ class _NewPlanFormState extends State<_NewPlanForm> {
           children: [
             OutlineButton(
               onPressed: () => closeOverlay(context),
-              child: const Text('Cancelar'),
+              child: Text(context.l10n.plansCancel),
             ),
             const Gap(8),
             PrimaryButton(
               leading: const Icon(LucideIcons.sparkles, size: 14),
               onPressed: _ready ? _create : null,
-              child: Text(_importing ? 'Importar plano' : 'Criar plano'),
+              child: Text(
+                _importing
+                    ? context.l10n.plansImportPlan
+                    : context.l10n.plansCreatePlan,
+              ),
             ),
           ],
         ),
@@ -154,12 +161,10 @@ class _NewPlanFormState extends State<_NewPlanForm> {
   List<Widget> _repoFields() {
     final repos = widget.store.workspaceRepos;
     return [
-      const Text('Repositório').small().medium(),
+      Text(context.l10n.plansRepository).small().medium(),
       const Gap(6),
       if (repos.isEmpty)
-        const Text(
-          'Adicione um repositório na barra lateral (Este Mac) primeiro.',
-        ).xSmall().muted()
+        Text(context.l10n.plansAddRepoFirst).xSmall().muted()
       else
         Wrap(
           spacing: 6,
@@ -194,7 +199,7 @@ class _NewPlanFormState extends State<_NewPlanForm> {
         );
 
   List<Widget> _templateFields() => [
-    const Text('Template').small().medium(),
+    Text(context.l10n.plansTemplate).small().medium(),
     const Gap(6),
     for (final t in widget.store.planTemplates)
       Padding(
@@ -232,13 +237,11 @@ class _NewPlanFormState extends State<_NewPlanForm> {
         ),
       ),
     const Gap(10),
-    const Text('Nome da feature').small().medium(),
+    Text(context.l10n.plansFeatureName).small().medium(),
     const Gap(6),
     TextField(controller: _name, autofocus: true),
     const Gap(12),
-    const Text(
-      'Fontes (Jira, Confluence, Figma), uma por linha',
-    ).small().medium(),
+    Text(context.l10n.plansSources).small().medium(),
     const Gap(6),
     TextField(
       controller: _links,
@@ -247,17 +250,13 @@ class _NewPlanFormState extends State<_NewPlanForm> {
       placeholder: const Text('https://empresa.atlassian.net/browse/MOB-123'),
     ),
     const Gap(12),
-    const Text('O que construir').small().medium(),
+    Text(context.l10n.plansWhatToBuild).small().medium(),
     const Gap(6),
     TextField(controller: _description, minLines: 2, maxLines: 4),
   ];
 
   List<Widget> _importFields() => [
-    const Text(
-      'Qualquer markdown no formato de plano: cada ## vira uma seção aprovável, '
-      'tabelas e listas viram widgets, ```mermaid vira diagrama e ```loops '
-      'define a execução.',
-    ).xSmall().muted(),
+    Text(context.l10n.plansImportHint).xSmall().muted(),
     const Gap(10),
     TextField(
       controller: _markdown,
@@ -265,7 +264,7 @@ class _NewPlanFormState extends State<_NewPlanForm> {
       minLines: 14,
       maxLines: 20,
       style: Theme.of(context).typography.mono.copyWith(fontSize: 12),
-      placeholder: const Text('# Nome do plano\n\n## Fontes\n…'),
+      placeholder: Text(context.l10n.plansImportPlaceholder),
     ),
   ];
 }

@@ -1,6 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../i18n.dart';
 
 /// "Este Mac": local repositories, each a source of worktree sessions.
 class RepoSection extends StatelessWidget {
@@ -29,13 +30,15 @@ class RepoSection extends StatelessWidget {
                         p['name'] as String,
                         overflow: TextOverflow.ellipsis,
                       ).small(),
-                      Text('base ${p['base_branch']}').xSmall().muted(),
+                      Text(
+                        context.l10n.devRepoBase('${p['base_branch']}'),
+                      ).xSmall().muted(),
                     ],
                   ),
                 ),
                 Tooltip(
-                  tooltip: (context) => const TooltipContainer(
-                    child: Text('Nova sessão em worktree'),
+                  tooltip: (context) => TooltipContainer(
+                    child: Text(context.l10n.devNewWorktreeSession),
                   ),
                   child: GhostButton(
                     density: ButtonDensity.icon,
@@ -57,12 +60,8 @@ class RepoSection extends StatelessWidget {
         if (store.workspaceRepos.isNotEmpty &&
             store.workspaceAccounts.isNotEmpty)
           Tooltip(
-            tooltip: (context) => const TooltipContainer(
-              child: Text(
-                'O Claude Code pergunta se confia em cada pasta nova. '
-                'Responda "Yes" uma vez nesta sessão e todas as worktrees '
-                'do harness ficam confiáveis.',
-              ),
+            tooltip: (context) => TooltipContainer(
+              child: Text(context.l10n.devTrustWorktreesHint),
             ),
             child: GhostButton(
               alignment: Alignment.centerLeft,
@@ -74,7 +73,7 @@ class RepoSection extends StatelessWidget {
                   'account_id': store.workspaceAccounts.first.id,
                 });
               },
-              child: const Text('Confiar nas worktrees').small(),
+              child: Text(context.l10n.devTrustWorktrees).small(),
             ),
           ),
       ],
@@ -141,23 +140,21 @@ class _AddRepoState extends State<_AddRepo> {
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      const Text('Adicionar repositório').large().semiBold(),
-      const Text(
-        'Um clone local. As sessões trabalham em worktrees dele, uma por branch.',
-      ).xSmall().muted(),
+      Text(context.l10n.devAddRepository).large().semiBold(),
+      Text(context.l10n.devAddRepositoryHint).xSmall().muted(),
       const Gap(16),
-      const Text('Nome').small().medium(),
+      Text(context.l10n.devName).small().medium(),
       const Gap(6),
       TextField(controller: _name, autofocus: true),
       const Gap(12),
-      const Text('Caminho do clone').small().medium(),
+      Text(context.l10n.devClonePath).small().medium(),
       const Gap(6),
       Row(
         children: [
           Expanded(
             child: TextField(
               controller: _path,
-              placeholder: const Text('~/Project/meu-repo'),
+              placeholder: Text(context.l10n.devClonePathPlaceholder),
             ),
           ),
           const Gap(6),
@@ -175,12 +172,12 @@ class _AddRepoState extends State<_AddRepo> {
                 _name.text = picked.split('/').where((p) => p.isNotEmpty).last;
               }
             },
-            child: const Text('Escolher…'),
+            child: Text(context.l10n.devChoose),
           ),
         ],
       ),
       const Gap(12),
-      const Text('Branch base').small().medium(),
+      Text(context.l10n.devBaseBranch).small().medium(),
       const Gap(6),
       TextField(controller: _base),
       const Gap(20),
@@ -189,7 +186,7 @@ class _AddRepoState extends State<_AddRepo> {
         children: [
           OutlineButton(
             onPressed: () => closeOverlay(context),
-            child: const Text('Cancelar'),
+            child: Text(context.l10n.devCancel),
           ),
           const Gap(8),
           PrimaryButton(
@@ -204,7 +201,7 @@ class _AddRepoState extends State<_AddRepo> {
                     );
                     closeOverlay(context);
                   },
-            child: const Text('Adicionar'),
+            child: Text(context.l10n.devAdd),
           ),
         ],
       ),
@@ -253,19 +250,17 @@ class _NewWorktreeState extends State<_NewWorktree> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Nova sessão em ${widget.projectName}').large().semiBold(),
-        const Text(
-          'Cria (ou reaproveita) a worktree da branch. Commits fora de conventional commits são recusados nela.',
-        ).xSmall().muted(),
+        Text(
+          context.l10n.devNewSessionIn(widget.projectName),
+        ).large().semiBold(),
+        Text(context.l10n.devNewWorktreeHint).xSmall().muted(),
         const Gap(16),
-        const Text('Branch').small().medium(),
+        Text(context.l10n.devBranch).small().medium(),
         const Gap(6),
         TextField(controller: _branch, autofocus: true),
         if (!_valid && _branch.text.trim().length > 5) ...[
           const Gap(4),
-          const Text(
-            'Use letras, números, . _ / -; ex.: feat/12-login',
-          ).xSmall().muted(),
+          Text(context.l10n.devBranchRule).xSmall().muted(),
         ],
         const Gap(20),
         Row(
@@ -273,7 +268,7 @@ class _NewWorktreeState extends State<_NewWorktree> {
           children: [
             OutlineButton(
               onPressed: () => closeOverlay(context),
-              child: const Text('Cancelar'),
+              child: Text(context.l10n.devCancel),
             ),
             const Gap(8),
             PrimaryButton(
@@ -288,7 +283,7 @@ class _NewWorktreeState extends State<_NewWorktree> {
                       );
                       closeOverlay(context);
                     },
-              child: const Text('Criar sessão'),
+              child: Text(context.l10n.devCreateSession),
             ),
           ],
         ),
@@ -345,14 +340,14 @@ class _FolderPickerState extends State<_FolderPicker> {
       listenable: d,
       builder: (context, _) {
         final f = d.folders;
-        if (f == null) return const Center(child: Text('Carregando…'));
+        if (f == null) return Center(child: Text(context.l10n.devLoading));
         final (path, parent, folders) = f;
         final parts = path.split('/').where((p) => p.isNotEmpty).toList();
         return Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('Escolher pasta').large().semiBold(),
+            Text(context.l10n.devChooseFolder).large().semiBold(),
             const Gap(8),
             // The path, each part clickable.
             Wrap(
@@ -383,13 +378,13 @@ class _FolderPickerState extends State<_FolderPicker> {
                     size: ButtonSize.small,
                     leading: const Icon(LucideIcons.arrowUp, size: 12),
                     onPressed: () => d.browseFolders(parent, hidden: _hidden),
-                    child: const Text('Subir'),
+                    child: Text(context.l10n.devFolderUp),
                   ),
                 GhostButton(
                   size: ButtonSize.small,
                   leading: const Icon(LucideIcons.house, size: 12),
                   onPressed: () => d.browseFolders(null, hidden: _hidden),
-                  child: const Text('Início'),
+                  child: Text(context.l10n.devFolderHome),
                 ),
                 const Spacer(),
                 GhostButton(
@@ -398,16 +393,20 @@ class _FolderPickerState extends State<_FolderPicker> {
                     setState(() => _hidden = !_hidden);
                     d.browseFolders(path, hidden: _hidden);
                   },
-                  child: Text(_hidden ? 'Esconder ocultas' : 'Mostrar ocultas'),
+                  child: Text(
+                    _hidden
+                        ? context.l10n.devHideHidden
+                        : context.l10n.devShowHidden,
+                  ),
                 ),
               ],
             ),
             const Divider(),
             Flexible(
               child: folders.isEmpty
-                  ? const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text('Nenhuma subpasta.'),
+                  ? Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(context.l10n.devNoSubfolders),
                     )
                   : ListView(
                       shrinkWrap: true,
@@ -456,12 +455,12 @@ class _FolderPickerState extends State<_FolderPicker> {
                 const Gap(8),
                 OutlineButton(
                   onPressed: () => closeOverlay(context, null),
-                  child: const Text('Cancelar'),
+                  child: Text(context.l10n.devCancel),
                 ),
                 const Gap(8),
                 PrimaryButton(
                   onPressed: () => closeOverlay(context, path),
-                  child: const Text('Usar esta pasta'),
+                  child: Text(context.l10n.devUseThisFolder),
                 ),
               ],
             ),

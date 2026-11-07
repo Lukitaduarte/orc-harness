@@ -6,6 +6,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../i18n.dart';
+import 'orc_sprite.dart';
 import '../live/daemon_client.dart';
 
 /// Connects the app to orcd: paste the ticket from `orcd pair`.
@@ -51,6 +53,37 @@ class _ConnectState extends State<_Connect> {
     if (d != null && d.status == LinkStatus.connected) d.listDevices();
   }
 
+  /// The app's language: the system's, or one you pick (remembered).
+  List<Widget> _language(BuildContext context) => [
+    const Gap(16),
+    Text(context.l10n.language).small().medium(),
+    const Gap(6),
+    ValueListenableBuilder(
+      valueListenable: appLocale,
+      builder: (context, locale, _) => Wrap(
+        spacing: 4,
+        runSpacing: 4,
+        children: [
+          for (final (code, name) in [
+            (null, context.l10n.languageSystem),
+            for (final e in languageNames.entries) (e.key, e.value),
+          ])
+            (locale?.languageCode == code)
+                ? SecondaryButton(
+                    size: ButtonSize.small,
+                    onPressed: () {},
+                    child: Text(name),
+                  )
+                : GhostButton(
+                    size: ButtonSize.small,
+                    onPressed: () => setLanguage(code),
+                    child: Text(name),
+                  ),
+        ],
+      ),
+    ),
+  ];
+
   /// A QR for the next device: scan it with the phone's app (Escanear o
   /// QR) or paste the text. One use, 10 minutes.
   List<Widget> _pairAnother(DaemonClient d) {
@@ -60,13 +93,13 @@ class _ConnectState extends State<_Connect> {
         DateTime.now().difference(t.$2) < const Duration(minutes: 10);
     return [
       const Gap(16),
-      const Text('Parear outro aparelho').small().medium(),
+      Text(context.l10n.shellPairAnother).small().medium(),
       const Gap(6),
       if (!fresh)
         OutlineButton(
           leading: const Icon(LucideIcons.qrCode, size: 14),
           onPressed: d.requestPairingTicket,
-          child: const Text('Mostrar QR de pareamento'),
+          child: Text(context.l10n.shellShowPairingQr),
         )
       else ...[
         Center(
@@ -83,16 +116,12 @@ class _ConnectState extends State<_Connect> {
         const Gap(6),
         Row(
           children: [
-            const Expanded(
-              child: Text(
-                'No celular: Conectar daemon → Escanear o QR. Vale uma vez, por 10 minutos.',
-              ),
-            ),
+            Expanded(child: Text(context.l10n.shellPairQrHint)),
             GhostButton(
               size: ButtonSize.small,
               leading: const Icon(LucideIcons.copy, size: 12),
               onPressed: () => Clipboard.setData(ClipboardData(text: t.$1)),
-              child: const Text('Copiar'),
+              child: Text(context.l10n.shellCopy),
             ),
           ],
         ),
@@ -103,7 +132,7 @@ class _ConnectState extends State<_Connect> {
   /// Paired apps; revoking one drops it now and it must pair again.
   List<Widget> _devices(DaemonClient d) => [
     const Gap(16),
-    const Text('Aparelhos pareados').small().medium(),
+    Text(context.l10n.shellPairedDevices).small().medium(),
     const Gap(6),
     for (final dev in d.devices)
       Padding(
@@ -117,14 +146,16 @@ class _ConnectState extends State<_Connect> {
             const Gap(8),
             Expanded(
               child: Text(
-                '${dev['name']}${dev['id'] == d.thisDevice ? ' (este)' : ''}',
+                dev['id'] == d.thisDevice
+                    ? context.l10n.shellThisDevice('${dev['name']}')
+                    : '${dev['name']}',
               ).small(),
             ),
             if (dev['id'] != d.thisDevice)
               DestructiveButton(
                 size: ButtonSize.small,
                 onPressed: () => d.revokeDevice(dev['id'] as String),
-                child: const Text('Revogar'),
+                child: Text(context.l10n.shellRevoke),
               ),
           ],
         ),
@@ -141,7 +172,7 @@ class _ConnectState extends State<_Connect> {
   Widget build(BuildContext context) {
     final d = widget.store.daemon;
     if (d == null) {
-      return const Text('Este app foi iniciado sem o daemon.').small().muted();
+      return Text(context.l10n.shellNoDaemon).small().muted();
     }
     return ListenableBuilder(
       listenable: d,
@@ -149,14 +180,22 @@ class _ConnectState extends State<_Connect> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Conectar daemon').large().semiBold(),
+          Text(context.l10n.shellConnectDaemon).large().semiBold(),
+          if (d.status == LinkStatus.connecting) ...[
+            const Gap(10),
+            OrcSprite(scale: 3, says: context.l10n.orcWorkWork),
+          ],
           const Gap(4),
           Text(switch (d.status) {
-            LinkStatus.connected =>
-              'Conectado: ${d.accounts.length} conta(s), ${d.sessions.length} sessão(ões).',
-            LinkStatus.connecting => 'Conectando…',
+            LinkStatus.connected => context.l10n.shellConnectedCounts(
+              d.accounts.length,
+              d.sessions.length,
+            ),
+            LinkStatus.connecting => context.l10n.shellConnecting,
             LinkStatus.disconnected =>
-              d.paired ? 'Pareado, sem conexão agora.' : 'Ainda não pareado.',
+              d.paired
+                  ? context.l10n.shellPairedOffline
+                  : context.l10n.shellNotPaired,
           }).small().muted(),
           if (d.error != null && d.status != LinkStatus.connected) ...[
             const Gap(6),
@@ -164,13 +203,11 @@ class _ConnectState extends State<_Connect> {
               d.error!,
             ).xSmall().medium(color: Theme.of(context).colorScheme.destructive),
           ],
+          ..._language(context),
           if (d.status == LinkStatus.connected) ..._pairAnother(d),
           if (d.devices.isNotEmpty) ..._devices(d),
           const Gap(16),
-          const Text(
-            'No Mac onde o orcd roda: `orcd serve` e, em outro terminal, `orcd pair`. '
-            'Cole aqui o ticket (vale 10 minutos, uma vez).',
-          ).xSmall().muted(),
+          Text(context.l10n.shellPairInstructions).xSmall().muted(),
           if (Platform.isIOS || Platform.isAndroid) ...[
             const Gap(8),
             OutlineButton(
@@ -181,7 +218,7 @@ class _ConnectState extends State<_Connect> {
                 );
                 if (code != null) _ticket.text = code;
               },
-              child: const Text('Escanear o QR do `orcd pair`'),
+              child: Text(context.l10n.shellScanPairQr),
             ),
           ],
           const Gap(8),
@@ -198,7 +235,7 @@ class _ConnectState extends State<_Connect> {
             children: [
               OutlineButton(
                 onPressed: () => closeOverlay(context),
-                child: const Text('Fechar'),
+                child: Text(context.l10n.shellClose),
               ),
               const Gap(8),
               PrimaryButton(
@@ -217,7 +254,7 @@ class _ConnectState extends State<_Connect> {
                         }
                       }
                     : null,
-                child: const Text('Parear e conectar'),
+                child: Text(context.l10n.shellPairAndConnect),
               ),
             ],
           ),
@@ -251,7 +288,7 @@ class _ScanTicketState extends State<_ScanTicket> {
                 onPressed: () => Navigator.of(context).pop(),
                 child: const Icon(LucideIcons.x, size: 18),
               ),
-              const Text('Aponte para o QR do orcd pair').small(),
+              Text(context.l10n.shellPointAtQr).small(),
             ],
           ),
           Expanded(

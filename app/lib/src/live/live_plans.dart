@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../i18n.dart';
 import '../model.dart';
 import '../plan_markdown.dart';
 
@@ -132,8 +133,12 @@ void applyRun(Project p, List<Map<String, dynamic>> cards) {
       ..accountId = r['account_id'] as String?
       ..waiting = state == 'todo' ? r['note'] as String? : null
       ..halt = switch (state) {
-        'failed' => 'Não começou: ${r['note'] ?? 'erro'}',
-        'stopped' => 'Parou: ${r['note'] ?? 'sessão encerrada'}',
+        'failed' => l10n.coreHaltFailed(
+          '${r['note'] ?? l10n.coreUnknownError}',
+        ),
+        'stopped' => l10n.coreHaltStopped(
+          '${r['note'] ?? l10n.coreSessionEnded}',
+        ),
         _ => null,
       };
   }
@@ -156,27 +161,31 @@ List<Map<String, Object?>> cardSpecs(Project p) => [
 /// PR rules).
 String cardPrompt(Project p, TaskCard c) {
   final b = StringBuffer()
-    ..writeln('Card #${c.number} do plano "${p.name}": ${c.title} (${c.type})')
+    ..writeln(l10n.corePromptCard('${c.number}', p.name, c.title, c.type))
     ..writeln();
-  if (p.plan!.summary.isNotEmpty) b.writeln('Plano: ${p.plan!.summary}\n');
+  if (p.plan!.summary.isNotEmpty) {
+    b.writeln('${l10n.corePromptPlan(p.plan!.summary)}\n');
+  }
   if (c.description.isNotEmpty) b.writeln('${c.description}\n');
   if (c.criteria.isNotEmpty) {
-    b.writeln('Critérios de aceite:');
+    b.writeln(l10n.corePromptCriteria);
     for (final k in c.criteria) {
       b.writeln('- $k');
     }
     b.writeln();
   }
   if (c.tasks.isNotEmpty) {
-    b.writeln('Tarefas, por grupo (subagentes, com skill e modelo):');
+    b.writeln(l10n.corePromptTasks);
     for (final t in c.tasks) {
-      final ok = t.needsOk ? ' — peça o OK do usuário antes' : '';
-      b.writeln('- grupo ${t.group}: ${t.title} · ${t.skill} · ${t.model}$ok');
+      final ok = t.needsOk ? l10n.corePromptNeedsOk : '';
+      b.writeln(
+        '${l10n.corePromptTask('${t.group}', t.title, t.skill, t.model)}$ok',
+      );
     }
     b.writeln();
   }
   if (c.notes.isNotEmpty) {
-    b.writeln('Notas:');
+    b.writeln(l10n.corePromptNotes);
     for (final n in c.notes) {
       b.writeln('- ${n.author}: ${n.body}');
     }
@@ -186,24 +195,22 @@ String cardPrompt(Project p, TaskCard c) {
 
 /// First request to the planning session: fill the template.
 String draftRequest(String name, String description, List<String> links) => [
-  'Escreva o plano "$name" preenchendo cada seção do template conforme a instrução dela.',
-  if (description.isNotEmpty) 'O que construir: $description',
-  if (links.isNotEmpty) 'Fontes:\n${links.map((l) => '- $l').join('\n')}',
+  l10n.corePromptDraft(name),
+  if (description.isNotEmpty) l10n.corePromptBuild(description),
+  if (links.isNotEmpty)
+    '${l10n.corePromptSources}\n${links.map((l) => '- $l').join('\n')}',
 ].join('\n\n');
 
 /// Review request: every comment waiting on the agent, with its thread id
 /// and whether its section is approved (then it becomes an amendment).
 String reviewRequest(Plan plan) {
-  final b = StringBuffer(
-    'Revise o plano a partir destes comentários e salve com save_plan, '
-    'respondendo cada um em replies:\n',
-  );
+  final b = StringBuffer('${l10n.corePromptReview}\n');
   for (final t in plan.threads.where((t) => t.awaitingAgent)) {
     final section = plan.sections.where((s) => s.id == t.anchor).firstOrNull;
     final locked = section?.approved ?? false;
     b.writeln(
       '\n[thread ${t.id}] ${t.anchorLabel}'
-      '${locked ? ' (aprovada: não mude, registre em amendments)' : ''}',
+      '${locked ? l10n.corePromptLocked : ''}',
     );
     for (final m in t.messages) {
       b.writeln('${m.author}: ${m.body}');

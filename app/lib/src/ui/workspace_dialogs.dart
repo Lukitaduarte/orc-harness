@@ -1,6 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../i18n.dart';
 import '../model.dart';
 
 Future<void> _dialog(BuildContext context, Widget child) => showOverlay<void>(
@@ -93,21 +94,19 @@ class _WorkspaceFormState extends State<_WorkspaceForm> {
     final entries = editing == null
         ? const []
         : d.memory[editing.id] ?? const [];
+    final l10n = context.l10n;
     return [
       const Gap(14),
-      const Text('Memória das sessões').small().medium(),
-      const Text(
-        'O que os agentes guardam (decisões, preferências, fatos dos projetos) '
-        'e as outras sessões do workspace encontram.',
-      ).xSmall().muted(),
+      Text(l10n.shellSessionMemory).small().medium(),
+      Text(l10n.shellSessionMemoryHint).xSmall().muted(),
       const Gap(6),
       Wrap(
         spacing: 4,
         runSpacing: 4,
         children: [
-          _choice('orc', 'Do harness'),
+          _choice('orc', l10n.shellMemoryHarness),
           for (final m in mcps) _choice(m['id'] as String, m['name'] as String),
-          _choice('off', 'Desligada'),
+          _choice('off', l10n.shellMemoryOff),
         ],
       ),
       if (_memory == 'orc' && entries.isNotEmpty) ...[
@@ -149,27 +148,23 @@ class _WorkspaceFormState extends State<_WorkspaceForm> {
     final editing = widget.editing;
     final all = store.accounts.where((a) => a.live).toList();
     final canDelete = editing != null && store.liveWorkspaces.length > 1;
+    final l10n = context.l10n;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          editing == null ? 'Novo workspace' : 'Workspace',
+          editing == null ? l10n.shellNewWorkspace : l10n.shellWorkspace,
         ).large().semiBold(),
-        const Text(
-          'Um workspace junta contas, sessões, repositórios, planos e um '
-          'navegador com logins próprios (ex.: Trabalho, Pessoal).',
-        ).xSmall().muted(),
+        Text(l10n.shellWorkspaceHint).xSmall().muted(),
         const Gap(16),
-        const Text('Nome').small().medium(),
+        Text(l10n.shellName).small().medium(),
         const Gap(6),
         TextField(controller: _name, autofocus: true),
         if (all.isNotEmpty) ...[
           const Gap(14),
-          const Text('Contas neste workspace').small().medium(),
-          const Text(
-            'Uma conta fica em um workspace só; marcar aqui a tira do outro.',
-          ).xSmall().muted(),
+          Text(l10n.shellWorkspaceAccounts).small().medium(),
+          Text(l10n.shellWorkspaceAccountsHint).xSmall().muted(),
           const Gap(6),
           for (final a in all)
             Padding(
@@ -186,18 +181,26 @@ class _WorkspaceFormState extends State<_WorkspaceForm> {
                 trailing: Text(
                   a.workspaceId == editing?.id || a.workspaceId == ''
                       ? a.email
-                      : '${a.email} (em ${store.workspaces.where((w) => w.id == a.workspaceId).map((w) => w.name).firstOrNull ?? a.workspaceId})',
+                      : l10n.shellAccountInWorkspace(
+                          a.email,
+                          store.workspaces
+                                  .where((w) => w.id == a.workspaceId)
+                                  .map((w) => w.name)
+                                  .firstOrNull ??
+                              a.workspaceId,
+                        ),
                 ).small(),
               ),
             ),
         ],
         const Gap(14),
-        const Text('Orçamento mensal (US\$)').small().medium(),
-        const Text(
-          'Opcional. O app avisa ao chegar em 80% e ao passar do limite.',
-        ).xSmall().muted(),
+        Text(l10n.shellMonthlyBudget).small().medium(),
+        Text(l10n.shellBudgetHint).xSmall().muted(),
         const Gap(6),
-        TextField(controller: _budget, placeholder: const Text('ex.: 200')),
+        TextField(
+          controller: _budget,
+          placeholder: Text(l10n.shellBudgetExample),
+        ),
         // Entries arrive from the daemon after the dialog opens.
         ListenableBuilder(
           listenable: store.daemon!,
@@ -215,12 +218,12 @@ class _WorkspaceFormState extends State<_WorkspaceForm> {
                   store.deleteWorkspace(editing.id);
                   closeOverlay(context);
                 },
-                child: const Text('Excluir'),
+                child: Text(l10n.shellDeleteWorkspace),
               ),
             const Spacer(),
             OutlineButton(
               onPressed: () => closeOverlay(context),
-              child: const Text('Cancelar'),
+              child: Text(l10n.shellCancel),
             ),
             const Gap(8),
             PrimaryButton(
@@ -238,7 +241,7 @@ class _WorkspaceFormState extends State<_WorkspaceForm> {
                       );
                       closeOverlay(context);
                     },
-              child: Text(editing == null ? 'Criar' : 'Salvar'),
+              child: Text(editing == null ? l10n.shellCreate : l10n.shellSave),
             ),
           ],
         ),
@@ -278,30 +281,27 @@ class _NewAccountState extends State<_NewAccount> {
     final id = _id.text.trim();
     final taken = widget.store.accounts.any((a) => a.live && a.id == id);
     final ok = _rule.hasMatch(id) && !taken;
+    final l10n = context.l10n;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text('Nova conta').large().semiBold(),
+        Text(l10n.shellNewAccount).large().semiBold(),
         Text(
-          'Uma conta do Claude Code com pasta de configuração própria '
-          '(~/.orc/accounts/<nome>) no workspace ${widget.store.workspace.name}. '
-          'Abre uma sessão nela: faça o login com /login.',
+          l10n.shellNewAccountBody(widget.store.workspace.name),
         ).xSmall().muted(),
         const Gap(16),
-        const Text('Nome da conta').small().medium(),
+        Text(l10n.shellAccountName).small().medium(),
         const Gap(6),
         TextField(
           controller: _id,
           autofocus: true,
-          placeholder: const Text('trabalho-2'),
+          placeholder: Text(l10n.shellAccountNameExample),
         ),
         if (id.isNotEmpty && !ok) ...[
           const Gap(4),
           Text(
-            taken
-                ? 'Já existe uma conta com esse nome.'
-                : 'Use letras, números, - e _.',
+            taken ? l10n.shellAccountTaken : l10n.shellAccountRule,
           ).xSmall().muted(),
         ],
         const Gap(20),
@@ -310,7 +310,7 @@ class _NewAccountState extends State<_NewAccount> {
           children: [
             OutlineButton(
               onPressed: () => closeOverlay(context),
-              child: const Text('Cancelar'),
+              child: Text(l10n.shellCancel),
             ),
             const Gap(8),
             PrimaryButton(
@@ -320,7 +320,7 @@ class _NewAccountState extends State<_NewAccount> {
                       closeOverlay(context);
                     }
                   : null,
-              child: const Text('Criar e fazer login'),
+              child: Text(l10n.shellCreateAndLogin),
             ),
           ],
         ),

@@ -1,5 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
+import '../i18n.dart';
+
 /// Asks before something that cannot be undone; true when confirmed.
 Future<bool> confirm(
   BuildContext context,
@@ -32,7 +34,7 @@ Future<bool> confirm(
                     children: [
                       OutlineButton(
                         onPressed: () => closeOverlay(context, false),
-                        child: const Text('Cancelar'),
+                        child: Text(context.l10n.shellCancel),
                       ),
                       const Gap(8),
                       DestructiveButton(

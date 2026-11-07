@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../i18n.dart';
 import 'format.dart';
 
 /// Usage of the workspace: totals, cost per day and where it went.
@@ -86,6 +87,7 @@ class _AnalyticsViewState extends State<AnalyticsView> {
         }(),
     ]..sort((a, b) => b.$4.compareTo(a.$4));
     final cacheHit = prompt == 0 ? null : types.$3 / prompt;
+    final t = context.l10n;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -96,11 +98,13 @@ class _AnalyticsViewState extends State<AnalyticsView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Uso · ${store.workspace.name}').large().semiBold(),
+                  Text(
+                    t.toolsUsageTitle(store.workspace.name),
+                  ).large().semiBold(),
                   Text(
                     store.isLive
-                        ? 'Métricas do próprio Claude Code (OpenTelemetry), por sessão, conta e modelo.'
-                        : 'Dados de demonstração; o workspace Este Mac mostra os reais.',
+                        ? t.toolsUsageLiveSubtitle
+                        : t.toolsUsageDemoSubtitle,
                   ).xSmall().muted(),
                 ],
               ),
@@ -110,12 +114,12 @@ class _AnalyticsViewState extends State<AnalyticsView> {
                   ? SecondaryButton(
                       size: ButtonSize.small,
                       onPressed: () {},
-                      child: Text('$d dias'),
+                      child: Text(t.toolsDays(d)),
                     )
                   : GhostButton(
                       size: ButtonSize.small,
                       onPressed: () => setState(() => _days = d),
-                      child: Text('$d dias'),
+                      child: Text(t.toolsDays(d)),
                     ),
               const Gap(4),
             ],
@@ -124,19 +128,19 @@ class _AnalyticsViewState extends State<AnalyticsView> {
         const Gap(16),
         Row(
           children: [
-            _Stat('Custo', formatUsd(totalCost)),
+            _Stat(t.toolsCost, formatUsd(totalCost)),
             const Gap(12),
-            _Stat('Tokens', formatTokens(totalTokens)),
+            _Stat(t.toolsTokens, formatTokens(totalTokens)),
             const Gap(12),
-            _Stat('Média por dia', formatUsd(totalCost / _days)),
+            _Stat(t.toolsDailyAverage, formatUsd(totalCost / _days)),
             const Gap(12),
             _Stat(
-              'Lido do cache',
+              t.toolsCacheRead,
               cacheHit == null ? '—' : '${(cacheHit * 100).round()}%',
             ),
             const Gap(12),
             _Stat(
-              'Este mês',
+              t.toolsThisMonth,
               budget == null
                   ? formatUsd(month)
                   : '${formatUsd(month)} / ${formatUsd(budget)}',
@@ -156,7 +160,10 @@ class _AnalyticsViewState extends State<AnalyticsView> {
           ),
           const Gap(4),
           Text(
-            '${(month * 100 / budget).round()}% do orçamento mensal de ${store.workspace.name}',
+            t.toolsBudgetShare(
+              (month * 100 / budget).round(),
+              store.workspace.name,
+            ),
           ).xSmall().muted(),
         ],
         const Gap(16),
@@ -165,13 +172,13 @@ class _AnalyticsViewState extends State<AnalyticsView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Tokens por tipo').semiBold(),
+              Text(t.toolsTokensByType).semiBold(),
               const Gap(12),
               _TokenTypes([
-                ('Entrada', types.$1),
-                ('Saída', types.$2),
-                ('Lido do cache', types.$3),
-                ('Escrito no cache', types.$4),
+                (t.toolsInput, types.$1),
+                (t.toolsOutput, types.$2),
+                (t.toolsCacheRead, types.$3),
+                (t.toolsCacheWrite, types.$4),
               ]),
             ],
           ),
@@ -184,13 +191,11 @@ class _AnalyticsViewState extends State<AnalyticsView> {
             children: [
               Row(
                 children: [
-                  const Expanded(
-                    child: Text('Custo por dia (US\$)'),
-                  ).semiBold(),
+                  Expanded(child: Text(t.toolsCostPerDay)).semiBold(),
                   GhostButton(
                     size: ButtonSize.small,
                     onPressed: () => setState(() => _table = !_table),
-                    child: Text(_table ? 'Ver gráfico' : 'Ver tabela'),
+                    child: Text(_table ? t.toolsShowChart : t.toolsShowTable),
                   ),
                 ],
               ),
@@ -208,14 +213,19 @@ class _AnalyticsViewState extends State<AnalyticsView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Por conta e modelo').semiBold(),
+              Text(t.toolsByAccountModel).semiBold(),
               const Gap(10),
-              _row(['Conta', 'Modelo', 'Tokens', 'Custo'], head: true),
+              _row([
+                t.toolsAccount,
+                t.toolsModel,
+                t.toolsTokens,
+                t.toolsCost,
+              ], head: true),
               const Divider(),
               if (breakdown.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text('Nenhum uso registrado no período.'),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(t.toolsNoUsage),
                 ).small().muted()
               else
                 for (final e in breakdown)
@@ -234,14 +244,19 @@ class _AnalyticsViewState extends State<AnalyticsView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Por plano').semiBold(),
+              Text(t.toolsByPlan).semiBold(),
               const Gap(10),
-              _row(['Plano', 'Cards feitos', 'Tokens', 'Custo'], head: true),
+              _row([
+                t.toolsPlan,
+                t.toolsCardsDone,
+                t.toolsTokens,
+                t.toolsCost,
+              ], head: true),
               const Divider(),
               if (byPlan.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text('Nenhum plano em execução no período.'),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(t.toolsNoPlans),
                 ).small().muted()
               else
                 for (final (name, done, tokens, cost) in byPlan)
@@ -255,13 +270,18 @@ class _AnalyticsViewState extends State<AnalyticsView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Por projeto e branch (cards)').semiBold(),
+              Text(t.toolsByProjectBranch).semiBold(),
               const Gap(10),
-              _row(['Projeto', 'Branch', 'Tokens', 'Custo'], head: true),
+              _row([
+                t.toolsProject,
+                t.toolsBranch,
+                t.toolsTokens,
+                t.toolsCost,
+              ], head: true),
               const Divider(),
               for (final e in branches)
                 _row([
-                  e.key.$1 ?? 'sessões soltas',
+                  e.key.$1 ?? t.toolsLooseSessions,
                   e.key.$2 ?? '—',
                   formatTokens(e.value.$1),
                   formatUsd(e.value.$2),
@@ -563,7 +583,7 @@ class _TokenTypes extends StatelessWidget {
     final colors = scheme.brightness == Brightness.dark ? _dark : _light;
     final total = parts.fold(0, (a, p) => a + p.$2);
     if (total == 0) {
-      return const Text('Nenhum token no período.').small().muted();
+      return Text(context.l10n.toolsNoTokens).small().muted();
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

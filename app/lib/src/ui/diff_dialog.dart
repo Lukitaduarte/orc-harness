@@ -1,6 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
+import '../i18n.dart';
 
 /// What a worktree session changed against its base, and its GitHub PR.
 Future<void> showDiffDialog(
@@ -68,7 +69,7 @@ class _DiffState extends State<_Diff> {
               Expanded(
                 child: TextField(
                   controller: _message,
-                  placeholder: const Text('feat(escopo): o que muda'),
+                  placeholder: Text(context.l10n.devCommitPlaceholder),
                   onSubmitted: (_) => d.gitCommit(sid, _message.text.trim()),
                 ),
               ),
@@ -76,13 +77,13 @@ class _DiffState extends State<_Diff> {
               PrimaryButton(
                 size: ButtonSize.small,
                 onPressed: () => d.gitCommit(sid, _message.text.trim()),
-                child: const Text('Commit'),
+                child: Text(context.l10n.devCommit),
               ),
               const Gap(4),
               OutlineButton(
                 size: ButtonSize.small,
                 onPressed: () => d.gitPush(sid),
-                child: const Text('Push'),
+                child: Text(context.l10n.devPush),
               ),
               if (open) ...[
                 const Gap(4),
@@ -90,7 +91,7 @@ class _DiffState extends State<_Diff> {
                   size: ButtonSize.small,
                   leading: const Icon(LucideIcons.gitMerge, size: 12),
                   onPressed: () => d.mergePr(sid),
-                  child: const Text('Merge (squash)'),
+                  child: Text(context.l10n.devMergeSquash),
                 ),
               ],
             ],
@@ -98,7 +99,7 @@ class _DiffState extends State<_Diff> {
           if (result != null) ...[
             const Gap(6),
             Text(
-              '${result.$1}: ${result.$2 ? 'ok' : 'falhou'}${result.$3.isEmpty ? '' : ' · ${result.$3.split('\n').take(3).join(' ')}'}',
+              '${result.$2 ? context.l10n.devGitResultOk(result.$1) : context.l10n.devGitResultFailed(result.$1)}${result.$3.isEmpty ? '' : ' · ${result.$3.split('\n').take(3).join(' ')}'}',
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
             ).xSmall().medium(
@@ -134,18 +135,18 @@ class _DiffState extends State<_Diff> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Mudanças da sessão').large().semiBold(),
+                    Text(context.l10n.devSessionChanges).large().semiBold(),
                     Text(
                       diff == null
-                          ? 'Carregando…'
-                          : '${files.length} arquivo(s) contra ${diff.$1}, incluindo o que ainda não foi commitado',
+                          ? context.l10n.devLoading
+                          : context.l10n.devDiffSummary(files.length, diff.$1),
                     ).xSmall().muted(),
                   ],
                 ),
               ),
               if (hasPr)
                 pr == null
-                    ? const OutlineBadge(child: Text('sem PR'))
+                    ? OutlineBadge(child: Text(context.l10n.devNoPr))
                     : _PrChip(pr),
               const Gap(8),
               GhostButton(
@@ -208,8 +209,8 @@ class _DiffState extends State<_Diff> {
               Expanded(
                 child: selected == null
                     ? Center(
-                        child: const Text(
-                          'Nenhuma mudança ainda.',
+                        child: Text(
+                          context.l10n.devNoChangesYet,
                         ).small().muted(),
                       )
                     : _Patch(
@@ -239,16 +240,16 @@ class _PrChip extends StatelessWidget {
         .where((c) => (c as Map)['conclusion'] == 'FAILURE')
         .length;
     final state = pr['isDraft'] == true
-        ? 'rascunho'
+        ? context.l10n.devPrDraft
         : (pr['state'] as String).toLowerCase();
     return OutlineBadge(
       child: Text(
-        'PR #${pr['number']} · $state'
+        '${context.l10n.devPrChip('${pr['number']}', state)}'
         '${checks.isEmpty
             ? ''
             : failing > 0
-            ? ' · $failing check(s) falhando'
-            : ' · checks ok'}',
+            ? ' · ${context.l10n.devPrChecksFailing(failing)}'
+            : ' · ${context.l10n.devPrChecksOk}'}',
       ),
     );
   }
@@ -263,11 +264,7 @@ class _Patch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (untracked) {
-      return Center(
-        child: const Text(
-          'Arquivo novo, ainda não rastreado pelo git.',
-        ).small().muted(),
-      );
+      return Center(child: Text(context.l10n.devUntrackedFile).small().muted());
     }
     final scheme = Theme.of(context).colorScheme;
     final lines = patch.split('\n');

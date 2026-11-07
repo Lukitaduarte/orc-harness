@@ -2,6 +2,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../harness_store.dart';
+import '../i18n.dart';
 import '../live/daemon_client.dart';
 import '../model.dart';
 import 'agent_notices.dart';
@@ -125,7 +126,7 @@ class _MobileShellState extends State<MobileShell> {
                     ).xSmall().medium(),
                     const Gap(4),
                     if (!a.hasReading)
-                      const Text('sem leitura de quota ainda').xSmall().muted()
+                      Text(context.l10n.devNoQuotaReading).xSmall().muted()
                     else ...[
                       QuotaMeter('5h', a.fiveHour, store.now),
                       const Gap(4),
@@ -141,7 +142,7 @@ class _MobileShellState extends State<MobileShell> {
                 children: [
                   Expanded(
                     child: _tab(
-                      'Sessões',
+                      context.l10n.devSessions,
                       !_plans,
                       () => setState(() => _plans = false),
                     ),
@@ -149,7 +150,7 @@ class _MobileShellState extends State<MobileShell> {
                   const Gap(6),
                   Expanded(
                     child: _tab(
-                      'Planos',
+                      context.l10n.devPlans,
                       _plans,
                       () => setState(() => _plans = true),
                     ),
@@ -183,18 +184,18 @@ class _MobileShellState extends State<MobileShell> {
             onLongPress: () async {
               if (await confirm(
                 context,
-                'Apagar a sessão ${s.name}?',
-                'Encerra o processo. A worktree, os commits e a conversa ficam.',
-                'Apagar',
+                context.l10n.devDeleteSessionTitle(s.name),
+                context.l10n.devDeleteSessionBody,
+                context.l10n.devDelete,
               )) {
                 store.deleteSession(s.id);
               }
             },
           ),
         if (sessions.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(24),
-            child: Text('Nenhuma sessão neste workspace.'),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(context.l10n.devNoSessions),
           ),
         const Gap(8),
         OutlineButton(
@@ -204,7 +205,7 @@ class _MobileShellState extends State<MobileShell> {
             final s = store.focusedSession;
             if (s != null) setState(() => _session = s.id);
           },
-          child: const Text('Nova sessão'),
+          child: Text(context.l10n.devNewSession),
         ),
       ],
     );
@@ -221,24 +222,28 @@ class _MobileShellState extends State<MobileShell> {
           ),
           title: p.name,
           subtitle: p.isPlanning
-              ? '${p.plan!.approvedCount}/${p.plan!.sections.length} seções aprovadas · ${p.plan!.openThreads} comentários'
-              : '${p.doneCount}/${p.cards.length} cards feitos',
+              ? context.l10n.devPlanReviewProgress(
+                  p.plan!.approvedCount,
+                  p.plan!.sections.length,
+                  p.plan!.openThreads,
+                )
+              : context.l10n.devCardsDone(p.doneCount, p.cards.length),
           onTap: () => setState(() => _project = p.id),
           onLongPress: () async {
             if (await confirm(
               context,
-              'Apagar o plano ${p.name}?',
-              'Sessões dos cards em execução são encerradas. Branches, worktrees e PRs ficam.',
-              'Apagar',
+              context.l10n.devDeletePlanTitle(p.name),
+              context.l10n.devDeletePlanBody,
+              context.l10n.devDelete,
             )) {
               store.deleteProject(p);
             }
           },
         ),
       if (store.workspaceProjects.isEmpty)
-        const Padding(
-          padding: EdgeInsets.all(24),
-          child: Text('Nenhum plano neste workspace.'),
+        Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(context.l10n.devNoPlans),
         ),
     ],
   );
@@ -422,7 +427,9 @@ class _ProjectScreen extends StatelessWidget {
                                         child: Text(c.title).small().semiBold(),
                                       ),
                                       OutlineBadge(
-                                        child: Text(_column(p.columnOf(c))),
+                                        child: Text(
+                                          _column(context.l10n, p.columnOf(c)),
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -433,7 +440,7 @@ class _ProjectScreen extends StatelessWidget {
                                     OutlineButton(
                                       size: ButtonSize.small,
                                       onPressed: () => store.retryCard(p, c),
-                                      child: const Text('Tentar de novo'),
+                                      child: Text(context.l10n.devRetry),
                                     ),
                                   ],
                                   if (c.prUrl != null) ...[
@@ -462,11 +469,11 @@ class _ProjectScreen extends StatelessWidget {
     );
   }
 
-  static String _column(KanbanColumn c) => switch (c) {
-    KanbanColumn.blocked => 'bloqueado',
-    KanbanColumn.ready => 'pronto',
-    KanbanColumn.running => 'rodando',
-    KanbanColumn.review => 'review',
-    KanbanColumn.done => 'feito',
+  static String _column(AppLocalizations l, KanbanColumn c) => switch (c) {
+    KanbanColumn.blocked => l.devColumnBlocked,
+    KanbanColumn.ready => l.devColumnReady,
+    KanbanColumn.running => l.devColumnRunning,
+    KanbanColumn.review => l.devColumnReview,
+    KanbanColumn.done => l.devColumnDone,
   };
 }
