@@ -1310,5 +1310,6 @@
         "type": "String"
       }
     }
-  }
+  },
+  "devBrowserNoDaemon": "The daemon is not connected: the browser runs there. Connect it in ⚙."
 }

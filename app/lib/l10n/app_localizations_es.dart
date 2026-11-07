@@ -1622,4 +1622,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String toolsResults(String count, String query) {
     return '$count resultado(s) para \"$query\"';
   }
+
+  @override
+  String get devBrowserNoDaemon =>
+      'El daemon no está conectado: el navegador corre en él. Conéctalo en ⚙.';
 }

@@ -128,72 +128,78 @@ class _Pane extends StatelessWidget {
           final wide = c.maxWidth >= 420;
           return Row(
             children: [
-              if (s != null) ...[
-                StatusDot(sessionStateColor(context, s.state)),
-                const Gap(8),
-                Flexible(
-                  child: Text(
-                    s.name,
-                    overflow: TextOverflow.ellipsis,
-                  ).small().semiBold(),
-                ),
-                if (wide) ...[
-                  const Gap(8),
-                  const Icon(LucideIcons.gitBranch, size: 12),
-                  const Gap(4),
-                  Flexible(
-                    child: Text(
-                      s.branch,
-                      overflow: TextOverflow.ellipsis,
-                    ).xSmall().muted(),
-                  ),
-                  const Gap(8),
-                  SecondaryBadge(child: Text(s.model)),
-                ],
-              ] else if (code != null) ...[
-                const Icon(LucideIcons.code, size: 14),
-                const Gap(8),
-                Flexible(
-                  child: Text(
-                    context.l10n.shellCodePaneTitle(
-                      store.sessions
-                              .where((x) => x.id == code)
-                              .map((x) => x.name)
-                              .firstOrNull ??
-                          code,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ).small().semiBold(),
-                ),
-              ] else if (browser != null) ...[
-                const Icon(LucideIcons.globe, size: 14),
-                const Gap(8),
-                Flexible(
-                  child: Text(
-                    context.l10n.shellWorkspaceBrowser,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ).small().semiBold(),
-                if (wide)
-                  if (store.daemon?.browserOf(browser).usedBy
-                      case final s?) ...[
-                    const Gap(8),
-                    OutlineBadge(
-                      child: Text(
-                        context.l10n.shellInUseBy(
-                          store.daemon!.sessionLabel(s),
-                        ),
+              // The title takes what is left; the buttons stay at the edge.
+              Expanded(
+                child: Row(
+                  children: [
+                    if (s != null) ...[
+                      StatusDot(sessionStateColor(context, s.state)),
+                      const Gap(8),
+                      Flexible(
+                        child: Text(
+                          s.name,
+                          overflow: TextOverflow.ellipsis,
+                        ).small().semiBold(),
                       ),
-                    ),
+                      if (wide) ...[
+                        const Gap(8),
+                        const Icon(LucideIcons.gitBranch, size: 12),
+                        const Gap(4),
+                        Flexible(
+                          child: Text(
+                            s.branch,
+                            overflow: TextOverflow.ellipsis,
+                          ).xSmall().muted(),
+                        ),
+                        const Gap(8),
+                        SecondaryBadge(child: Text(s.model)),
+                      ],
+                    ] else if (code != null) ...[
+                      const Icon(LucideIcons.code, size: 14),
+                      const Gap(8),
+                      Flexible(
+                        child: Text(
+                          context.l10n.shellCodePaneTitle(
+                            store.sessions
+                                    .where((x) => x.id == code)
+                                    .map((x) => x.name)
+                                    .firstOrNull ??
+                                code,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ).small().semiBold(),
+                      ),
+                    ] else if (browser != null) ...[
+                      const Icon(LucideIcons.globe, size: 14),
+                      const Gap(8),
+                      Flexible(
+                        child: Text(
+                          context.l10n.shellWorkspaceBrowser,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ).small().semiBold(),
+                      if (wide)
+                        if (store.daemon?.browserOf(browser).usedBy
+                            case final s?) ...[
+                          const Gap(8),
+                          OutlineBadge(
+                            child: Text(
+                              context.l10n.shellInUseBy(
+                                store.daemon!.sessionLabel(s),
+                              ),
+                            ),
+                          ),
+                        ],
+                    ] else
+                      Flexible(
+                        child: Text(
+                          context.l10n.shellEmptyPane,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ).small().muted(),
                   ],
-              ] else
-                Flexible(
-                  child: Text(
-                    context.l10n.shellEmptyPane,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ).small().muted(),
-              const Spacer(),
+                ),
+              ),
               // A worktree session: its changes and PR.
               if (s != null &&
                   s.live &&

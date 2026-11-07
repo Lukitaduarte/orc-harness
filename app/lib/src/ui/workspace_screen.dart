@@ -31,8 +31,7 @@ class WorkspaceScreen extends StatelessWidget {
         // The profile belongs to a session, on wide windows; the kanban
         // and narrow windows get the space.
         final showProfile =
-            store.profilePanelOpen &&
-            width >= 1100 &&
+            (store.profileOverride ?? width >= 1100) &&
             store.focusedSession != null &&
             store.openProject == null &&
             !store.catalogOpen &&
@@ -74,7 +73,12 @@ class WorkspaceScreen extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              _Toolbar(store, sidebarShown: showSidebar),
+                              _Toolbar(
+                                store,
+                                sidebarShown: showSidebar,
+                                profileShown: showProfile,
+                                searchWidth: width < 1000 ? 200 : 340,
+                              ),
                               const Divider(),
                               AgentNotices(store),
                               Expanded(
@@ -121,10 +125,17 @@ class WorkspaceScreen extends StatelessWidget {
 }
 
 class _Toolbar extends StatelessWidget {
-  const _Toolbar(this.store, {required this.sidebarShown});
+  const _Toolbar(
+    this.store, {
+    required this.sidebarShown,
+    required this.profileShown,
+    required this.searchWidth,
+  });
 
   final HarnessStore store;
   final bool sidebarShown;
+  final bool profileShown;
+  final double searchWidth;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -137,20 +148,19 @@ class _Toolbar extends StatelessWidget {
           child: const Icon(LucideIcons.panelLeft, size: 16),
         ),
         const Gap(4),
-        Flexible(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 340),
-            child: OutlineButton(
-              alignment: Alignment.centerLeft,
-              leading: const Icon(LucideIcons.search, size: 14),
-              trailing: const Text('⌘K').xSmall().muted(),
-              onPressed: () => openCommandPalette(context, store),
-              child: Text(
-                context.l10n.shellSearchOrRun,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ).small().muted(),
-            ),
+        // A fixed share of the bar: the right-hand tools stay at the edge.
+        SizedBox(
+          width: searchWidth,
+          child: OutlineButton(
+            alignment: Alignment.centerLeft,
+            leading: const Icon(LucideIcons.search, size: 14),
+            trailing: const Text('⌘K').xSmall().muted(),
+            onPressed: () => openCommandPalette(context, store),
+            child: Text(
+              context.l10n.shellSearchOrRun,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ).small().muted(),
           ),
         ),
         if (store.openProject case final p?) ...[
@@ -213,11 +223,13 @@ class _Toolbar extends StatelessWidget {
             label: store.daemon!.sessionLabel,
             onPressed: () => store.openBrowser(store.focusedLeafId),
           ),
-        GhostButton(
-          density: ButtonDensity.icon,
-          onPressed: store.toggleProfilePanel,
-          child: const Icon(LucideIcons.panelRight, size: 16),
-        ),
+        // The session's profile (skills, MCPs, envs): only with a session.
+        if (store.focusedSession != null)
+          GhostButton(
+            density: ButtonDensity.icon,
+            onPressed: () => store.toggleProfilePanel(profileShown),
+            child: const Icon(LucideIcons.panelRight, size: 16),
+          ),
       ],
     ),
   );

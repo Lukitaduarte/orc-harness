@@ -1619,4 +1619,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String toolsResults(String count, String query) {
     return '$count result(s) for \"$query\"';
   }
+
+  @override
+  String get devBrowserNoDaemon =>
+      'The daemon is not connected: the browser runs there. Connect it in ⚙.';
 }

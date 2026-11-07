@@ -110,7 +110,6 @@ class HarnessStore extends ChangeNotifier {
 
   /// Shows the demonstration workspaces.
   final bool demo;
-  bool profilePanelOpen = true;
 
   /// Sidebar shown or hidden by hand; null follows the window width.
   bool? sidebarOverride;
@@ -670,8 +669,11 @@ class HarnessStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleProfilePanel() {
-    profilePanelOpen = !profilePanelOpen;
+  /// The profile panel shown or hidden by hand; null follows the width.
+  bool? profileOverride;
+
+  void toggleProfilePanel(bool shownNow) {
+    profileOverride = !shownNow;
     notifyListeners();
   }
 

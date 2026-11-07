@@ -2799,6 +2799,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} result(s) for \"{query}\"'**
   String toolsResults(String count, String query);
+
+  /// No description provided for @devBrowserNoDaemon.
+  ///
+  /// In en, this message translates to:
+  /// **'The daemon is not connected: the browser runs there. Connect it in ⚙.'**
+  String get devBrowserNoDaemon;
 }
 
 class _AppLocalizationsDelegate

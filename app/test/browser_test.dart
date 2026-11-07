@@ -71,7 +71,7 @@ void main() {
   testWidgets('clicks and keys reach the page in its own coordinates', (
     tester,
   ) async {
-    final d = DaemonClient();
+    final d = DaemonClient()..status = LinkStatus.connected;
     final sent = <Map<String, Object?>>[];
     d.sendHook = sent.add;
     d.handle(

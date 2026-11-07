@@ -32,6 +32,15 @@ void main() {
         findsNothing,
         reason: 'no session: no profile panel',
       );
+      // Toolbar tools and pane buttons sit at the right edge.
+      expect(
+        tester.getRect(find.byIcon(LucideIcons.globe).first).right,
+        greaterThan(w - 60),
+      );
+      expect(
+        tester.getRect(find.byIcon(LucideIcons.x).first).right,
+        greaterThan(w - 60),
+      );
       // Splitting the only pane still fits.
       store.split(store.focusedLeafId, horizontal: true);
       await tester.pump();

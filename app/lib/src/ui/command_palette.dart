@@ -101,11 +101,11 @@ List<_Cmd> _commands(BuildContext context, HarnessStore store) {
     ],
     _Cmd(
       t.toolsGroupPanes,
-      store.profilePanelOpen
+      (store.profileOverride ?? true)
           ? t.toolsHideProfilePanel
           : t.toolsShowProfilePanel,
       LucideIcons.panelRight,
-      store.toggleProfilePanel,
+      () => store.toggleProfilePanel(store.profileOverride ?? true),
     ),
     for (final p in store.workspaceProjects) ...[
       _Cmd(

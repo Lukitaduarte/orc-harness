@@ -236,7 +236,18 @@ class _BrowserPaneState extends State<BrowserPane> {
             ),
             const Divider(),
             Expanded(
-              child: !b.open
+              child: widget.daemon.status != LinkStatus.connected
+                  // Nothing reaches a browser without the daemon.
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(
+                          context.l10n.devBrowserNoDaemon,
+                          textAlign: TextAlign.center,
+                        ).small().muted(),
+                      ),
+                    )
+                  : !b.open
                   ? Center(
                       child: PrimaryButton(
                         leading: const Icon(LucideIcons.globe, size: 14),
