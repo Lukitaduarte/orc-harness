@@ -86,7 +86,7 @@ class Account {
   final bool hasReading;
 }
 
-enum SessionState { starting, running, waitingInput, idle }
+enum SessionState { starting, running, waitingInput, idle, exited }
 
 enum LineKind { prompt, assistant, tool, result, dim }
 

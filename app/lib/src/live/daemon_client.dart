@@ -419,9 +419,27 @@ class DaemonClient extends ChangeNotifier {
     '${(await getApplicationSupportDirectory()).path}/daemon-identity.json',
   );
 
-  /// Loads a stored pairing and connects. Without one, the app's own
-  /// daemon is installed and paired with, so a fresh install just works.
-  Future<void> start() async {
+  /// Whether a pairing is stored (this app talked to a daemon before).
+  Future<bool> hasPairing() async => (await _identityFile()).exists();
+
+  /// Installs the app's own daemon if needed and pairs with it over the
+  /// local socket.
+  Future<void> pairLocal() async {
+    status = LinkStatus.connecting;
+    error = null;
+    notifyListeners();
+    try {
+      final ticket = await local.ticket();
+      if (ticket != null) await pair(ticket);
+    } catch (e) {
+      _fail('$e');
+    }
+  }
+
+  /// Loads a stored pairing and connects. Without one, and with
+  /// [autoPair], the app's own daemon is installed and paired with (the
+  /// first launch does that step by step, in the onboarding).
+  Future<void> start({bool autoPair = true}) async {
     try {
       final f = await _identityFile();
       if (await f.exists()) {
@@ -433,11 +451,8 @@ class DaemonClient extends ChangeNotifier {
           debugPrint('$e');
         }
         await connect();
-      } else if (local.bundled != null) {
-        status = LinkStatus.connecting;
-        notifyListeners();
-        final ticket = await local.ticket();
-        if (ticket != null) await pair(ticket);
+      } else if (autoPair && local.bundled != null) {
+        await pairLocal();
       }
     } catch (e) {
       _fail('$e');

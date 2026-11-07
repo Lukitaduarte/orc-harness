@@ -59,8 +59,10 @@ esac
   });
 
   test('a Mac paired elsewhere is left alone', () async {
-    await LocalDaemon(home: home, bundled: bundled)
-        .ensureInstalled(onlyUpdate: true);
+    await LocalDaemon(
+      home: home,
+      bundled: bundled,
+    ).ensureInstalled(onlyUpdate: true);
     expect(await installs(), 0);
     expect(File('$home/bin/orcd').existsSync(), isFalse);
   });

@@ -1630,4 +1630,69 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get devFoldersNoDaemon =>
       'El daemon no está conectado: las carpetas vienen de él. Conéctalo en ⚙.';
+
+  @override
+  String get toolsSessionEnded => 'terminada';
+
+  @override
+  String get sessionEndedBanner => 'La sesión terminó.';
+
+  @override
+  String get sessionReopen => 'Reabrir';
+
+  @override
+  String get sessionCloseEnded => 'Cerrar';
+
+  @override
+  String get onboardWelcomeTitle => 'Te damos la bienvenida a Orc Harness';
+
+  @override
+  String get onboardWelcomeWhy =>
+      'Ejecuta muchas sesiones de Claude Code lado a lado. Antes, tres permisos, uno a la vez: cada uno dice por qué hace falta, y puedes saltar cualquiera.';
+
+  @override
+  String get onboardNotificationsTitle => 'Notificaciones';
+
+  @override
+  String get onboardNotificationsWhy =>
+      'Para que sepas cuándo una sesión te espera, un deploy necesita tu OK o una tarjeta termina. Solo aparecen con la app en segundo plano.';
+
+  @override
+  String get onboardServiceTitle => 'Servicio en segundo plano';
+
+  @override
+  String get onboardServiceWhy =>
+      'Las sesiones corren en orcd, un servicio pequeño que arranca al iniciar sesión, así siguen con la app cerrada. macOS avisará que se agregó un ítem en segundo plano (puedes desactivarlo en Ajustes del Sistema → General → Ítems de inicio). Guarda su clave en el Llavero: si pregunta, elige Permitir siempre.';
+
+  @override
+  String get onboardNetworkTitle => 'Red local';
+
+  @override
+  String get onboardNetworkWhy =>
+      'La app habla con el servicio, y luego con tu teléfono, por una conexión cifrada en tu red. macOS preguntará si Orc Harness puede encontrar dispositivos en la red local: permítelo, o la app no podrá conectarse.';
+
+  @override
+  String get onboardNotNow => 'Ahora no';
+
+  @override
+  String get onboardStart => 'Vamos';
+
+  @override
+  String get onboardGrant => 'Conceder';
+
+  @override
+  String get onboardGrantFinish => 'Conceder y terminar';
+
+  @override
+  String get onboardRetry => 'Intentar de nuevo';
+
+  @override
+  String onboardStep(int n, int total) {
+    return '$n de $total';
+  }
+
+  @override
+  String onboardFailed(String error) {
+    return 'No funcionó: $error';
+  }
 }

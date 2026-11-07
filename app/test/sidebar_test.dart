@@ -55,6 +55,31 @@ void main() {
     },
   );
 
+  testWidgets('a session whose claude quit reads as ended and reopens', (
+    tester,
+  ) async {
+    final d = DaemonClient();
+    final store = HarnessStore(daemon: d);
+    final sent = <Map<String, Object?>>[];
+    d.sendHook = sent.add;
+    d.handle('{"type":"hello","accounts":["work"]}');
+    d.handle(
+      '{"type":"sessions","sessions":[{"id":"s1","account_id":"work","cwd":"/r/app","state":"exited","model":null,"claude_session_id":"u"}]}',
+    );
+    store.selectWorkspace('live');
+    tester.view.physicalSize = const Size(900, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(ShadcnApp(home: Sidebar(store)));
+    expect(find.text('encerrada'), findsOneWidget);
+
+    store.reopen(store.sessions.single);
+    expect(sent.last['type'], 'apply_profile');
+    expect(sent.last['session_id'], 's1');
+    store.dispose();
+    d.dispose();
+  });
+
   test('deleting a plan ends its run on the daemon; demo plans just go', () {
     final store = HarnessStore();
     final p = store.projects.first;

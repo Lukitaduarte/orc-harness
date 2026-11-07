@@ -2811,6 +2811,120 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The daemon is not connected: the folders come from it. Connect it in ⚙.'**
   String get devFoldersNoDaemon;
+
+  /// Session state label: the process exited
+  ///
+  /// In en, this message translates to:
+  /// **'ended'**
+  String get toolsSessionEnded;
+
+  /// Shown over a terminal whose Claude process exited
+  ///
+  /// In en, this message translates to:
+  /// **'The session ended.'**
+  String get sessionEndedBanner;
+
+  /// Button: start the ended session again, resuming its conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Reopen'**
+  String get sessionReopen;
+
+  /// Button: remove the ended session
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get sessionCloseEnded;
+
+  /// Onboarding, first screen title
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome to Orc Harness'**
+  String get onboardWelcomeTitle;
+
+  /// Onboarding, first screen text
+  ///
+  /// In en, this message translates to:
+  /// **'Run many Claude Code sessions side by side. First, three permissions, one at a time: each one says why it\'s needed, and you can skip any of them.'**
+  String get onboardWelcomeWhy;
+
+  /// Onboarding step title
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications'**
+  String get onboardNotificationsTitle;
+
+  /// Onboarding: why notifications
+  ///
+  /// In en, this message translates to:
+  /// **'So you know when a session is waiting for you, a deploy needs your OK or a card is done. They only show while the app is in the background.'**
+  String get onboardNotificationsWhy;
+
+  /// Onboarding step title
+  ///
+  /// In en, this message translates to:
+  /// **'Background service'**
+  String get onboardServiceTitle;
+
+  /// Onboarding: why the background service
+  ///
+  /// In en, this message translates to:
+  /// **'Sessions run in orcd, a small service that starts when you log in, so they keep going with the app closed. macOS will say a background item was added (you can turn it off in System Settings → General → Login Items). It keeps its key in your Keychain: if asked, choose Always Allow.'**
+  String get onboardServiceWhy;
+
+  /// Onboarding step title
+  ///
+  /// In en, this message translates to:
+  /// **'Local network'**
+  String get onboardNetworkTitle;
+
+  /// Onboarding: why local network
+  ///
+  /// In en, this message translates to:
+  /// **'The app talks to the service, and later to your phone, over an encrypted connection on your network. macOS will ask whether Orc Harness may find devices on your local network: allow it, or the app can\'t connect.'**
+  String get onboardNetworkWhy;
+
+  /// Onboarding: skip this step
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get onboardNotNow;
+
+  /// Onboarding: leave the welcome
+  ///
+  /// In en, this message translates to:
+  /// **'Let\'s go'**
+  String get onboardStart;
+
+  /// Onboarding: bring up the native prompt
+  ///
+  /// In en, this message translates to:
+  /// **'Grant'**
+  String get onboardGrant;
+
+  /// Onboarding: last step's button
+  ///
+  /// In en, this message translates to:
+  /// **'Grant and finish'**
+  String get onboardGrantFinish;
+
+  /// Onboarding: retry after an error
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get onboardRetry;
+
+  /// Onboarding progress
+  ///
+  /// In en, this message translates to:
+  /// **'{n} of {total}'**
+  String onboardStep(int n, int total);
+
+  /// Onboarding: an error
+  ///
+  /// In en, this message translates to:
+  /// **'That didn\'t work: {error}'**
+  String onboardFailed(String error);
 }
 
 class _AppLocalizationsDelegate

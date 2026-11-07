@@ -34,6 +34,7 @@ Color sessionStateColor(BuildContext context, SessionState s) => switch (s) {
   SessionState.waitingInput => Colors.amber,
   SessionState.starting => Colors.blue,
   SessionState.idle => Theme.of(context).colorScheme.mutedForeground,
+  SessionState.exited => Colors.red,
 };
 
 String sessionStateLabel(SessionState s) => switch (s) {
@@ -41,6 +42,7 @@ String sessionStateLabel(SessionState s) => switch (s) {
   SessionState.waitingInput => l10n.toolsSessionWaiting,
   SessionState.starting => l10n.toolsSessionStarting,
   SessionState.idle => l10n.toolsSessionIdle,
+  SessionState.exited => l10n.toolsSessionEnded,
 };
 
 class StatusDot extends StatelessWidget {

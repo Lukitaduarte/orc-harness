@@ -1312,5 +1312,94 @@
     }
   },
   "devBrowserNoDaemon": "The daemon is not connected: the browser runs there. Connect it in ⚙.",
-  "devFoldersNoDaemon": "The daemon is not connected: the folders come from it. Connect it in ⚙."
+  "devFoldersNoDaemon": "The daemon is not connected: the folders come from it. Connect it in ⚙.",
+  "toolsSessionEnded": "ended",
+  "@toolsSessionEnded": {
+    "description": "Session state label: the process exited"
+  },
+  "sessionEndedBanner": "The session ended.",
+  "@sessionEndedBanner": {
+    "description": "Shown over a terminal whose Claude process exited"
+  },
+  "sessionReopen": "Reopen",
+  "@sessionReopen": {
+    "description": "Button: start the ended session again, resuming its conversation"
+  },
+  "sessionCloseEnded": "Close",
+  "@sessionCloseEnded": {
+    "description": "Button: remove the ended session"
+  },
+  "onboardWelcomeTitle": "Welcome to Orc Harness",
+  "@onboardWelcomeTitle": {
+    "description": "Onboarding, first screen title"
+  },
+  "onboardWelcomeWhy": "Run many Claude Code sessions side by side. First, three permissions, one at a time: each one says why it's needed, and you can skip any of them.",
+  "@onboardWelcomeWhy": {
+    "description": "Onboarding, first screen text"
+  },
+  "onboardNotificationsTitle": "Notifications",
+  "@onboardNotificationsTitle": {
+    "description": "Onboarding step title"
+  },
+  "onboardNotificationsWhy": "So you know when a session is waiting for you, a deploy needs your OK or a card is done. They only show while the app is in the background.",
+  "@onboardNotificationsWhy": {
+    "description": "Onboarding: why notifications"
+  },
+  "onboardServiceTitle": "Background service",
+  "@onboardServiceTitle": {
+    "description": "Onboarding step title"
+  },
+  "onboardServiceWhy": "Sessions run in orcd, a small service that starts when you log in, so they keep going with the app closed. macOS will say a background item was added (you can turn it off in System Settings → General → Login Items). It keeps its key in your Keychain: if asked, choose Always Allow.",
+  "@onboardServiceWhy": {
+    "description": "Onboarding: why the background service"
+  },
+  "onboardNetworkTitle": "Local network",
+  "@onboardNetworkTitle": {
+    "description": "Onboarding step title"
+  },
+  "onboardNetworkWhy": "The app talks to the service, and later to your phone, over an encrypted connection on your network. macOS will ask whether Orc Harness may find devices on your local network: allow it, or the app can't connect.",
+  "@onboardNetworkWhy": {
+    "description": "Onboarding: why local network"
+  },
+  "onboardNotNow": "Not now",
+  "@onboardNotNow": {
+    "description": "Onboarding: skip this step"
+  },
+  "onboardStart": "Let's go",
+  "@onboardStart": {
+    "description": "Onboarding: leave the welcome"
+  },
+  "onboardGrant": "Grant",
+  "@onboardGrant": {
+    "description": "Onboarding: bring up the native prompt"
+  },
+  "onboardGrantFinish": "Grant and finish",
+  "@onboardGrantFinish": {
+    "description": "Onboarding: last step's button"
+  },
+  "onboardRetry": "Try again",
+  "@onboardRetry": {
+    "description": "Onboarding: retry after an error"
+  },
+  "onboardStep": "{n} of {total}",
+  "@onboardStep": {
+    "description": "Onboarding progress",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "onboardFailed": "That didn't work: {error}",
+  "@onboardFailed": {
+    "description": "Onboarding: an error",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
 }

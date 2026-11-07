@@ -374,6 +374,7 @@ class HarnessStore extends ChangeNotifier {
             'running' => SessionState.running,
             'waiting_input' => SessionState.waitingInput,
             'starting' => SessionState.starting,
+            'exited' => SessionState.exited,
             _ => SessionState.idle,
           },
           tokens: d.usage[l.id]?.$1 ?? 0,
@@ -1369,6 +1370,13 @@ class HarnessStore extends ChangeNotifier {
 
   void discardDraft(Session s) {
     s.draftItems = Set.of(s.appliedItems);
+    notifyListeners();
+  }
+
+  /// Starts an ended session again, back in its conversation (`--resume`).
+  void reopen(Session s) {
+    daemon?.applyProfile(s.id, _profileFor(s));
+    s.state = SessionState.starting;
     notifyListeners();
   }
 

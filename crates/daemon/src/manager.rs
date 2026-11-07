@@ -197,7 +197,8 @@ impl SessionManager {
         let id = format!("s{}", self.next);
         let cwd = match cwd {
             Some(dir) => dir,
-            None => std::env::current_dir()?,
+            // Not the daemon's own folder: under launchd that is `/`.
+            None => std::env::var_os("HOME").map(PathBuf::from).map_or_else(std::env::current_dir, Ok)?,
         };
         let summary = SessionSummary {
             id: id.clone(),

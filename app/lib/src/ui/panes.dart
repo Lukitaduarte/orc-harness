@@ -105,12 +105,46 @@ class _Pane extends StatelessWidget {
       onInput: (data) => d.input(s.id, data),
       onResize: (cols, rows) => d.resize(s.id, cols, rows),
     );
-    return grid == null
+    final view = grid == null
         ? terminal(null)
         : ListenableBuilder(
             listenable: grid,
             builder: (context, _) => terminal(grid.state),
           );
+    if (s.state != SessionState.exited) return view;
+    // Claude quit (e.g. "No, exit" on the trust question): the last screen
+    // stays, with a way back in.
+    return Builder(
+      builder: (context) {
+        final l10n = context.l10n;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: view),
+            Container(
+              color: Theme.of(context).colorScheme.muted,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(child: Text(l10n.sessionEndedBanner).small()),
+                  OutlineButton(
+                    size: ButtonSize.small,
+                    onPressed: () => store.deleteSession(s.id),
+                    child: Text(l10n.sessionCloseEnded),
+                  ),
+                  const Gap(8),
+                  PrimaryButton(
+                    size: ButtonSize.small,
+                    onPressed: () => store.reopen(s),
+                    child: Text(l10n.sessionReopen),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Widget _header(
