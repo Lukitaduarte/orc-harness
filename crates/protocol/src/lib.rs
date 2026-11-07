@@ -662,6 +662,8 @@ pub enum DaemonMessage {
     ApprovalResolved { id: String, approved: bool },
     Learnings { plan_id: String, items: Vec<LearningItem> },
     BrowserState { profile: String, open: bool, url: String },
+    /// Which session's agent is driving a workspace browser (None: no one).
+    BrowserUse { profile: String, session_id: Option<String> },
     DirEntries { session_id: String, path: String, entries: Vec<DirEntry> },
     FileContent { session_id: String, path: String, text: String },
     FileSaved { session_id: String, path: String },

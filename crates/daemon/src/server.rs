@@ -62,6 +62,10 @@ pub struct Daemon {
     /// Workspace browsers, and the address each open one is at.
     pub browsers: Arc<Browsers>,
     browser_urls: Arc<Mutex<HashMap<String, String>>>,
+    /// Agents' last traffic per browser (through the CDP proxy).
+    pub browser_use: crate::cdp_proxy::BrowserUse,
+    /// The CDP proxy's port, once it listens.
+    pub cdp_proxy_port: Arc<OnceLock<u16>>,
     /// Browser actions run one at a time, in arrival order (a click must
     /// reach the page before the typing that follows it).
     browser_queue: Arc<OnceLock<tokio::sync::mpsc::UnboundedSender<(String, BrowserAction)>>>,
@@ -100,6 +104,8 @@ impl Daemon {
             remote: Arc::default(),
             browsers: Arc::new(Browsers::new(PathBuf::new(), None)),
             browser_urls: Arc::default(),
+            browser_use: Arc::default(),
+            cdp_proxy_port: Arc::default(),
             browser_queue: Arc::default(),
             language_servers: Default::default(),
             workspaces: Arc::new(Mutex::new(crate::workspaces::Workspaces::load(None))),
@@ -223,11 +229,17 @@ impl Daemon {
             let result = match d.open_browser(&name).await {
                 Ok(b) => {
                     let mut profile = profile;
+                    // Through the proxy when it runs, so the app sees who drives
+                    // the browser; {ORC_SESSION} becomes the session's id.
+                    let endpoint = match d.cdp_proxy_port.get() {
+                        Some(port) => format!("http://127.0.0.1:{port}/orc/{name}/{{ORC_SESSION}}"),
+                        None => b.cdp_http.clone(),
+                    };
                     profile.mcp_servers.insert(
                         "browser".into(),
                         serde_json::json!({
                             "command": "npx",
-                            "args": ["-y", PLAYWRIGHT_MCP, "--cdp-endpoint", b.cdp_http],
+                            "args": ["-y", PLAYWRIGHT_MCP, "--cdp-endpoint", endpoint],
                         }),
                     );
                     let d2 = d.clone();
@@ -322,6 +334,11 @@ impl Daemon {
         }
         for (profile, url) in self.browser_urls.lock().unwrap().iter() {
             out.push(DaemonMessage::BrowserState { profile: profile.clone(), open: true, url: url.clone() });
+        }
+        for (profile, (session, at)) in self.browser_use.lock().unwrap().iter() {
+            if at.elapsed() < crate::cdp_proxy::ACTIVE_FOR {
+                out.push(DaemonMessage::BrowserUse { profile: profile.clone(), session_id: Some(session.clone()) });
+            }
         }
         out.extend(runs);
         {

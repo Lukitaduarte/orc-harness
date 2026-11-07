@@ -147,6 +147,12 @@ class _Pane extends StatelessWidget {
             const Icon(LucideIcons.globe, size: 14),
             const Gap(8),
             const Text('Navegador do workspace').small().semiBold(),
+            if (store.daemon?.browserOf(browser).usedBy case final s?) ...[
+              const Gap(8),
+              OutlineBadge(
+                child: Text('em uso por ${store.daemon!.sessionLabel(s)}'),
+              ),
+            ],
           ] else
             const Text('Pane vazio').small().muted(),
           const Spacer(),

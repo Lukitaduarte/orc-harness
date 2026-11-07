@@ -2,6 +2,7 @@
 
 pub mod browser;
 pub mod catalog;
+pub mod cdp_proxy;
 pub mod db;
 pub mod config;
 pub mod gates;

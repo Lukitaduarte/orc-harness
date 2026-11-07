@@ -112,6 +112,10 @@ fn main() -> std::io::Result<()> {
                 eprintln!("orcd: para parear um app, rode `orcd pair`");
                 tokio::spawn(remote.serve(daemon.clone()));
                 tokio::spawn(daemon.clone().stream_grids());
+                // Agents reach the workspace browsers through here (127.0.0.1).
+                let cdp = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+                let _ = daemon.cdp_proxy_port.set(cdp.local_addr()?.port());
+                tokio::spawn(orc_daemon::cdp_proxy::serve(cdp, daemon.clone()));
                 // Cards move with their PRs on GitHub.
                 tokio::spawn(daemon.clone().watch_plans(Duration::from_secs(60)));
                 daemon.serve(socket).await

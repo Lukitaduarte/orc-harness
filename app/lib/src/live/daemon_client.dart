@@ -90,6 +90,9 @@ class LiveBrowser extends ChangeNotifier {
   bool open = false;
   String url = '';
 
+  /// The session whose agent is driving it now, if any.
+  String? usedBy;
+
   /// Last screen (JPEG) and the page size it shows, in CSS pixels.
   Uint8List? frame;
   int width = 0;
@@ -702,6 +705,11 @@ class DaemonClient extends ChangeNotifier {
         browserOf(m['profile'] as String)
           ..open = m['open'] as bool
           ..url = m['url'] as String
+          ..notifyListeners();
+        notifyListeners();
+      case 'browser_use':
+        browserOf(m['profile'] as String)
+          ..usedBy = m['session_id'] as String?
           ..notifyListeners();
         notifyListeners();
       case 'browser_frame':

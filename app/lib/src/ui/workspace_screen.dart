@@ -188,6 +188,15 @@ class _Toolbar extends StatelessWidget {
           const Text('Catálogo').small().semiBold(),
         ],
         const Spacer(),
+        // The workspace's tools, lit while an agent uses them.
+        if (store.isLive && store.daemon != null)
+          _ToolIcon(
+            icon: LucideIcons.globe,
+            name: 'Navegador do workspace',
+            usedBy: store.daemon!.browserOf(store.workspaceId).usedBy,
+            label: store.daemon!.sessionLabel,
+            onPressed: () => store.openBrowser(store.focusedLeafId),
+          ),
         GhostButton(
           density: ButtonDensity.icon,
           onPressed: store.toggleProfilePanel,
@@ -217,4 +226,61 @@ class _Toggle extends StatelessWidget {
           onPressed: onPressed,
           child: Text(label),
         );
+}
+
+/// A workspace tool (browser, simulators) with a dot while an agent uses it.
+class _ToolIcon extends StatelessWidget {
+  const _ToolIcon({
+    required this.icon,
+    required this.name,
+    required this.usedBy,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String name;
+
+  /// The session driving it now, if any.
+  final String? usedBy;
+  final String Function(String) label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final busy = usedBy;
+    return Tooltip(
+      tooltip: (context) => TooltipContainer(
+        child: Text(busy == null ? name : '$name · em uso por ${label(busy)}'),
+      ),
+      child: GhostButton(
+        density: ButtonDensity.icon,
+        onPressed: onPressed,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Icon(icon, size: 16),
+            if (busy != null)
+              Positioned(
+                right: -3,
+                top: -3,
+                child: Container(
+                  key: const ValueKey('in-use'),
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD97757),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.background,
+                      width: 1.5,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }

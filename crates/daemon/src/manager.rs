@@ -401,6 +401,9 @@ impl SessionManager {
         for (name, config) in self.extra_mcp.get(&account.id).into_iter().flatten() {
             servers.entry(name.clone()).or_insert_with(|| config.clone());
         }
+        // Per-session endpoints (the browser's CDP proxy) name the session.
+        let mut servers: BTreeMap<String, serde_json::Value> =
+            serde_json::from_str(&serde_json::to_string(&servers)?.replace("{ORC_SESSION}", &s.id))?;
         if let Some(orc) = &self.cfg.orc_mcp {
             // The harness tools; the session id ties every call to it.
             servers.insert(
