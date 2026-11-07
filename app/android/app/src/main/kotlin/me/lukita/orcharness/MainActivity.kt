@@ -1,4 +1,4 @@
-package me.lukita.orc_harness
+package me.lukita.orcharness
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -1,129 +1,151 @@
-# orc-harness
+<div align="center">
 
-Um harness para o Claude Code. Roda várias sessões em paralelo, em várias contas e workspaces, cada uma com o seu conjunto de skills, MCPs e envs. Planos aprovados viram cards, que rodam em worktrees até virar PR, e a cota de cada conta decide onde e quando cada card roda. Tudo pelo app no desktop e no celular.
+<img src="docs/logo.png" width="128" alt="Orc Harness icon">
 
-Plano completo: https://claude.ai/artifact/69F6tkzkd1TZqcbXBABdaQ
+# Orc Harness
 
-## O que tem
+**Run many Claude Code sessions in parallel, across accounts and workspaces, from your desktop and your phone.**
 
-- **Sessões**:
-  - terminais de verdade (o daemon emula e o app desenha), em panes divididos e redimensionáveis;
-  - cada sessão volta depois de um restart do daemon, com a conversa;
-  - avisos quando uma sessão espera você.
-- **Contas e workspaces**:
-  - várias contas do Claude Code, cada uma com a própria pasta de configuração;
-  - workspaces (ex.: Trabalho, Pessoal) agrupam contas, repositórios, planos, navegador e memória;
-  - a cota de 5h e da semana de cada conta fica sempre à vista.
-- **Perfis**: skills, MCPs e envs escolhidos por sessão a partir de um catálogo global, aplicados com restart (`--resume`). Os valores das envs ficam no Keychain e nunca vão para arquivos nem para o app.
-- **Plan mode**:
-  - templates em markdown (back end com deploy, app com release, spike);
-  - uma sessão de planejamento do Claude escreve o plano e responde aos comentários;
-  - as seções são aprovadas uma a uma, com digest;
-  - os comentários em seções já aprovadas viram emendas.
-- **Execução**:
-  - os loops do plano viram cards (um DAG com o modelo de cada card);
-  - cada card roda na própria worktree, na conta com mais folga;
-  - PR aberto move o card para review, e o merge move para feito e libera os cards que dependiam dele;
-  - commits só em conventional commits.
-- **Trava de saída**: tudo isto espera o seu OK no app, também pelo celular: deploy (Railway, GCP, AWS, Firebase, Vercel, Fly), release nas lojas, kubectl, helm, terraform, push na main, merge e publicação de pacote.
-- **Sessões que conversam**: o MCP do harness (`orc`) dá a cada sessão as tools:
-  - `list_sessions`, `send_message`, `read_inbox` e `delegate_task`;
-  - `search_code`;
-  - `list_envs` e `request_env_change`;
-  - memória: `remember`, `recall` e `forget`;
-  - no planejamento e no Learn: `save_plan` e `propose_learning`.
-- **Learn**: os comentários nos cards viram propostas de edição nas skills, aplicadas só com o seu OK.
-- **Memória por workspace**: a do harness ou um MCP de memória do catálogo (mem0, basic-memory…).
-- **Navegador por workspace**: Chrome headless com perfil próprio, onde ficam cookies e logins. Ele aparece num pane e os agentes o usam pelo Playwright MCP.
-- **IDE**:
-  - árvore e abas, autocomplete, erros, ir para definição, informação do símbolo e formatação, pelo servidor de linguagem (Dart, TypeScript, Kotlin, Swift);
-  - abrir no Xcode, Android Studio ou Zed;
-  - diff contra a base, commit, push e merge do PR;
-  - busca de texto e de símbolos.
-- **Analytics**:
-  - tokens e custo do próprio Claude Code (OpenTelemetry), por dia, conta, modelo, plano e branch;
-  - taxa de cache;
-  - orçamento mensal por workspace, com avisos.
-- **Celular**: o mesmo app, com cotas no topo, sessões com barra de digitação e revisão e aprovação de planos. O pareamento é por QR.
+[![CI](https://github.com/Lukitaduarte/orc-harness/actions/workflows/ci.yml/badge.svg)](https://github.com/Lukitaduarte/orc-harness/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Lukitaduarte/orc-harness?include_prereleases&sort=semver)](https://github.com/Lukitaduarte/orc-harness/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Platform](https://img.shields.io/badge/platform-macOS-lightgrey?logo=apple)
+![Rust](https://img.shields.io/badge/daemon-Rust-orange?logo=rust)
+![Flutter](https://img.shields.io/badge/app-Flutter-02569B?logo=flutter)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-## Arquitetura
+English · [Português](README.pt-BR.md)
 
-- **`orcd`, o daemon em Rust**: dono das sessões (PTY e terminal emulado), dos processos, do estado e dos segredos.
-- **App em Flutter** (`shadcn_flutter`): só cliente, no desktop e no celular.
-- **Transporte via iroh (QUIC P2P)**: só chaves pareadas entram. O relay é opcional e o tráfego é cifrado de ponta a ponta.
+<img src="docs/screenshots/sessions.png" alt="Sessions in split panes" width="900">
 
+</div>
+
+> *"Work, work."* Each session gets its own skills, MCPs and envs. Approved plans become cards that run in git worktrees until they turn into PRs, and each account's quota decides where and when each card runs.
+
+## Features
+
+- **Sessions**: real terminals (the daemon emulates, the app draws) in split, resizable panes. Sessions survive daemon restarts with their conversation, and you get notified when one is waiting on you.
+- **Accounts and workspaces**: several Claude Code accounts, each with its own config dir. Workspaces (e.g. Work, Personal) group accounts, repos, plans, browser and memory. Every account's 5-hour and weekly quota stays in sight.
+- **Profiles**: skills, MCPs and envs picked per session from a global catalog and applied with a restart (`--resume`). Env values live in the Keychain and never reach files or the app.
+- **Plan mode**: markdown templates (backend with deploy, app with release, spike). A planning session writes the plan and answers comments; you approve it section by section, and comments on approved sections become amendments.
+- **Execution**: plan loops become a DAG of cards. Each card runs in its own worktree, on the account with the most headroom. An open PR moves it to review; the merge moves it to done and unblocks what depended on it. Conventional commits only.
+- **Exit gates**: deploys (Railway, GCP, AWS, Firebase, Vercel, Fly), store releases, `kubectl`, `helm`, `terraform`, pushes to `main`, merges and package publishing wait for your OK in the app, from the phone too.
+- **Sessions that talk**: the harness MCP (`orc`) gives every session `list_sessions`, `send_message`, `read_inbox`, `delegate_task`, `search_code`, `list_envs`, `request_env_change` and memory (`remember`, `recall`, `forget`).
+- **Learn**: comments on cards become proposed edits to your skills, applied only with your OK.
+- **Memory per workspace**: the harness's own, or a memory MCP from the catalog (mem0, basic-memory…).
+- **Browser per workspace**: headless Chrome with its own profile (cookies and logins persist), shown in a pane and driven by agents through Playwright MCP. The toolbar shows when an agent is using it.
+- **IDE**: file tree and tabs, completion, diagnostics, go to definition, hover and formatting through language servers (Dart, TypeScript, Kotlin, Swift); diff against base, commit, push and merge; open in Xcode, Android Studio or Zed.
+- **Analytics**: tokens and cost straight from Claude Code (OpenTelemetry) by day, account, model, plan and branch; cache hit rate; monthly budgets per workspace.
+- **Phone**: the same app, with quotas on top, sessions with a typing bar, and plan review and approval. Pair by scanning a QR code.
+- **Languages**: English, Português and Español.
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/plan.png" alt="Plan review"></td>
+    <td><img src="docs/screenshots/kanban.png" alt="Execution board"></td>
+  </tr>
+  <tr>
+    <td align="center">Plan review, section by section</td>
+    <td align="center">Cards running in worktrees</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/analytics.png" alt="Analytics"></td>
+    <td><img src="docs/screenshots/catalog.png" alt="Catalog"></td>
+  </tr>
+  <tr>
+    <td align="center">Usage and cost</td>
+    <td align="center">Skills, MCPs and envs catalog</td>
+  </tr>
+</table>
+
+<p align="center"><img src="docs/screenshots/phone.png" width="260" alt="Phone"></p>
+
+## Install (macOS)
+
+You need [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`) installed. `gh` and Google Chrome are optional.
+
+**1. The app.** Download `OrcHarness-<version>-macos.dmg` from the [latest release](https://github.com/Lukitaduarte/orc-harness/releases/latest) and drag **Orc Harness** to Applications. Builds are not notarized yet, so the first time macOS blocks it: open **System Settings → Privacy & Security** and click **Open Anyway** (or run `xattr -dr com.apple.quarantine "/Applications/Orc Harness.app"`).
+
+**2. The daemon.** `orcd` owns the sessions and runs in the background:
+
+```sh
+curl -fsSLO https://github.com/Lukitaduarte/orc-harness/releases/latest/download/orcd-<version>-macos-universal.tar.gz
+tar xzf orcd-*-macos-universal.tar.gz && cd orcd-*-macos-universal
+./orcd install        # copies itself to ~/.orc/bin and starts at login (LaunchAgent)
+~/.orc/bin/orcd pair  # prints a pairing ticket and a QR code
 ```
-app/                Flutter (desktop + mobile)
-app/rust/           ponte Flutter ↔ Rust (flutter_rust_bridge), workspace próprio
-crates/protocol/    mensagens e tipos compartilhados
-crates/link/        iroh: tickets, chaves, endpoints, relay
-crates/daemon/      orcd + orc-statusline, orc-hook, orc-commit-check, orc-mcp
-crates/client-core/ lado do app: parear e conectar
-```
 
-## Começando
+`orcd install --sign "Apple Development: Your Name (TEAMID)"` signs the copies so the Keychain and firewall don't ask again after each update (`security find-identity -v -p codesigning` lists your identities).
 
-Precisa de: Rust estável, Flutter 3.38+, Claude Code (`claude`) e, opcionalmente, `gh`, Chrome e `dart` ou outros servidores de linguagem.
+**3. Connect.** In the app, open ⚙ → **Connect daemon** and paste the `orc1…` ticket, or scan the QR from your phone. Then create a workspace (**+** in the left bar), add an account (**New account** opens a session for `/login`) and add repositories.
+
+## Build from source
+
+Requires stable Rust and Flutter 3.38+.
 
 ```sh
 cargo build --release --bins
-./target/release/orcd serve          # deixa rodando (ou: orcd install, veja abaixo)
-./target/release/orcd pair           # imprime o ticket orc1… e um QR
-cd app && flutter run -d macos       # ⚙ → Conectar daemon → cole o ticket (ou escaneie no celular)
+./target/release/orcd serve          # keep it running (or: orcd install)
+./target/release/orcd pair
+cd app && flutter run -d macos
 ```
 
-No app, crie um workspace (**+** na barra da esquerda) e adicione contas (**Nova conta** abre uma sessão para o `/login`). Depois adicione repositórios em "Este Mac" e clique em "Confiar nas worktrees" uma vez.
+To reach the daemon away from your network, set a relay in `~/.orc/config.json`: `{ "relay": "n0" }` (n0's public relays) or the URL of your own `iroh-relay`. The default `"off"` keeps it on the local network. Paired devices are listed, and can be revoked, in ⚙ → Connect daemon, or with `orcd devices` / `orcd revoke ID`.
 
-### Como serviço (sobe no login)
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph Mac
+    D["orcd (Rust)<br/>PTYs · terminal emulation<br/>state · Keychain secrets"]
+    C["claude sessions<br/>in worktrees"]
+    B["headless Chrome<br/>per workspace"]
+    D --> C
+    D --> B
+  end
+  A["Orc Harness app<br/>(Flutter, desktop)"] <-->|iroh QUIC, E2E| D
+  P["Orc Harness app<br/>(phone)"] <-->|iroh QUIC, E2E, optional relay| D
+```
+
+- **`orcd`**, the Rust daemon, owns the sessions (PTY and emulated terminal), processes, state and secrets.
+- **The app** ([Flutter](https://flutter.dev) with [shadcn_flutter](https://pub.dev/packages/shadcn_flutter)) is only a client, on desktop and phone.
+- **Transport** is [iroh](https://iroh.computer) (QUIC, peer to peer): only paired keys get in, and traffic is end-to-end encrypted.
+
+```
+app/                Flutter app (desktop + mobile)
+app/rust/           Flutter ↔ Rust bridge (flutter_rust_bridge)
+crates/protocol/    shared messages and types
+crates/link/        iroh: tickets, keys, endpoints, relay
+crates/daemon/      orcd + orc-statusline, orc-hook, orc-commit-check, orc-mcp
+crates/client-core/ app side: pairing and connecting
+```
+
+Everything lives in `~/.orc` (or `$ORC_HOME`): JSON config you can edit by hand (`config.json`, `workspaces.json`, `catalog.json`…), plan templates in `templates/*.md`, plans in `plans/<id>/`, and usage and agent memory in `orc.db` ([Turso](https://turso.tech), SQLite format). Secrets are in the Keychain under the `orc-harness` service.
+
+## Languages
+
+The app follows the system language; pick another in ⚙ → Language. Strings live in `app/lib/l10n/app_<code>.arb`, one file per language, with `app_en.arb` as the template. To add one:
+
+1. Copy `app_en.arb` to `app_<code>.arb`, change `@@locale`, and translate the values (not the keys or `{placeholders}`).
+2. Add the language to `languageNames` in `app/lib/src/i18n.dart`.
+3. Run `flutter gen-l10n` and `flutter test test/i18n_test.dart`, which checks nothing is missing.
+
+## Tests
 
 ```sh
-./target/release/orcd install --sign "Apple Development: Seu Nome (TEAMID)"
-orcd status
-orcd uninstall
-```
-
-O `install` copia os binários para `~/.orc/bin`, assina-os (assim o Keychain e o firewall não perguntam de novo a cada atualização) e cria um LaunchAgent com o PATH do seu shell. O log fica em `~/.orc/orcd.log`.
-
-### Fora da rede local
-
-Em `~/.orc/config.json`:
-
-```json
-{ "relay": "n0" }
-```
-
-As opções são `"off"` (padrão, só a mesma rede), `"n0"` (relays públicos da n0) ou a URL do seu `iroh-relay`. Os aparelhos pareados ficam em ⚙ → Conectar daemon, onde também dá para revogar. Pelo terminal: `orcd devices` e `orcd revoke ID`.
-
-## Onde ficam as coisas
-
-Fica tudo em `~/.orc` (ou em `ORC_HOME`). Os arquivos de configuração são JSON, para você editar à mão:
-- `config.json`: contas, relay e caminho do `claude`;
-- `workspaces.json`, `catalog.json`, `projects.json`, `devices.json`;
-- `templates/*.md`: templates de plan mode;
-- `plans/<id>/`: `plan.md`, revisão, execução e learnings.
-
-O resto:
-- `orc.db` (Turso, formato SQLite): uso (tokens e custo) e a memória dos agentes;
-- `sessions/`: uma pasta por sessão com a config gerada, mais `sessions.json`;
-- `worktrees/`, `browsers/` (perfis do Chrome) e `accounts/` (contas criadas pelo app);
-- segredos (valores de envs e a chave do daemon): no Keychain, serviço `orc-harness`. Em desenvolvimento, `ORC_SECRETS=file` guarda num arquivo 0600.
-
-## Idiomas
-
-O app vem em português, inglês e espanhol e segue o idioma do sistema. Dá para escolher outro em ⚙ → Idioma.
-
-Os textos ficam em `app/lib/l10n/app_<código>.arb`, um arquivo por idioma; o `app_en.arb` é o modelo e traz a descrição e os parâmetros de cada texto. Para adicionar um idioma:
-
-1. Copie `app_en.arb` para `app_<código>.arb` (ex.: `app_fr.arb`), troque o `@@locale` e traduza os valores. Não traduza as chaves nem os `{parâmetros}`.
-2. Acrescente o idioma em `languageNames`, em `app/lib/src/i18n.dart`.
-3. Rode `flutter gen-l10n` (ou só `flutter run`) e `flutter test test/i18n_test.dart`, que confere se nenhuma chave ficou faltando.
-
-As falas do orc ("Work, work.", "Zug zug!") ficam em inglês em todos os idiomas.
-
-## Testes
-
-```sh
-cargo test --workspace     # daemon, protocolo, iroh ponta a ponta; usa Chrome e dart se existirem
+cargo test --workspace     # daemon, protocol, iroh end to end (uses Chrome and dart if present)
 cd app && flutter test     # app
-cargo test -p orc-daemon --test real_claude -- --ignored --nocapture   # claude real, sem prompt
+cd app && flutter test test_screenshots   # regenerates docs/screenshots
 ```
+
+## Contributing
+
+Issues and PRs are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE) © 2026 Lucas Duarte
+
+---
+
+<sub>Orc Harness is an independent project. It is not affiliated with or endorsed by Anthropic; Claude and Claude Code are trademarks of Anthropic. The orc theme is a fan homage to classic real-time strategy games; it is not affiliated with Blizzard Entertainment, and its pixel art is original.</sub>

@@ -157,7 +157,7 @@ List<Account> seedAccounts(DateTime now) => [
   Account(
     id: 'personal-main',
     workspaceId: 'personal',
-    email: 'talk@lukita.me',
+    email: 'lucas@demo.dev',
     plan: 'Max',
     fiveHour: QuotaWindow(
       usedPercent: 8,

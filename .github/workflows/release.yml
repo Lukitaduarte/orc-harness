@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  FLUTTER_VERSION: 3.38.10
+
+jobs:
+  macos:
+    name: macOS (universal)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            app/rust
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Version
+        id: v
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Daemon (orcd and helpers)
+        run: |
+          set -euo pipefail
+          for t in aarch64-apple-darwin x86_64-apple-darwin; do
+            cargo build --release --locked --bins --target "$t"
+          done
+          out="orcd-${{ steps.v.outputs.version }}-macos-universal"
+          mkdir -p "dist/$out"
+          for b in orcd orc-statusline orc-commit-check orc-mcp orc-hook; do
+            lipo -create -output "dist/$out/$b" \
+              "target/aarch64-apple-darwin/release/$b" \
+              "target/x86_64-apple-darwin/release/$b"
+            codesign --force --sign - "dist/$out/$b"
+          done
+          cp LICENSE "dist/$out/"
+          tar -C dist -czf "dist/$out.tar.gz" "$out"
+
+      - name: App
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter build macos --release --build-name "${{ steps.v.outputs.version }}" --build-number "${{ github.run_number }}"
+
+      - name: Package app (dmg and zip)
+        run: |
+          set -euo pipefail
+          app="app/build/macos/Build/Products/Release/Orc Harness.app"
+          name="OrcHarness-${{ steps.v.outputs.version }}-macos"
+          ditto -c -k --keepParent "$app" "dist/$name.zip"
+          mkdir -p dmg
+          cp -R "$app" dmg/
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "Orc Harness" -srcfolder dmg -ov -format UDZO "dist/$name.dmg"
+          cd dist && shasum -a 256 *.dmg *.zip *.tar.gz > SHA256SUMS.txt
+
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.tar.gz
+            dist/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        with:
+          name: orc-harness-macos
+          path: |
+            dist/*.dmg
+            dist/*.tar.gz

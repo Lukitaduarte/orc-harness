@@ -8,7 +8,7 @@
 PRODUCT_NAME = Orc Harness
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = me.lukita.orcHarness
+PRODUCT_BUNDLE_IDENTIFIER = me.lukita.orcharness
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 me.lukita. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 Lucas Duarte. MIT License.
