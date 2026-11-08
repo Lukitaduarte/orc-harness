@@ -137,6 +137,11 @@ impl SessionManager {
         self.accounts.insert(account.id.clone(), account);
     }
 
+    /// The `claude` program sessions run.
+    pub fn claude(&self) -> &str {
+        &self.cfg.claude
+    }
+
     pub fn account(&self, id: &str) -> Option<&Account> {
         self.accounts.get(id)
     }
@@ -395,11 +400,10 @@ impl SessionManager {
                 }]
             }])
         };
-        let settings = json!({
+        let mut settings = json!({
             "statusLine": { "type": "command", "command": self.cfg.statusline.display().to_string() },
             "hooks": HOOK_EVENTS.iter().map(|e| (e.to_string(), hook(e))).collect::<serde_json::Map<_, _>>(),
         });
-        write_json(&dir.join("settings.json"), &settings)?;
         let mut servers = profile.mcp_servers.clone();
         for (name, config) in self.extra_mcp.get(&account.id).into_iter().flatten() {
             servers.entry(name.clone()).or_insert_with(|| config.clone());
@@ -419,6 +423,13 @@ impl SessionManager {
             );
         }
         write_json(&dir.join("mcp.json"), &json!({ "mcpServers": servers }))?;
+        // Strict mode keeps the account's other MCP servers out, and its
+        // claude.ai connectors too; with connectors, an allowlist does it.
+        let strict = profile.connectors.is_empty();
+        if !strict {
+            settings["allowedMcpServers"] = crate::connectors::allowlist(&servers, &profile.connectors);
+        }
+        write_json(&dir.join("settings.json"), &settings)?;
 
         // Skills go in through a local plugin made of links to the catalog.
         let plugin = dir.join("plugin");
@@ -441,10 +452,12 @@ impl SessionManager {
             dir.join("settings.json").display().to_string(),
             "--mcp-config".into(),
             dir.join("mcp.json").display().to_string(),
-            "--strict-mcp-config".into(),
             "--plugin-dir".into(),
             plugin.display().to_string(),
         ];
+        if strict {
+            args.push("--strict-mcp-config".into());
+        }
         if resume {
             args.extend(["--resume".into(), s.claude_session_id.clone()]);
         } else {
@@ -658,6 +671,32 @@ mod tests {
         assert_eq!(mcp["mcpServers"]["orc"]["env"]["ORC_SESSION"], s.id.as_str());
         let link = dir.join("plugin/skills/code-review");
         assert_eq!(fs::read_link(link).unwrap(), Path::new("/catalog/skills/code-review"));
+    }
+
+    #[test]
+    fn connectors_swap_strict_mode_for_an_allowlist() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut m = manager(tmp.path());
+        let mut p = profile();
+        p.connectors = vec!["https://mcp.slack.com/mcp".into()];
+        let s = m.create("work-main", Some(tmp.path().into()), p, 120, 40).unwrap();
+        let lines = screen(&m, &s.id);
+        assert!(!lines.contains(&"arg:--strict-mcp-config".to_string()), "{lines:?}");
+        let settings: serde_json::Value =
+            serde_json::from_slice(&fs::read(m.runtime_dir(&s.id).join("settings.json")).unwrap()).unwrap();
+        let allowed = settings["allowedMcpServers"].as_array().unwrap();
+        for entry in [
+            serde_json::json!({ "serverName": "orc" }),
+            serde_json::json!({ "serverName": "postgres" }),
+            serde_json::json!({ "serverUrl": "https://mcp.slack.com/mcp" }),
+        ] {
+            assert!(allowed.contains(&entry), "{entry} not in {allowed:?}");
+        }
+        // Without connectors, strict as before and no allowlist.
+        let plain = m.create("work-main", Some(tmp.path().into()), profile(), 120, 40).unwrap();
+        let settings: serde_json::Value =
+            serde_json::from_slice(&fs::read(m.runtime_dir(&plain.id).join("settings.json")).unwrap()).unwrap();
+        assert!(settings.get("allowedMcpServers").is_none());
     }
 
     #[test]

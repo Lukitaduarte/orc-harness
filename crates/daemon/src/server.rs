@@ -1447,6 +1447,24 @@ impl Daemon {
                 emit(DaemonMessage::McpRequestResolved { id, approved: true });
             }
             ClientMessage::ScanMcpImports => return vec![self.mcp_imports()],
+            ClientMessage::ListConnectors { account_id } => {
+                let (claude, dir) = {
+                    let sessions = self.sessions.lock().unwrap();
+                    let Some(a) = sessions.account(&account_id) else {
+                        return vec![DaemonMessage::Error { message: format!("conta desconhecida: {account_id}") }];
+                    };
+                    (sessions.claude().to_string(), a.config_dir.clone())
+                };
+                let events = self.events.clone();
+                // It checks each connector: off the message loop.
+                std::thread::spawn(move || {
+                    let reply = match crate::connectors::list(&claude, dir.as_deref()) {
+                        Ok(items) => DaemonMessage::Connectors { account_id, items },
+                        Err(e) => DaemonMessage::Error { message: e.to_string() },
+                    };
+                    let _ = events.send(reply);
+                });
+            }
             ClientMessage::ImportMcps { keys } => {
                 let found = self.scan_mcps();
                 let secrets = self.sessions.lock().unwrap().secrets.clone();

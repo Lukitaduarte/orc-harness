@@ -1731,4 +1731,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String toolsImportCount(int count) {
     return 'Import $count';
   }
+
+  @override
+  String get shellConnectorsTitle => 'claude.ai connectors';
+
+  @override
+  String get shellConnectorsHint =>
+      'The ones this account added on claude.ai (Gmail, Drive, Slack…). Only the ones you check enter this session.';
+
+  @override
+  String get shellConnectorsLoading =>
+      'Asking Claude Code (it checks each one)…';
+
+  @override
+  String get shellConnectorsNone =>
+      'No connectors on this account (or it is logged in with an API key).';
+
+  @override
+  String get shellConnectorNeedsAuth =>
+      'Not connected: connect it on claude.ai';
+
+  @override
+  String get shellConnectorFailed => 'Didn\'t answer the last check';
 }

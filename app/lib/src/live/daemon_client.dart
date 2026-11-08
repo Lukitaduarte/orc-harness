@@ -146,6 +146,17 @@ class DaemonClient extends ChangeNotifier {
   /// MCP servers agents ask to add: (id, session, name, config, reason).
   List<(String, String, String, Map<String, dynamic>, String)> mcpRequests = [];
 
+  /// Each account's claude.ai connectors: {name, url, status}.
+  final connectors = <String, List<Map<String, dynamic>>>{};
+  final connectorsLoading = <String>{};
+
+  /// Asks Claude Code for an account's connectors (it checks each, slowly).
+  void listConnectors(String accountId) {
+    if (!connectorsLoading.add(accountId)) return;
+    send({'type': 'list_connectors', 'account_id': accountId});
+    notifyListeners();
+  }
+
   /// MCP servers set up in Claude Code that could join the catalog (null
   /// until asked for).
   List<Map<String, dynamic>>? mcpImports;
@@ -676,6 +687,11 @@ class DaemonClient extends ChangeNotifier {
             (m['reason'] as String?) ?? '',
           ),
         ];
+        notifyListeners();
+      case 'connectors':
+        final account = m['account_id'] as String;
+        connectorsLoading.remove(account);
+        connectors[account] = (m['items'] as List).cast<Map<String, dynamic>>();
         notifyListeners();
       case 'mcp_imports':
         mcpImports = (m['items'] as List).cast<Map<String, dynamic>>();

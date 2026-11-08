@@ -2985,6 +2985,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Import {count}'**
   String toolsImportCount(int count);
+
+  /// Profile panel section title
+  ///
+  /// In en, this message translates to:
+  /// **'claude.ai connectors'**
+  String get shellConnectorsTitle;
+
+  /// Profile panel connectors hint
+  ///
+  /// In en, this message translates to:
+  /// **'The ones this account added on claude.ai (Gmail, Drive, Slack…). Only the ones you check enter this session.'**
+  String get shellConnectorsHint;
+
+  /// Connectors loading
+  ///
+  /// In en, this message translates to:
+  /// **'Asking Claude Code (it checks each one)…'**
+  String get shellConnectorsLoading;
+
+  /// No connectors
+  ///
+  /// In en, this message translates to:
+  /// **'No connectors on this account (or it is logged in with an API key).'**
+  String get shellConnectorsNone;
+
+  /// Connector status
+  ///
+  /// In en, this message translates to:
+  /// **'Not connected: connect it on claude.ai'**
+  String get shellConnectorNeedsAuth;
+
+  /// Connector status
+  ///
+  /// In en, this message translates to:
+  /// **'Didn\'t answer the last check'**
+  String get shellConnectorFailed;
 }
 
 class _AppLocalizationsDelegate

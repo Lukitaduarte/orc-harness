@@ -16,7 +16,7 @@ Um harness para o Claude Code. Roda várias sessões em paralelo, em várias con
   - várias contas do Claude Code, cada uma com a própria pasta de configuração;
   - workspaces (ex.: Trabalho, Pessoal) agrupam contas, repositórios, planos, navegador e memória;
   - a cota de 5h e da semana de cada conta fica sempre à vista.
-- **Perfis**: skills, MCPs e envs escolhidos por sessão a partir de um catálogo global, aplicados com restart (`--resume`). Os valores das envs ficam no Keychain e nunca vão para arquivos nem para o app.
+- **Perfis**: skills, MCPs, envs e os conectores do claude.ai da conta (Gmail, Drive, Slack…) escolhidos por sessão a partir de um catálogo global, aplicados com restart (`--resume`). Os MCPs que você já usa no Claude Code entram com um clique (Importar do Claude Code). Os valores das envs ficam no Keychain e nunca vão para arquivos nem para o app.
 - **Plan mode**:
   - templates em markdown (back end com deploy, app com release, spike);
   - uma sessão de planejamento do Claude escreve o plano e responde aos comentários;
@@ -31,7 +31,7 @@ Um harness para o Claude Code. Roda várias sessões em paralelo, em várias con
 - **Sessões que conversam**: o MCP do harness (`orc`) dá a cada sessão as tools:
   - `list_sessions`, `send_message`, `read_inbox` e `delegate_task`;
   - `search_code`;
-  - `list_envs` e `request_env_change`;
+  - `list_envs`, `request_env_change` e `request_mcp_add` (o agente pede um MCP e você aprova no app);
   - memória: `remember`, `recall` e `forget`;
   - no planejamento e no Learn: `save_plan` e `propose_learning`.
 - **Learn**: os comentários nos cards viram propostas de edição nas skills, aplicadas só com o seu OK.

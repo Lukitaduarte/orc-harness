@@ -1724,4 +1724,25 @@ class AppLocalizationsPt extends AppLocalizations {
   String toolsImportCount(int count) {
     return 'Importar $count';
   }
+
+  @override
+  String get shellConnectorsTitle => 'Conectores do claude.ai';
+
+  @override
+  String get shellConnectorsHint =>
+      'Os que esta conta adicionou no claude.ai (Gmail, Drive, Slack…). Só os marcados entram nesta sessão.';
+
+  @override
+  String get shellConnectorsLoading =>
+      'Perguntando ao Claude Code (ele testa cada um)…';
+
+  @override
+  String get shellConnectorsNone =>
+      'Nenhum conector nesta conta (ou ela entrou com chave de API).';
+
+  @override
+  String get shellConnectorNeedsAuth => 'Não conectado: conecte no claude.ai';
+
+  @override
+  String get shellConnectorFailed => 'Não respondeu no último teste';
 }

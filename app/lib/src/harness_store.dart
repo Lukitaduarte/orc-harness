@@ -511,8 +511,13 @@ class HarnessStore extends ChangeNotifier {
         })
           e['id'] as String,
       if (p['browser'] != null) workspaceBrowserItem,
+      for (final url in p['connectors'] as List? ?? const [])
+        connectorItem(url as String),
     };
   }
+
+  /// A claude.ai connector in a session's picks, by URL.
+  static String connectorItem(String url) => 'connector:$url';
 
   Map<String, Object?> _profileFor(Session s) {
     final picked = daemon!.catalog.where((e) => s.draftItems.contains(e['id']));
@@ -536,6 +541,10 @@ class HarnessStore extends ChangeNotifier {
         ...refs,
       }.toList(),
       'model': s.model == 'padrão' ? null : s.model,
+      'connectors': [
+        for (final i in s.draftItems)
+          if (i.startsWith('connector:')) i.substring('connector:'.length),
+      ],
       'browser': s.draftItems.contains(workspaceBrowserItem)
           ? s.workspaceId
           : null,

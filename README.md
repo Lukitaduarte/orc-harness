@@ -26,11 +26,11 @@ English · [Português](README.pt-BR.md)
 
 - **Sessions**: real terminals (the daemon emulates, the app draws) in split, resizable panes. Sessions survive daemon restarts with their conversation, and you get notified when one is waiting on you.
 - **Accounts and workspaces**: several Claude Code accounts, each with its own config dir. Workspaces (e.g. Work, Personal) group accounts, repos, plans, browser and memory. Every account's 5-hour and weekly quota stays in sight.
-- **Profiles**: skills, MCPs and envs picked per session from a global catalog and applied with a restart (`--resume`). Env values live in the Keychain and never reach files or the app.
+- **Profiles**: skills, MCPs, envs and the account's claude.ai connectors (Gmail, Drive, Slack…) picked per session from a global catalog and applied with a restart (`--resume`). Import the MCP servers you already use in Claude Code in one click. Env values live in the Keychain and never reach files or the app.
 - **Plan mode**: markdown templates (backend with deploy, app with release, spike). A planning session writes the plan and answers comments; you approve it section by section, and comments on approved sections become amendments.
 - **Execution**: plan loops become a DAG of cards. Each card runs in its own worktree, on the account with the most headroom. An open PR moves it to review; the merge moves it to done and unblocks what depended on it. Conventional commits only.
 - **Exit gates**: deploys (Railway, GCP, AWS, Firebase, Vercel, Fly), store releases, `kubectl`, `helm`, `terraform`, pushes to `main`, merges and package publishing wait for your OK in the app, from the phone too.
-- **Sessions that talk**: the harness MCP (`orc`) gives every session `list_sessions`, `send_message`, `read_inbox`, `delegate_task`, `search_code`, `list_envs`, `request_env_change` and memory (`remember`, `recall`, `forget`).
+- **Sessions that talk**: the harness MCP (`orc`) gives every session `list_sessions`, `send_message`, `read_inbox`, `delegate_task`, `search_code`, `list_envs`, `request_env_change`, `request_mcp_add` (an agent asks for an MCP server; you approve it in the app) and memory (`remember`, `recall`, `forget`).
 - **Learn**: comments on cards become proposed edits to your skills, applied only with your OK.
 - **Memory per workspace**: the harness's own, or a memory MCP from the catalog (mem0, basic-memory…).
 - **Browser per workspace**: headless Chrome with its own profile (cookies and logins persist), shown in a pane and driven by agents through Playwright MCP. The toolbar shows when an agent is using it.

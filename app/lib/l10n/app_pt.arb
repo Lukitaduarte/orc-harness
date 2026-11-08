@@ -479,5 +479,11 @@
   "toolsImportNone": "Nenhum MCP encontrado no Claude Code.",
   "toolsImportReplaces": "· substitui o do catálogo",
   "toolsImportSecrets": "Para o Keychain: {names}",
-  "toolsImportCount": "Importar {count}"
+  "toolsImportCount": "Importar {count}",
+  "shellConnectorsTitle": "Conectores do claude.ai",
+  "shellConnectorsHint": "Os que esta conta adicionou no claude.ai (Gmail, Drive, Slack…). Só os marcados entram nesta sessão.",
+  "shellConnectorsLoading": "Perguntando ao Claude Code (ele testa cada um)…",
+  "shellConnectorsNone": "Nenhum conector nesta conta (ou ela entrou com chave de API).",
+  "shellConnectorNeedsAuth": "Não conectado: conecte no claude.ai",
+  "shellConnectorFailed": "Não respondeu no último teste"
 }

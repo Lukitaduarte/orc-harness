@@ -237,6 +237,19 @@ pub struct Profile {
     /// CDP); the daemon opens it if needed.
     #[serde(default)]
     pub browser: Option<String>,
+    /// claude.ai connectors let in, by URL (see `Connector`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub connectors: Vec<String>,
+}
+
+/// An MCP server the account added on claude.ai, as Claude Code lists it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Connector {
+    /// As on claude.ai (Claude Code shows it as `claude.ai <name>`).
+    pub name: String,
+    pub url: String,
+    /// `connected`, `needs_auth` (connect it on claude.ai) or `failed`.
+    pub status: String,
 }
 
 /// One entry of a folder in the IDE's file tree.
@@ -584,6 +597,8 @@ pub enum ClientMessage {
     /// Lists the MCP servers already set up in Claude Code (accounts'
     /// `.claude.json`, repositories' `.mcp.json`).
     ScanMcpImports,
+    /// The account's claude.ai connectors (slow: Claude Code checks each).
+    ListConnectors { account_id: String },
     /// Brings those (by key) into the catalog; secrets go to the Keychain.
     ImportMcps { keys: Vec<String> },
     /// Saves a plan (new or updated) with its review state.
@@ -723,6 +738,7 @@ pub enum DaemonMessage {
     },
     McpRequestResolved { id: String, approved: bool },
     McpImports { items: Vec<McpImport> },
+    Connectors { account_id: String, items: Vec<Connector> },
 }
 
 #[cfg(test)]

@@ -3,6 +3,7 @@ import 'package:orc_harness/src/harness_store.dart';
 import 'package:orc_harness/src/live/daemon_client.dart';
 import 'package:orc_harness/src/ui/agent_notices.dart';
 import 'package:orc_harness/src/ui/catalog_view.dart';
+import 'package:orc_harness/src/ui/profile_panel.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 const _catalog =
@@ -105,6 +106,51 @@ void main() {
       'type': 'import_mcps',
       'keys': ['a'],
     });
+    d.dispose();
+  });
+
+  testWidgets('claude.ai connectors are picked per session', (tester) async {
+    final d = DaemonClient();
+    final store = HarnessStore(daemon: d);
+    final sent = <Map<String, Object?>>[];
+    d.sendHook = sent.add;
+    d.handle('{"type":"hello","accounts":["work"]}');
+    d.handle(
+      '{"type":"sessions","sessions":[{"id":"s1","account_id":"work","cwd":"/r/app","state":"idle","model":null,"claude_session_id":"u"}]}',
+    );
+    store.selectWorkspace('live');
+    store.showSession('s1');
+    tester.view.physicalSize = const Size(600, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: ListenableBuilder(
+          listenable: Listenable.merge([store, d]),
+          builder: (context, _) => ProfilePanel(store),
+        ),
+      ),
+    );
+    await tester.pump();
+    // Asked for once, for the session's account.
+    expect(sent.where((m) => m['type'] == 'list_connectors').single, {
+      'type': 'list_connectors',
+      'account_id': 'work',
+    });
+    d.handle(
+      '{"type":"connectors","account_id":"work","items":['
+      '{"name":"Gmail","url":"https://gmail/mcp","status":"connected"},'
+      '{"name":"Slack","url":"https://slack/mcp","status":"needs_auth"}]}',
+    );
+    await tester.pump();
+    expect(find.text('Gmail'), findsOneWidget);
+    expect(find.text('Não conectado: conecte no claude.ai'), findsOneWidget);
+    await tester.tap(find.text('Gmail'));
+    await tester.pump();
+    store.applyDraft(store.sessions.firstWhere((s) => s.id == 's1'));
+    final profile = sent.last['profile'] as Map;
+    expect(profile['connectors'], ['https://gmail/mcp']);
+    store.dispose();
     d.dispose();
   });
 }

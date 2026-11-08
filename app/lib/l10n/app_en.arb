@@ -1467,5 +1467,29 @@
         "type": "int"
       }
     }
+  },
+  "shellConnectorsTitle": "claude.ai connectors",
+  "@shellConnectorsTitle": {
+    "description": "Profile panel section title"
+  },
+  "shellConnectorsHint": "The ones this account added on claude.ai (Gmail, Drive, Slack…). Only the ones you check enter this session.",
+  "@shellConnectorsHint": {
+    "description": "Profile panel connectors hint"
+  },
+  "shellConnectorsLoading": "Asking Claude Code (it checks each one)…",
+  "@shellConnectorsLoading": {
+    "description": "Connectors loading"
+  },
+  "shellConnectorsNone": "No connectors on this account (or it is logged in with an API key).",
+  "@shellConnectorsNone": {
+    "description": "No connectors"
+  },
+  "shellConnectorNeedsAuth": "Not connected: connect it on claude.ai",
+  "@shellConnectorNeedsAuth": {
+    "description": "Connector status"
+  },
+  "shellConnectorFailed": "Didn't answer the last check",
+  "@shellConnectorFailed": {
+    "description": "Connector status"
   }
 }

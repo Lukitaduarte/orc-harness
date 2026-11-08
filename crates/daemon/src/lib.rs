@@ -5,6 +5,7 @@ pub mod catalog;
 pub mod cdp_proxy;
 pub mod db;
 pub mod config;
+pub mod connectors;
 pub mod gates;
 pub mod git;
 pub mod ide;
