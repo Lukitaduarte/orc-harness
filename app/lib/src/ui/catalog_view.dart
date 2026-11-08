@@ -2,6 +2,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
 import '../i18n.dart';
+import '../live/daemon_client.dart';
 import '../model.dart';
 import 'template_editor.dart';
 
@@ -28,6 +29,14 @@ class CatalogView extends StatelessWidget {
                 ],
               ),
             ),
+            if (store.isLive) ...[
+              OutlineButton(
+                leading: const Icon(LucideIcons.download, size: 14),
+                onPressed: () => _showImportDialog(context, store.daemon!),
+                child: Text(context.l10n.toolsImportMcps),
+              ),
+              const Gap(8),
+            ],
             PrimaryButton(
               leading: const Icon(LucideIcons.plus, size: 14),
               onPressed: () => _showAddDialog(context, store),
@@ -208,6 +217,163 @@ class _ItemRow extends StatelessWidget {
           child: Text(context.l10n.toolsTestConnection),
         ),
       ],
+    );
+  }
+}
+
+Future<void> _showImportDialog(BuildContext context, DaemonClient daemon) {
+  daemon.scanMcpImports();
+  return showOverlay<void>(
+    context,
+    DialogConfiguration<void>(
+      builder: (context) {
+        final theme = Theme.of(context);
+        return ConstrainedBox(
+          constraints: const BoxConstraints.tightFor(width: 560),
+          child: ModalBackdrop(
+            borderRadius: theme.borderRadiusXl,
+            child: OutlinedContainer(
+              backgroundColor: theme.colorScheme.popover,
+              padding: const EdgeInsets.all(20),
+              child: McpImportForm(daemon),
+            ),
+          ),
+        );
+      },
+    ),
+  ).future;
+}
+
+/// The MCP servers you already use in Claude Code, to pick into the
+/// catalog. Secret values never come here: the daemon moves them to the
+/// Keychain and shows only their names.
+class McpImportForm extends StatefulWidget {
+  const McpImportForm(this.daemon, {super.key});
+
+  final DaemonClient daemon;
+
+  @override
+  State<McpImportForm> createState() => _McpImportFormState();
+}
+
+class _McpImportFormState extends State<McpImportForm> {
+  Set<String>? _picked;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return ListenableBuilder(
+      listenable: widget.daemon,
+      builder: (context, _) {
+        final items = widget.daemon.mcpImports;
+        // New ones start picked; ones already in the catalog don't.
+        final picked = _picked ??= items == null
+            ? null
+            : {
+                for (final i in items)
+                  if (i['in_catalog'] != true) i['key'] as String,
+              };
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(l10n.toolsImportMcps).large().semiBold(),
+            Text(l10n.toolsImportMcpsHint).xSmall().muted(),
+            const Gap(12),
+            if (items == null)
+              Center(child: Text(l10n.devLoading).small().muted())
+            else if (items.isEmpty)
+              Text(l10n.toolsImportNone).small().muted()
+            else
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 360),
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [for (final i in items) _row(i, picked!)],
+                ),
+              ),
+            const Gap(16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlineButton(
+                  onPressed: () => closeOverlay(context),
+                  child: Text(l10n.shellCancel),
+                ),
+                const Gap(8),
+                PrimaryButton(
+                  onPressed: picked == null || picked.isEmpty
+                      ? null
+                      : () {
+                          widget.daemon.importMcps(picked.toList());
+                          closeOverlay(context);
+                        },
+                  child: Text(l10n.toolsImportCount(picked?.length ?? 0)),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _row(Map<String, dynamic> i, Set<String> picked) {
+    final l10n = context.l10n;
+    final key = i['key'] as String;
+    final mcp = i['mcp'] as Map<String, dynamic>;
+    final secrets = (i['secrets'] as List).cast<String>();
+    final runs =
+        mcp['url'] as String? ??
+        [mcp['command'], ...(mcp['args'] as List? ?? const [])].join(' ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Checkbox(
+            state: picked.contains(key)
+                ? CheckboxState.checked
+                : CheckboxState.unchecked,
+            onChanged: (v) => setState(() {
+              v == CheckboxState.checked ? picked.add(key) : picked.remove(key);
+            }),
+          ),
+          const Gap(8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(i['name'] as String).small().semiBold(),
+                    const Gap(6),
+                    Flexible(
+                      child: Text(
+                        i['label'] as String,
+                        overflow: TextOverflow.ellipsis,
+                      ).xSmall().muted(),
+                    ),
+                    if (i['in_catalog'] == true) ...[
+                      const Gap(6),
+                      Text(l10n.toolsImportReplaces).xSmall().muted(),
+                    ],
+                  ],
+                ),
+                Text(
+                  runs,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ).mono().xSmall().muted(),
+                if (secrets.isNotEmpty)
+                  Text(
+                    l10n.toolsImportSecrets(secrets.join(', ')),
+                  ).xSmall().muted(),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

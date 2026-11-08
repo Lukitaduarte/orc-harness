@@ -209,6 +209,7 @@ impl SessionManager {
             claude_session_id: uuid::Uuid::new_v4().to_string(),
             project_id: project.as_ref().map(|p| p.0.clone()),
             branch: project.map(|p| p.1),
+            profile: None,
         };
         let mut spec = self.prepare(&summary, &account, &profile, cols, rows, false)?;
         if let Some(p) = prompt {
@@ -327,6 +328,7 @@ impl SessionManager {
             .values()
             .map(|m| {
                 let mut s = m.summary.clone();
+                s.profile = Some(m.profile.clone());
                 if m.session.exited().is_some() {
                     s.state = SessionState::Exited;
                 }

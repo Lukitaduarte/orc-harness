@@ -24,6 +24,7 @@ class LiveSession {
     this.model, {
     this.projectId,
     this.branch,
+    this.profile,
   });
 
   final String id;
@@ -42,7 +43,12 @@ class LiveSession {
     j['model'] as String?,
     projectId: j['project_id'] as String?,
     branch: j['branch'] as String?,
+    profile: j['profile'] as Map<String, dynamic>?,
   );
+
+  /// What the session runs with (skills, MCP servers, env names, browser),
+  /// as the daemon has it.
+  final Map<String, dynamic>? profile;
 
   /// Set when the session runs in a project worktree.
   final String? projectId;
@@ -56,6 +62,7 @@ class LiveSession {
     model,
     projectId: projectId,
     branch: branch,
+    profile: profile,
   );
 }
 
@@ -133,6 +140,30 @@ class DaemonClient extends ChangeNotifier {
   void resolveApproval(String id, bool approve) {
     send({'type': 'resolve_approval', 'id': id, 'approve': approve});
     approvals = approvals.where((a) => a.$1 != id).toList();
+    notifyListeners();
+  }
+
+  /// MCP servers agents ask to add: (id, session, name, config, reason).
+  List<(String, String, String, Map<String, dynamic>, String)> mcpRequests = [];
+
+  /// MCP servers set up in Claude Code that could join the catalog (null
+  /// until asked for).
+  List<Map<String, dynamic>>? mcpImports;
+
+  void scanMcpImports() {
+    mcpImports = null;
+    send({'type': 'scan_mcp_imports'});
+    notifyListeners();
+  }
+
+  /// Brings them in; their secret values go to the Keychain on the daemon.
+  void importMcps(List<String> keys) =>
+      send({'type': 'import_mcps', 'keys': keys});
+
+  /// Approving adds it to the catalog and restarts that session with it.
+  void resolveMcpRequest(String id, bool approve) {
+    send({'type': 'resolve_mcp_request', 'id': id, 'approve': approve});
+    mcpRequests = mcpRequests.where((r) => r.$1 != id).toList();
     notifyListeners();
   }
 
@@ -626,6 +657,31 @@ class DaemonClient extends ChangeNotifier {
         }
       case 'approval_resolved':
         approvals = approvals.where((a) => a.$1 != m['id']).toList();
+        notifyListeners();
+      case 'mcp_request':
+        onAlert?.call(
+          l10n.coreAlertMcpTitle,
+          l10n.coreAlertMcpBody(
+            sessionLabel(m['session_id'] as String),
+            '${m['name']}',
+          ),
+        );
+        mcpRequests = [
+          ...mcpRequests,
+          (
+            m['id'] as String,
+            m['session_id'] as String,
+            m['name'] as String,
+            m['mcp'] as Map<String, dynamic>,
+            (m['reason'] as String?) ?? '',
+          ),
+        ];
+        notifyListeners();
+      case 'mcp_imports':
+        mcpImports = (m['items'] as List).cast<Map<String, dynamic>>();
+        notifyListeners();
+      case 'mcp_request_resolved':
+        mcpRequests = mcpRequests.where((r) => r.$1 != m['id']).toList();
         notifyListeners();
       case 'env_request_resolved':
         envRequests = envRequests.where((r) => r.$1 != m['id']).toList();

@@ -12,6 +12,7 @@ pub mod plans;
 pub mod projects;
 pub mod learn;
 pub mod manager;
+pub mod mcp_import;
 pub mod memory;
 pub mod quota;
 pub mod remote;

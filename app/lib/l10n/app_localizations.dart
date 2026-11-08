@@ -2925,6 +2925,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'That didn\'t work: {error}'**
   String onboardFailed(String error);
+
+  /// Notification title: an agent asks to add an MCP server
+  ///
+  /// In en, this message translates to:
+  /// **'An agent wants an MCP server'**
+  String get coreAlertMcpTitle;
+
+  /// Notification body
+  ///
+  /// In en, this message translates to:
+  /// **'{session} asks to add {name}'**
+  String coreAlertMcpBody(String session, String name);
+
+  /// Notice above the panes
+  ///
+  /// In en, this message translates to:
+  /// **'{session} asks to add the MCP server {name}'**
+  String shellMcpRequest(String session, String name);
+
+  /// Button: add the MCP and restart that session (resuming its conversation)
+  ///
+  /// In en, this message translates to:
+  /// **'Approve and restart'**
+  String get shellMcpApprove;
+
+  /// Button and dialog title: bring MCP servers already set up in Claude Code into the catalog
+  ///
+  /// In en, this message translates to:
+  /// **'Import from Claude Code'**
+  String get toolsImportMcps;
+
+  /// Import dialog hint
+  ///
+  /// In en, this message translates to:
+  /// **'MCP servers in your accounts\' Claude Code settings and in your repositories\' .mcp.json. Secret values go to the Keychain; the catalog keeps only references.'**
+  String get toolsImportMcpsHint;
+
+  /// Import dialog: nothing found
+  ///
+  /// In en, this message translates to:
+  /// **'No MCP servers found in Claude Code.'**
+  String get toolsImportNone;
+
+  /// Import row: a catalog MCP has this name
+  ///
+  /// In en, this message translates to:
+  /// **'· replaces the one in the catalog'**
+  String get toolsImportReplaces;
+
+  /// Import row: env names whose values move to the Keychain
+  ///
+  /// In en, this message translates to:
+  /// **'To the Keychain: {names}'**
+  String toolsImportSecrets(String names);
+
+  /// Import dialog button
+  ///
+  /// In en, this message translates to:
+  /// **'Import {count}'**
+  String toolsImportCount(int count);
 }
 
 class _AppLocalizationsDelegate

@@ -1685,4 +1685,43 @@ class AppLocalizationsPt extends AppLocalizations {
   String onboardFailed(String error) {
     return 'Não deu certo: $error';
   }
+
+  @override
+  String get coreAlertMcpTitle => 'Um agente quer um MCP';
+
+  @override
+  String coreAlertMcpBody(String session, String name) {
+    return '$session pede para adicionar $name';
+  }
+
+  @override
+  String shellMcpRequest(String session, String name) {
+    return '$session pede para adicionar o MCP $name';
+  }
+
+  @override
+  String get shellMcpApprove => 'Aprovar e reiniciar';
+
+  @override
+  String get toolsImportMcps => 'Importar do Claude Code';
+
+  @override
+  String get toolsImportMcpsHint =>
+      'MCPs das configurações do Claude Code das suas contas e dos .mcp.json dos repositórios. Os valores secretos vão para o Keychain; o catálogo guarda só referências.';
+
+  @override
+  String get toolsImportNone => 'Nenhum MCP encontrado no Claude Code.';
+
+  @override
+  String get toolsImportReplaces => '· substitui o do catálogo';
+
+  @override
+  String toolsImportSecrets(String names) {
+    return 'Para o Keychain: $names';
+  }
+
+  @override
+  String toolsImportCount(int count) {
+    return 'Importar $count';
+  }
 }

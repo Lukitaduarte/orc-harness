@@ -469,5 +469,15 @@
   "onboardGrantFinish": "Conceder e terminar",
   "onboardRetry": "Tentar de novo",
   "onboardStep": "{n} de {total}",
-  "onboardFailed": "Não deu certo: {error}"
+  "onboardFailed": "Não deu certo: {error}",
+  "coreAlertMcpTitle": "Um agente quer um MCP",
+  "coreAlertMcpBody": "{session} pede para adicionar {name}",
+  "shellMcpRequest": "{session} pede para adicionar o MCP {name}",
+  "shellMcpApprove": "Aprovar e reiniciar",
+  "toolsImportMcps": "Importar do Claude Code",
+  "toolsImportMcpsHint": "MCPs das configurações do Claude Code das suas contas e dos .mcp.json dos repositórios. Os valores secretos vão para o Keychain; o catálogo guarda só referências.",
+  "toolsImportNone": "Nenhum MCP encontrado no Claude Code.",
+  "toolsImportReplaces": "· substitui o do catálogo",
+  "toolsImportSecrets": "Para o Keychain: {names}",
+  "toolsImportCount": "Importar {count}"
 }

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -362,28 +363,39 @@ class HarnessStore extends ChangeNotifier {
           .where((p) => p['id'] == l.projectId)
           .map((p) => p['name'] as String)
           .firstOrNull;
+      // What it really runs with, from the daemon (survives app restarts
+      // and changes made elsewhere, like an approved MCP).
+      final applied = l.profile == null
+          ? before?.appliedItems ?? const <String>{}
+          : _itemsOf(l.profile!, d);
       sessions.add(
         Session(
-          id: l.id,
-          workspaceId: _workspaceOfAccount(l.accountId),
-          accountId: l.accountId,
-          name: projectName ?? cwdName,
-          branch: l.branch ?? l.cwd,
-          model: l.model ?? 'padrão',
-          state: switch (l.state) {
-            'running' => SessionState.running,
-            'waiting_input' => SessionState.waitingInput,
-            'starting' => SessionState.starting,
-            'exited' => SessionState.exited,
-            _ => SessionState.idle,
-          },
-          tokens: d.usage[l.id]?.$1 ?? 0,
-          costUsd: d.usage[l.id]?.$2 ?? 0,
-          fiveHourShare: 0,
-          enabledItems: before?.appliedItems ?? const {},
-          lines: const [],
-          live: true,
-        )..draftItems = Set.of(before?.draftItems ?? const {}),
+            id: l.id,
+            workspaceId: _workspaceOfAccount(l.accountId),
+            accountId: l.accountId,
+            name: projectName ?? cwdName,
+            branch: l.branch ?? l.cwd,
+            model: l.model ?? 'padrão',
+            state: switch (l.state) {
+              'running' => SessionState.running,
+              'waiting_input' => SessionState.waitingInput,
+              'starting' => SessionState.starting,
+              'exited' => SessionState.exited,
+              _ => SessionState.idle,
+            },
+            tokens: d.usage[l.id]?.$1 ?? 0,
+            costUsd: d.usage[l.id]?.$2 ?? 0,
+            fiveHourShare: 0,
+            enabledItems: applied,
+            lines: const [],
+            live: true,
+            // Your unapplied picks stay; otherwise follow the daemon.
+          )
+          ..draftItems = Set.of(
+            before != null && before.hasPendingChanges
+                ? before.draftItems
+                : applied,
+          ),
       );
     }
     _syncLivePlans(d);
@@ -483,8 +495,34 @@ class HarnessStore extends ChangeNotifier {
   /// The profile the daemon runs a session with, from the catalog picks.
   /// The profile the daemon runs a session with, from the catalog picks:
   /// skill folders, MCP configs as stored in the daemon, env names only.
+  /// Catalog ids a daemon profile turns on: skills by folder, MCP servers
+  /// and envs by name.
+  Set<String> _itemsOf(Map<String, dynamic> p, DaemonClient d) {
+    final skills = (p['skills'] as List? ?? const []).toSet();
+    final mcps = (p['mcp_servers'] as Map? ?? const {}).keys.toSet();
+    final envs = (p['env_names'] as List? ?? const []).toSet();
+    return {
+      for (final e in d.catalog)
+        if (switch (e['kind']) {
+          'skill' => skills.contains(e['path']),
+          'mcp' => mcps.contains(e['name']),
+          'env' => envs.contains(e['name']),
+          _ => false,
+        })
+          e['id'] as String,
+      if (p['browser'] != null) workspaceBrowserItem,
+    };
+  }
+
   Map<String, Object?> _profileFor(Session s) {
     final picked = daemon!.catalog.where((e) => s.draftItems.contains(e['id']));
+    // An MCP brings the envs its config references (`${NAME}`).
+    final refs = {
+      for (final e in picked.where((e) => e['kind'] == 'mcp'))
+        ...RegExp(
+          r'\$\{([A-Za-z_][A-Za-z0-9_]*)',
+        ).allMatches(jsonEncode(e['mcp'])).map((m) => m.group(1)!),
+    };
     return {
       'skills': [
         for (final e in picked.where((e) => e['kind'] == 'skill')) e['path'],
@@ -493,9 +531,10 @@ class HarnessStore extends ChangeNotifier {
         for (final e in picked.where((e) => e['kind'] == 'mcp'))
           e['name']: e['mcp'],
       },
-      'env_names': [
+      'env_names': {
         for (final e in picked.where((e) => e['kind'] == 'env')) e['name'],
-      ],
+        ...refs,
+      }.toList(),
       'model': s.model == 'padrão' ? null : s.model,
       'browser': s.draftItems.contains(workspaceBrowserItem)
           ? s.workspaceId

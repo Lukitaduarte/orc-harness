@@ -282,6 +282,23 @@ pub struct CatalogEntry {
     pub has_value: bool,
 }
 
+/// An MCP server found in your Claude Code config, offered for the
+/// catalog. Secret values were already replaced by `${NAME}` references.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct McpImport {
+    pub key: String,
+    /// Where it was found (account and project, or repository).
+    pub label: String,
+    pub name: String,
+    pub mcp: serde_json::Value,
+    /// Envs whose values move to the Keychain on import.
+    #[serde(default)]
+    pub secrets: Vec<String>,
+    /// The catalog already has an MCP with this name.
+    #[serde(default)]
+    pub in_catalog: bool,
+}
+
 /// A plan mode template: markdown in `~/.orc/templates/<id>.md`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PlanTemplateFile {
@@ -483,6 +500,10 @@ pub struct SessionSummary {
     pub project_id: Option<String>,
     #[serde(default)]
     pub branch: Option<String>,
+    /// What the session runs with, filled in for clients (kept apart on
+    /// disk), so the app shows what is really on after a restart.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<Profile>,
 }
 
 // ---------------------------------------------------------------------------
@@ -557,6 +578,14 @@ pub enum ClientMessage {
     McpCall { session_id: String, tool: String, args: serde_json::Value },
     /// Your answer to an agent asking to store an env value.
     ResolveEnvRequest { id: String, approve: bool },
+    /// Your answer to an agent asking to add an MCP server; approving adds
+    /// it to the catalog and restarts that session with it (`--resume`).
+    ResolveMcpRequest { id: String, approve: bool },
+    /// Lists the MCP servers already set up in Claude Code (accounts'
+    /// `.claude.json`, repositories' `.mcp.json`).
+    ScanMcpImports,
+    /// Brings those (by key) into the catalog; secrets go to the Keychain.
+    ImportMcps { keys: Vec<String> },
     /// Saves a plan (new or updated) with its review state.
     SavePlan { plan: PlanDoc },
     /// Deletes a plan. A plan running cards is refused unless `force`,
@@ -682,6 +711,18 @@ pub enum DaemonMessage {
     /// approve it. The value is never sent to clients.
     EnvRequest { id: String, session_id: String, name: String },
     EnvRequestResolved { id: String, approved: bool },
+    /// An agent asks to add an MCP server (config in Claude Code's
+    /// `mcpServers` format, secrets only as `${ENV}` references).
+    McpRequest {
+        id: String,
+        session_id: String,
+        name: String,
+        mcp: serde_json::Value,
+        #[serde(default)]
+        reason: String,
+    },
+    McpRequestResolved { id: String, approved: bool },
+    McpImports { items: Vec<McpImport> },
 }
 
 #[cfg(test)]

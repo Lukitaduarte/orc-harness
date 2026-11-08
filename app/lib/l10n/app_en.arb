@@ -1401,5 +1401,71 @@
         "type": "String"
       }
     }
+  },
+  "coreAlertMcpTitle": "An agent wants an MCP server",
+  "@coreAlertMcpTitle": {
+    "description": "Notification title: an agent asks to add an MCP server"
+  },
+  "coreAlertMcpBody": "{session} asks to add {name}",
+  "@coreAlertMcpBody": {
+    "description": "Notification body",
+    "placeholders": {
+      "session": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shellMcpRequest": "{session} asks to add the MCP server {name}",
+  "@shellMcpRequest": {
+    "description": "Notice above the panes",
+    "placeholders": {
+      "session": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shellMcpApprove": "Approve and restart",
+  "@shellMcpApprove": {
+    "description": "Button: add the MCP and restart that session (resuming its conversation)"
+  },
+  "toolsImportMcps": "Import from Claude Code",
+  "@toolsImportMcps": {
+    "description": "Button and dialog title: bring MCP servers already set up in Claude Code into the catalog"
+  },
+  "toolsImportMcpsHint": "MCP servers in your accounts' Claude Code settings and in your repositories' .mcp.json. Secret values go to the Keychain; the catalog keeps only references.",
+  "@toolsImportMcpsHint": {
+    "description": "Import dialog hint"
+  },
+  "toolsImportNone": "No MCP servers found in Claude Code.",
+  "@toolsImportNone": {
+    "description": "Import dialog: nothing found"
+  },
+  "toolsImportReplaces": "· replaces the one in the catalog",
+  "@toolsImportReplaces": {
+    "description": "Import row: a catalog MCP has this name"
+  },
+  "toolsImportSecrets": "To the Keychain: {names}",
+  "@toolsImportSecrets": {
+    "description": "Import row: env names whose values move to the Keychain",
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "toolsImportCount": "Import {count}",
+  "@toolsImportCount": {
+    "description": "Import dialog button",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

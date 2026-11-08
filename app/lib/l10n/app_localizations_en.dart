@@ -1692,4 +1692,43 @@ class AppLocalizationsEn extends AppLocalizations {
   String onboardFailed(String error) {
     return 'That didn\'t work: $error';
   }
+
+  @override
+  String get coreAlertMcpTitle => 'An agent wants an MCP server';
+
+  @override
+  String coreAlertMcpBody(String session, String name) {
+    return '$session asks to add $name';
+  }
+
+  @override
+  String shellMcpRequest(String session, String name) {
+    return '$session asks to add the MCP server $name';
+  }
+
+  @override
+  String get shellMcpApprove => 'Approve and restart';
+
+  @override
+  String get toolsImportMcps => 'Import from Claude Code';
+
+  @override
+  String get toolsImportMcpsHint =>
+      'MCP servers in your accounts\' Claude Code settings and in your repositories\' .mcp.json. Secret values go to the Keychain; the catalog keeps only references.';
+
+  @override
+  String get toolsImportNone => 'No MCP servers found in Claude Code.';
+
+  @override
+  String get toolsImportReplaces => '· replaces the one in the catalog';
+
+  @override
+  String toolsImportSecrets(String names) {
+    return 'To the Keychain: $names';
+  }
+
+  @override
+  String toolsImportCount(int count) {
+    return 'Import $count';
+  }
 }

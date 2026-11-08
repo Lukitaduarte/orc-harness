@@ -110,7 +110,7 @@ async fn sessions_talk_delegate_and_ask_for_envs() {
     .unwrap();
     assert_eq!(r[0]["result"]["serverInfo"]["name"], "orc-harness");
     let tools: Vec<&str> = r[1]["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
-    assert_eq!(tools, ["list_sessions", "send_message", "read_inbox", "delegate_task", "search_code", "save_plan", "propose_learning", "remember", "recall", "forget", "list_envs", "request_env_change"]);
+    assert_eq!(tools, ["list_sessions", "send_message", "read_inbox", "delegate_task", "search_code", "save_plan", "propose_learning", "remember", "recall", "forget", "list_envs", "request_env_change", "request_mcp_add"]);
     assert!(text(&r[2]).contains("(você)"));
     assert!(text(&r[3]).contains("entregue"));
     assert_eq!(r[4]["result"]["isError"], true);
@@ -184,4 +184,61 @@ async fn sessions_talk_delegate_and_ask_for_envs() {
     let r = tokio::task::spawn_blocking(move || mcp(&sock, &s1c, &[call(1, "list_envs", json!({}))])).await.unwrap();
     assert_eq!(text(&r[0]), "API_TOKEN · com valor · não ativa nesta sessão · token da API");
     assert!(!text(&r[0]).contains("s3cret"));
+
+    // An MCP: a secret written in the config is refused; a reference waits
+    // for you, and approving puts it in the catalog and in the session.
+    let sock = socket.clone();
+    let s1c = daemon.sessions.lock().unwrap().list()[0].id.clone();
+    let s1id = s1c.clone();
+    let r = tokio::task::spawn_blocking(move || {
+        mcp(&sock, &s1c, &[
+            call(1, "request_mcp_add", json!({ "name": "gh", "reason": "PRs",
+                "config": { "command": "npx", "args": ["gh-mcp"], "env": { "GH_TOKEN": "ghp_123" } } })),
+            call(2, "request_mcp_add", json!({ "name": "gh", "reason": "PRs",
+                "config": { "command": "npx", "args": ["gh-mcp"], "env": { "GH_TOKEN": "${GH_TOKEN}" } } })),
+        ])
+    })
+    .await
+    .unwrap();
+    // No value yet: the env comes first.
+    assert_eq!(r[1]["result"]["isError"], true);
+    assert!(text(&r[1]).contains("request_env_change"), "{}", text(&r[1]));
+    secrets.set("env/GH_TOKEN", "ghp_x").unwrap();
+    let sock = socket.clone();
+    let s1c = s1id.clone();
+    let r = tokio::task::spawn_blocking(move || {
+        mcp(&sock, &s1c, &[
+            call(1, "request_mcp_add", json!({ "name": "gh", "reason": "PRs",
+                "config": { "command": "npx", "args": ["gh-mcp"], "env": { "GH_TOKEN": "ghp_123" } } })),
+            call(2, "request_mcp_add", json!({ "name": "gh", "reason": "PRs",
+                "config": { "command": "npx", "args": ["gh-mcp"], "env": { "GH_TOKEN": "${GH_TOKEN}" } } })),
+        ])
+    })
+    .await
+    .unwrap();
+    assert_eq!(r[0]["result"]["isError"], true);
+    assert!(text(&r[0]).contains("Keychain"));
+    assert!(text(&r[1]).contains("só entra se ele aprovar"));
+    let id = loop {
+        match tokio::time::timeout(Duration::from_secs(5), events.recv()).await.unwrap().unwrap() {
+            DaemonMessage::McpRequest { id, name, .. } => {
+                assert_eq!(name, "gh");
+                break id;
+            }
+            _ => continue,
+        }
+    };
+    let replies = daemon.handle(ClientMessage::ResolveMcpRequest { id, approve: true });
+    assert!(replies.is_empty(), "{replies:?}");
+    let catalog = daemon.catalog.lock().unwrap().list();
+    assert!(catalog.iter().any(|e| e.kind == "mcp" && e.name == "gh"));
+    assert!(catalog.iter().any(|e| e.kind == "env" && e.name == "GH_TOKEN"));
+    let profile = daemon.sessions.lock().unwrap().profile(&s1id).cloned().unwrap();
+    assert_eq!(profile.mcp_servers["gh"]["env"]["GH_TOKEN"], "${GH_TOKEN}");
+    assert!(profile.env_names.contains(&"GH_TOKEN".to_string()));
+    let summary = daemon.sessions.lock().unwrap().list().into_iter().find(|s| s.id == s1id).unwrap();
+    assert!(summary.profile.unwrap().mcp_servers.contains_key("gh"));
+    let sock = socket.clone();
+    let r = tokio::task::spawn_blocking(move || mcp(&sock, &s1id, &[call(1, "read_inbox", json!({}))])).await.unwrap();
+    assert!(text(&r[0]).contains("aprovou o MCP gh"), "{}", text(&r[0]));
 }

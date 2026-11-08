@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
-use orc_protocol::{BrowserAction, ClientMessage, DaemonMessage, ProjectInfo, Profile};
+use orc_protocol::{BrowserAction, CatalogEntry, ClientMessage, DaemonMessage, ProjectInfo, Profile};
 use orc_protocol::GridSnapshot;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
@@ -28,6 +28,65 @@ pub type Inbox = HashMap<String, Vec<(String, String)>>;
 
 /// Env values agents asked to store, waiting for you: id → (session, name, value).
 pub type EnvRequests = HashMap<String, (String, String, String)>;
+
+/// Pending MCP additions: id → (session, name, config, reason).
+pub type McpRequests = HashMap<String, (String, String, serde_json::Value, String)>;
+
+/// `${NAME}` references in an MCP config: the envs it needs.
+pub fn env_refs(config: &serde_json::Value) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut strings = Vec::new();
+    fn walk<'a>(v: &'a serde_json::Value, out: &mut Vec<&'a str>) {
+        match v {
+            serde_json::Value::String(s) => out.push(s),
+            serde_json::Value::Array(a) => a.iter().for_each(|x| walk(x, out)),
+            serde_json::Value::Object(o) => o.values().for_each(|x| walk(x, out)),
+            _ => {}
+        }
+    }
+    walk(config, &mut strings);
+    for s in strings {
+        let mut rest = s;
+        while let Some(i) = rest.find("${") {
+            rest = &rest[i + 2..];
+            let Some(end) = rest.find('}') else { break };
+            // `${NAME:-default}` names NAME.
+            let name = rest[..end].split(":-").next().unwrap_or_default();
+            if crate::secrets::valid_env_name(name) && !out.iter().any(|n| n == name) {
+                out.push(name.to_string());
+            }
+            rest = &rest[end + 1..];
+        }
+    }
+    out
+}
+
+/// Checks an MCP server an agent asks for: Claude Code's `mcpServers`
+/// entry shape, and no secret written into it (env and header values must
+/// be `${ENV}` references; the values go to the Keychain).
+pub fn check_mcp_request(name: &str, config: &serde_json::Value) -> Result<(), String> {
+    if name.is_empty() || name.len() > 64 || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return Err(format!("nome de MCP inválido: {name} (letras, números, - e _)"));
+    }
+    let o = config.as_object().ok_or("`config` precisa ser um objeto no formato do mcpServers")?;
+    let has = |k: &str| o.get(k).and_then(|v| v.as_str()).is_some_and(|s| !s.is_empty());
+    if !has("command") && !has("url") {
+        return Err("`config` precisa de `command` (stdio) ou `url` (http/sse)".into());
+    }
+    for key in ["env", "headers"] {
+        let Some(map) = o.get(key) else { continue };
+        let map = map.as_object().ok_or(format!("`{key}` precisa ser um objeto"))?;
+        for (k, v) in map {
+            let v = v.as_str().ok_or(format!("{key}.{k} precisa ser texto"))?;
+            if !v.contains("${") {
+                return Err(format!(
+                    "{key}.{k} tem um valor escrito; use uma referência como \"${{{k}}}\" e peça o valor com request_env_change (segredos ficam só no Keychain)"
+                ));
+            }
+        }
+    }
+    Ok(())
+}
 
 /// Actions waiting for your OK: id → (session, action, the hook waiting).
 pub type Approvals = HashMap<String, (String, String, tokio::sync::oneshot::Sender<bool>)>;
@@ -55,6 +114,7 @@ pub struct Daemon {
     pub git: GitPaths,
     pub inbox: Arc<Mutex<Inbox>>,
     pub env_requests: Arc<Mutex<EnvRequests>>,
+    pub mcp_requests: Arc<Mutex<McpRequests>>,
     /// Everything clients should see; each connection subscribes.
     pub events: broadcast::Sender<DaemonMessage>,
     /// Set once iroh is up; mints pairing tickets for `orcd pair`.
@@ -100,6 +160,7 @@ impl Daemon {
             git,
             inbox: Arc::default(),
             env_requests: Arc::default(),
+            mcp_requests: Arc::default(),
             events: broadcast::channel(1024).0,
             remote: Arc::default(),
             browsers: Arc::new(Browsers::new(PathBuf::new(), None)),
@@ -464,6 +525,29 @@ impl Daemon {
                 self.env_requests.lock().unwrap().insert(id.clone(), (me.id.clone(), name.clone(), value));
                 let _ = self.events.send(DaemonMessage::EnvRequest { id, session_id: me.id, name: name.clone() });
                 Ok(format!("pedido enviado ao usuário; {name} só é gravada se ele aprovar no app (a resposta chega no read_inbox)"))
+            }
+            "request_mcp_add" => {
+                let name = arg("name").ok_or("falta `name`")?;
+                let config = args.get("config").cloned().ok_or("falta `config`")?;
+                check_mcp_request(&name, &config)?;
+                // The session cannot start with an env that has no value:
+                // values first, then the server.
+                let secrets = self.sessions.lock().unwrap().secrets.clone();
+                let missing: Vec<String> =
+                    env_refs(&config).into_iter().filter(|n| secrets.get(&crate::secrets::env_key(n)).is_none()).collect();
+                if !missing.is_empty() {
+                    return Err(format!(
+                        "antes, peça o valor de {} com request_env_change; depois que o usuário aprovar, peça o MCP de novo",
+                        missing.join(", ")
+                    ));
+                }
+                let reason = arg("reason").unwrap_or_default();
+                let id = uuid::Uuid::new_v4().simple().to_string();
+                self.mcp_requests.lock().unwrap().insert(id.clone(), (me.id.clone(), name.clone(), config.clone(), reason.clone()));
+                let _ = self.events.send(DaemonMessage::McpRequest { id, session_id: me.id, name: name.clone(), mcp: config, reason });
+                Ok(format!(
+                    "pedido enviado ao usuário; o MCP {name} só entra se ele aprovar no app. Se aprovar, esta sessão reinicia com ele (a conversa continua) e o aviso chega no read_inbox."
+                ))
             }
             "remember" | "recall" | "forget" => {
                 let memory = self.memory.as_ref().ok_or("este harness não tem memória")?;
@@ -920,6 +1004,54 @@ impl Daemon {
         Vec::new()
     }
 
+    /// MCP servers in the accounts' Claude Code configs and the known
+    /// repositories' `.mcp.json`.
+    fn scan_mcps(&self) -> Vec<crate::mcp_import::Found> {
+        let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
+        let claude_jsons: Vec<(String, PathBuf)> = {
+            let sessions = self.sessions.lock().unwrap();
+            sessions
+                .account_ids()
+                .into_iter()
+                .filter_map(|id| {
+                    let a = sessions.account(&id)?;
+                    let file = a.config_dir.as_ref().map_or_else(|| home.join(".claude.json"), |d| d.join(".claude.json"));
+                    Some((id, file))
+                })
+                .collect()
+        };
+        let mcp_jsons: Vec<(String, PathBuf)> = self
+            .projects
+            .lock()
+            .unwrap()
+            .list()
+            .into_iter()
+            .map(|p| (p.name, crate::catalog::expand(&p.repo).join(".mcp.json")))
+            .collect();
+        crate::mcp_import::scan(&claude_jsons, &mcp_jsons)
+    }
+
+    fn mcp_imports(&self) -> DaemonMessage {
+        let have: Vec<String> =
+            self.catalog.lock().unwrap().list().into_iter().filter(|e| e.kind == "mcp").map(|e| e.name).collect();
+        let items = self
+            .scan_mcps()
+            .into_iter()
+            .map(|f| {
+                let (mcp, secrets) = crate::mcp_import::sanitize(&f.name, &f.config);
+                orc_protocol::McpImport {
+                    in_catalog: have.contains(&f.name),
+                    key: f.key,
+                    label: f.label,
+                    name: f.name,
+                    mcp,
+                    secrets: secrets.into_iter().map(|(n, _)| n).collect(),
+                }
+            })
+            .collect();
+        DaemonMessage::McpImports { items }
+    }
+
     fn catalog_message(&self) -> DaemonMessage {
         let secrets = self.sessions.lock().unwrap().secrets.clone();
         let catalog = self.catalog.lock().unwrap();
@@ -1245,6 +1377,124 @@ impl Daemon {
                 self.deliver("harness", &session, &format!("O usuário {verdict} gravar {name}."));
                 emit(DaemonMessage::EnvRequestResolved { id, approved: approve });
             }
+            ClientMessage::ResolveMcpRequest { id, approve } => {
+                let Some((session, name, config, reason)) = self.mcp_requests.lock().unwrap().remove(&id) else {
+                    return vec![DaemonMessage::Error { message: "pedido de MCP não encontrado".into() }];
+                };
+                if !approve {
+                    self.deliver("harness", &session, &format!("O usuário recusou o MCP {name}."));
+                    emit(DaemonMessage::McpRequestResolved { id, approved: false });
+                    return Vec::new();
+                }
+                let needs = env_refs(&config);
+                {
+                    let mut catalog = self.catalog.lock().unwrap();
+                    // Same name: the agent's version replaces it.
+                    let entry_id = catalog
+                        .list()
+                        .into_iter()
+                        .find(|e| e.kind == "mcp" && e.name == name)
+                        .map_or_else(|| format!("mcp-{name}"), |e| e.id);
+                    let entry = CatalogEntry {
+                        id: entry_id,
+                        kind: "mcp".into(),
+                        name: name.clone(),
+                        description: reason,
+                        path: None,
+                        mcp: Some(config.clone()),
+                        has_value: false,
+                    };
+                    if let Err(e) = catalog.upsert(entry) {
+                        return error(e);
+                    }
+                    for env in &needs {
+                        if !catalog.list().iter().any(|e| e.kind == "env" && &e.name == env) {
+                            let entry = CatalogEntry {
+                                id: format!("env-{env}"),
+                                kind: "env".into(),
+                                name: env.clone(),
+                                description: format!("usada pelo MCP {name}"),
+                                path: None,
+                                mcp: None,
+                                has_value: false,
+                            };
+                            if let Err(e) = catalog.upsert(entry) {
+                                return error(e);
+                            }
+                        }
+                    }
+                }
+                emit(self.catalog_message());
+                // On in that session, with the envs it references.
+                {
+                    let mut sessions = self.sessions.lock().unwrap();
+                    let Some(mut profile) = sessions.profile(&session).cloned() else {
+                        return vec![DaemonMessage::Error { message: format!("sessão desconhecida: {session}") }];
+                    };
+                    profile.mcp_servers.insert(name.clone(), config);
+                    for env in &needs {
+                        if !profile.env_names.contains(env) {
+                            profile.env_names.push(env.clone());
+                        }
+                    }
+                    if let Err(e) = sessions.apply_profile(&session, profile) {
+                        return error(e);
+                    }
+                    emit(DaemonMessage::Sessions { sessions: sessions.list() });
+                }
+                let note = format!("O usuário aprovou o MCP {name}; a sessão reiniciou com ele.");
+                self.deliver("harness", &session, &note);
+                emit(DaemonMessage::McpRequestResolved { id, approved: true });
+            }
+            ClientMessage::ScanMcpImports => return vec![self.mcp_imports()],
+            ClientMessage::ImportMcps { keys } => {
+                let found = self.scan_mcps();
+                let secrets = self.sessions.lock().unwrap().secrets.clone();
+                {
+                    let mut catalog = self.catalog.lock().unwrap();
+                    for f in found.iter().filter(|f| keys.contains(&f.key)) {
+                        let (config, values) = crate::mcp_import::sanitize(&f.name, &f.config);
+                        for (env, value) in &values {
+                            if let Err(e) = secrets.set(&crate::secrets::env_key(env), value) {
+                                return error(e);
+                            }
+                            if !catalog.list().iter().any(|e| e.kind == "env" && &e.name == env) {
+                                let entry = CatalogEntry {
+                                    id: format!("env-{env}"),
+                                    kind: "env".into(),
+                                    name: env.clone(),
+                                    description: format!("usada pelo MCP {}", f.name),
+                                    path: None,
+                                    mcp: None,
+                                    has_value: false,
+                                };
+                                if let Err(e) = catalog.upsert(entry) {
+                                    return error(e);
+                                }
+                            }
+                        }
+                        let id = catalog
+                            .list()
+                            .into_iter()
+                            .find(|e| e.kind == "mcp" && e.name == f.name)
+                            .map_or_else(|| format!("mcp-{}", f.name), |e| e.id);
+                        let entry = CatalogEntry {
+                            id,
+                            kind: "mcp".into(),
+                            name: f.name.clone(),
+                            description: format!("importado de {}", f.label),
+                            path: None,
+                            mcp: Some(config),
+                            has_value: false,
+                        };
+                        if let Err(e) = catalog.upsert(entry) {
+                            return error(e);
+                        }
+                    }
+                }
+                emit(self.catalog_message());
+                return vec![self.mcp_imports()];
+            }
             ClientMessage::SavePlan { plan } => {
                 let mut plans = self.plans.lock().unwrap();
                 if let Err(e) = plans.save_from_app(plan) {
@@ -1480,7 +1730,9 @@ impl Daemon {
                     let replies = match msg {
                         // Approvals come from you in the app, never from the
                         // socket the sessions' tools use.
-                        ClientMessage::ResolveEnvRequest { .. } | ClientMessage::ResolveApproval { .. } => {
+                        ClientMessage::ResolveEnvRequest { .. }
+                        | ClientMessage::ResolveMcpRequest { .. }
+                        | ClientMessage::ResolveApproval { .. } => {
                             vec![DaemonMessage::Error { message: "aprovação só pelo app".into() }]
                         }
                         ClientMessage::Gate { session_id, tool, input } => vec![daemon.gate(&session_id, &tool, &input).await],
@@ -1586,4 +1838,22 @@ fn gh_pr(cwd: &std::path::Path, branch: &str, gh_dir: Option<&std::path::Path>) 
 fn set_owner_only(path: &std::path::Path) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+}
+
+#[cfg(test)]
+mod mcp_request_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn mcp_configs_carry_references_not_secrets() {
+        let ok = json!({ "type": "http", "url": "https://x/mcp", "headers": { "Authorization": "Bearer ${X_TOKEN}" } });
+        assert_eq!(check_mcp_request("x", &ok), Ok(()));
+        assert_eq!(env_refs(&ok), ["X_TOKEN"]);
+        let refs = json!({ "command": "a", "args": ["${A}", "--b=${B:-1}"], "env": { "A": "${A}" } });
+        assert_eq!(env_refs(&refs), ["A", "B"]);
+        assert!(check_mcp_request("x", &json!({ "command": "a", "env": { "K": "secret" } })).is_err());
+        assert!(check_mcp_request("x", &json!({ "args": [] })).is_err());
+        assert!(check_mcp_request("../x", &json!({ "command": "a" })).is_err());
+    }
 }

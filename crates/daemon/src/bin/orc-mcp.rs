@@ -62,6 +62,11 @@ fn tools() -> Value {
           "description": "Pede ao usuário para gravar o valor de uma env no Keychain do harness. Só acontece se ele aprovar no app.",
           "inputSchema": s(json!({ "name": { "type": "string" },
                                    "value": { "type": "string" } }), &["name", "value"]) },
+        { "name": "request_mcp_add",
+          "description": "Pede ao usuário para adicionar um servidor MCP a esta sessão (claude mcp add não funciona aqui: as sessões do harness só usam os MCPs do perfil). Se ele aprovar no app, o MCP entra no catálogo e esta sessão reinicia com ele, continuando a conversa. `config` vai no formato do mcpServers do Claude Code: {\"command\", \"args\"} para stdio ou {\"type\": \"http\", \"url\", \"headers\"}. Nunca escreva segredos: valores de env e headers vão como \"${NOME}\", e o valor você pede com request_env_change.",
+          "inputSchema": s(json!({ "name": { "type": "string", "description": "Nome curto, ex.: github" },
+                                   "config": { "type": "object" },
+                                   "reason": { "type": "string", "description": "Para que você precisa dele" } }), &["name", "config", "reason"]) },
     ])
 }
 

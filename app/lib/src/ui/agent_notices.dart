@@ -14,7 +14,10 @@ class AgentNotices extends StatelessWidget {
   Widget build(BuildContext context) {
     final d = store.daemon;
     if (d == null ||
-        (d.envRequests.isEmpty && d.messages.isEmpty && d.approvals.isEmpty)) {
+        (d.envRequests.isEmpty &&
+            d.mcpRequests.isEmpty &&
+            d.messages.isEmpty &&
+            d.approvals.isEmpty)) {
       return const SizedBox.shrink();
     }
     final scheme = Theme.of(context).colorScheme;
@@ -56,6 +59,47 @@ class AgentNotices extends StatelessWidget {
                     size: ButtonSize.small,
                     onPressed: () => d.resolveApproval(id, true),
                     child: Text(l10n.shellApprove),
+                  ),
+                ],
+              ),
+            ),
+          for (final (id, session, name_, mcp, reason) in d.mcpRequests)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(LucideIcons.plug, size: 14),
+                  const Gap(8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l10n.shellMcpRequest(name(session), name_),
+                        ).small(),
+                        if (reason.isNotEmpty) Text(reason).xSmall().muted(),
+                        // What would run, so you can judge it.
+                        Text(
+                          mcp['url'] as String? ??
+                              [
+                                mcp['command'],
+                                ...(mcp['args'] as List? ?? const []),
+                              ].join(' '),
+                        ).mono().xSmall().muted(),
+                      ],
+                    ),
+                  ),
+                  OutlineButton(
+                    size: ButtonSize.small,
+                    onPressed: () => d.resolveMcpRequest(id, false),
+                    child: Text(l10n.shellDecline),
+                  ),
+                  const Gap(6),
+                  PrimaryButton(
+                    size: ButtonSize.small,
+                    onPressed: () => d.resolveMcpRequest(id, true),
+                    child: Text(l10n.shellMcpApprove),
                   ),
                 ],
               ),
