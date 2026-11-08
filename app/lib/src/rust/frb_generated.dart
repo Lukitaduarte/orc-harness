@@ -78,7 +78,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
-  Stream<String> crateApiLinkDaemonLinkListen({required DaemonLink that});
+  Stream<Uint8List> crateApiLinkDaemonLinkListen({required DaemonLink that});
 
   Future<void> crateApiLinkDaemonLinkSend({
     required DaemonLink that,
@@ -112,8 +112,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
-  Stream<String> crateApiLinkDaemonLinkListen({required DaemonLink that}) {
-    final sink = RustStreamSink<String>();
+  Stream<Uint8List> crateApiLinkDaemonLinkListen({required DaemonLink that}) {
+    final sink = RustStreamSink<Uint8List>();
     unawaited(
       handler.executeNormal(
         NormalTask(
@@ -123,7 +123,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
               that,
               serializer,
             );
-            sse_encode_StreamSink_String_Sse(sink, serializer);
+            sse_encode_StreamSink_list_prim_u_8_strict_Sse(sink, serializer);
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
@@ -319,7 +319,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  RustStreamSink<String> dco_decode_StreamSink_String_Sse(dynamic raw) {
+  RustStreamSink<Uint8List> dco_decode_StreamSink_list_prim_u_8_strict_Sse(
+    dynamic raw,
+  ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     throw UnimplementedError();
   }
@@ -398,7 +400,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  RustStreamSink<String> sse_decode_StreamSink_String_Sse(
+  RustStreamSink<Uint8List> sse_decode_StreamSink_list_prim_u_8_strict_Sse(
     SseDeserializer deserializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -497,15 +499,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_StreamSink_String_Sse(
-    RustStreamSink<String> self,
+  void sse_encode_StreamSink_list_prim_u_8_strict_Sse(
+    RustStreamSink<Uint8List> self,
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(
       self.setupAndSerialize(
         codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
           decodeErrorData: sse_decode_AnyhowException,
         ),
       ),
@@ -578,10 +580,11 @@ class DaemonLinkImpl extends RustOpaque implements DaemonLink {
         RustLib.instance.api.rust_arc_decrement_strong_count_DaemonLinkPtr,
   );
 
-  /// Daemon messages as JSON, from the moment of connecting (nothing is
-  /// lost before Dart listens). Ends after a final
-  /// `{"type":"link_closed","reason":…}`. Can be listened to once.
-  Stream<String> listen() =>
+  /// Daemon messages from the moment of connecting (nothing is lost
+  /// before Dart listens): `[kind, …payload]`, kind 0 JSON, 1 a binary
+  /// grid. Ends after a final JSON `{"type":"link_closed","reason":…}`.
+  /// Can be listened to once.
+  Stream<Uint8List> listen() =>
       RustLib.instance.api.crateApiLinkDaemonLinkListen(that: this);
 
   /// Sends one client message (JSON).

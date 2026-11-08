@@ -91,6 +91,10 @@ class LiveGrid extends ChangeNotifier {
     state.apply(diff);
     notifyListeners();
   }
+
+  void applyBinary(Uint8List bytes) {
+    if (state.applyBinary(bytes)) notifyListeners();
+  }
 }
 
 /// A workspace browser as the daemon streams it. Panes listen to it
@@ -489,7 +493,7 @@ class DaemonClient extends ChangeNotifier {
   final mcpTests = <String, (bool, int, String?)>{};
 
   link.DaemonLink? _link;
-  StreamSubscription<String>? _sub;
+  StreamSubscription<Uint8List>? _sub;
   Timer? _retry;
   bool _disposed = false;
 
@@ -570,13 +574,32 @@ class DaemonClient extends ChangeNotifier {
     try {
       final l = await link.connectDaemon(identity: identity);
       _link = l;
-      _sub = l.listen().listen(handle);
+      _sub = l.listen().listen(_frame);
       status = LinkStatus.connected;
       error = null;
       notifyListeners();
     } catch (e) {
       _fail('$e');
       _scheduleRetry();
+    }
+  }
+
+  /// One frame from the link: a kind byte, then JSON (0) or a binary grid
+  /// (1, orc_protocol::wire).
+  @visibleForTesting
+  void handleFrame(Uint8List frame) => _frame(frame);
+
+  void _frame(Uint8List frame) {
+    if (frame.isEmpty) return;
+    final payload = Uint8List.sublistView(frame, 1);
+    switch (frame[0]) {
+      case 0:
+        handle(utf8.decode(payload));
+      case 1:
+        final session = binaryGridSession(payload);
+        if (session != null) {
+          grids.putIfAbsent(session, LiveGrid.new).applyBinary(payload);
+        }
     }
   }
 

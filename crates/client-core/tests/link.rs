@@ -3,13 +3,17 @@
 use std::sync::mpsc;
 use std::time::Duration;
 
-use orc_client_core::{Identity, connect, pair};
+use orc_client_core::{Identity, connect, connect_framed, pair};
 use orc_daemon::manager::{Account, ManagerConfig, SessionManager};
 use orc_daemon::remote::{Devices, Remote};
 use orc_daemon::server::Daemon;
 use orc_protocol::{ClientMessage as DaemonClientMessage, DaemonMessage, GridSnapshot};
 
 async fn start_daemon(dir: &std::path::Path) -> (Daemon, Remote) {
+    start_daemon_with(dir, &[orc_link::ALPN_PAIR, orc_link::ALPN_MAIN, orc_link::ALPN_FRAMED]).await
+}
+
+async fn start_daemon_with(dir: &std::path::Path, alpns: &[&[u8]]) -> (Daemon, Remote) {
     let fake = dir.join("fake-claude");
     std::fs::write(&fake, "#!/bin/sh\necho hello from fake\nexec cat\n").unwrap();
     std::fs::set_permissions(&fake, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
@@ -34,7 +38,7 @@ async fn start_daemon(dir: &std::path::Path) -> (Daemon, Remote) {
             commit_check: "/usr/bin/true".into(),
         });
     let key = orc_link::load_or_create_key(&dir.join("daemon.key")).unwrap();
-    let endpoint = orc_link::endpoint_on(key, &[orc_link::ALPN_PAIR, orc_link::ALPN_MAIN], 0, &orc_link::Relay::Off)
+    let endpoint = orc_link::endpoint_on(key, alpns, 0, &orc_link::Relay::Off)
         .await
         .unwrap();
     let remote = Remote::new(endpoint, Devices::load(dir.join("devices.json")));
@@ -192,4 +196,60 @@ async fn a_revoked_device_is_dropped_and_refused() {
         closed2_rx.recv_timeout(Duration::from_secs(10)).expect("revoked device got back in");
     }
     assert!(again_rx.try_recv().is_err());
+}
+
+
+/// The app's link: JSON frames, and the screen as binary grids, decoded
+/// and applied like the app does. Against a daemon without orc/2 it falls
+/// back to JSON.
+#[tokio::test(flavor = "multi_thread")]
+async fn framed_link_sends_binary_grids_and_falls_back() {
+    use orc_protocol::wire::{FRAME_GRID, FRAME_JSON, decode_grid};
+    for framed_daemon in [true, false] {
+        let dir = tempfile::tempdir().unwrap();
+        let alpns: &[&[u8]] = if framed_daemon {
+            &[orc_link::ALPN_PAIR, orc_link::ALPN_MAIN, orc_link::ALPN_FRAMED]
+        } else {
+            &[orc_link::ALPN_PAIR, orc_link::ALPN_MAIN]
+        };
+        let (_daemon, remote) = start_daemon_with(dir.path(), alpns).await;
+        let identity = pair(&remote.new_ticket().await.encode(), "teste").await.unwrap();
+        let (tx, rx) = mpsc::channel::<(u8, Vec<u8>)>();
+        let conn = connect_framed(&identity, move |k, p| { let _ = tx.send((k, p)); }, |_| {}).await.unwrap();
+        conn.send(
+            serde_json::json!({
+                "type": "create_session", "account_id": "work-main",
+                "cwd": dir.path(), "profile": {}, "cols": 60, "rows": 12
+            })
+            .to_string(),
+        )
+        .await
+        .unwrap();
+        let mut screen = GridSnapshot::default();
+        let (mut grids, mut json) = (0, 0);
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            let (kind, payload) = rx.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now())).expect("timed out");
+            let diff = match kind {
+                FRAME_GRID => {
+                    grids += 1;
+                    decode_grid(&payload).expect("bad grid").1
+                }
+                FRAME_JSON => {
+                    json += 1;
+                    match serde_json::from_slice(&payload).unwrap() {
+                        DaemonMessage::GridDiff { diff, .. } => diff,
+                        _ => continue,
+                    }
+                }
+                k => panic!("kind {k}"),
+            };
+            screen.apply(&diff);
+            if (0..screen.rows as usize).any(|r| screen.line_text(r).contains("hello from fake")) {
+                break;
+            }
+        }
+        assert!(json > 0, "the rest stays JSON");
+        assert_eq!(grids > 0, framed_daemon, "binary grids only from a daemon with orc/2");
+    }
 }

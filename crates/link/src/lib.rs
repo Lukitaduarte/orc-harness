@@ -14,12 +14,15 @@ use std::path::Path;
 use iroh::endpoint::presets;
 use iroh::{Endpoint, EndpointAddr, RelayMode, SecretKey};
 use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 /// Pairing: the client presents the ticket's token and its name.
 pub const ALPN_PAIR: &[u8] = b"orc/pair/1";
 /// Everything else: newline-delimited JSON messages, both ways.
 pub const ALPN_MAIN: &[u8] = b"orc/1";
+/// The same, but the daemon answers in frames (`orc_protocol::wire`):
+/// grids binary. Clients still send JSON lines.
+pub const ALPN_FRAMED: &[u8] = b"orc/2";
 
 const TICKET_PREFIX: &str = "orc1";
 
@@ -195,6 +198,23 @@ where
     line.push(b'\n');
     w.write_all(&line).await?;
     w.flush().await
+}
+
+/// Reads one `[kind][len: u32 BE][payload]` frame; None at the end.
+pub async fn read_frame<R: AsyncRead + Unpin>(r: &mut R) -> std::io::Result<Option<(u8, Vec<u8>)>> {
+    let mut head = [0u8; 5];
+    match r.read_exact(&mut head).await {
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(None),
+        Err(e) => return Err(e),
+    }
+    let len = u32::from_be_bytes([head[1], head[2], head[3], head[4]]) as usize;
+    if len > 64 * 1024 * 1024 {
+        return Err(std::io::Error::other("frame grande demais"));
+    }
+    let mut payload = vec![0u8; len];
+    r.read_exact(&mut payload).await?;
+    Ok(Some((head[0], payload)))
 }
 
 #[cfg(test)]

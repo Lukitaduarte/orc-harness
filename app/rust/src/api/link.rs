@@ -1,5 +1,6 @@
-//! What Dart calls to reach the daemon. Messages cross as JSON strings
-//! (orc_protocol shapes); Dart parses them into its own models.
+//! What Dart calls to reach the daemon. Messages go out as JSON strings
+//! and come back as frames: a kind byte, then JSON (0) or a binary grid (1,
+//! orc_protocol::wire); Dart decodes both.
 
 use std::sync::OnceLock;
 
@@ -33,7 +34,7 @@ pub async fn pair_device(ticket: String, device_name: String) -> Result<String, 
 #[frb(opaque)]
 pub struct DaemonLink {
     conn: orc_client_core::Connection,
-    inbox: std::sync::Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<String>>>,
+    inbox: std::sync::Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>>>,
 }
 
 impl DaemonLink {
@@ -42,10 +43,11 @@ impl DaemonLink {
         self.conn.send(json).await
     }
 
-    /// Daemon messages as JSON, from the moment of connecting (nothing is
-    /// lost before Dart listens). Ends after a final
-    /// `{"type":"link_closed","reason":…}`. Can be listened to once.
-    pub fn listen(&self, sink: StreamSink<String>) {
+    /// Daemon messages from the moment of connecting (nothing is lost
+    /// before Dart listens): `[kind, …payload]`, kind 0 JSON, 1 a binary
+    /// grid. Ends after a final JSON `{"type":"link_closed","reason":…}`.
+    /// Can be listened to once.
+    pub fn listen(&self, sink: StreamSink<Vec<u8>>) {
         let Some(mut rx) = self.inbox.lock().unwrap().take() else { return };
         runtime().spawn(async move {
             while let Some(m) = rx.recv().await {
@@ -59,20 +61,24 @@ impl DaemonLink {
 
 /// Connects with a stored identity (from `pair_device`).
 pub async fn connect_daemon(identity: String) -> Result<DaemonLink, String> {
-    let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
     let closed = tx.clone();
     let conn = runtime()
         .spawn(async move {
-            orc_client_core::connect(
+            orc_client_core::connect_framed(
                 &identity,
-                move |m| {
+                move |kind, payload| {
+                    let mut m = Vec::with_capacity(payload.len() + 1);
+                    m.push(kind);
+                    m.extend_from_slice(&payload);
                     let _ = tx.send(m);
                 },
                 move |reason| {
-                    let _ = closed.send(format!(
-                        "{{\"type\":\"link_closed\",\"reason\":{}}}",
-                        string_json(&reason)
-                    ));
+                    let mut m = vec![0u8];
+                    m.extend_from_slice(
+                        format!("{{\"type\":\"link_closed\",\"reason\":{}}}", string_json(&reason)).as_bytes(),
+                    );
+                    let _ = closed.send(m);
                 },
             )
             .await

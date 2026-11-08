@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/services.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
@@ -26,6 +28,7 @@ class LiveTerminal extends StatefulWidget {
 
 class _LiveTerminalState extends State<LiveTerminal> {
   final _focus = FocusNode();
+  final _cache = _RowCache();
   (int, int)? _reported;
 
   @override
@@ -53,6 +56,7 @@ class _LiveTerminalState extends State<LiveTerminal> {
   @override
   void dispose() {
     _focus.dispose();
+    _cache.clear(null);
     super.dispose();
   }
 
@@ -97,6 +101,7 @@ class _LiveTerminalState extends State<LiveTerminal> {
                         style,
                         cell,
                         Theme.of(context).colorScheme,
+                        _cache,
                       ),
                       size: Size.infinite,
                     ),
@@ -116,71 +121,74 @@ Size _cellSize(TextStyle style) {
   return Size(tp.width, tp.height);
 }
 
+/// Rows recorded so far (tests check unchanged rows are not redrawn).
+@visibleForTesting
+int debugRowsRecorded = 0;
+
+/// What drawing keeps between frames: each row as a recorded picture
+/// (redrawn only when the row's version changes), and laid-out text runs
+/// (most runs repeat: prompts, borders, the status line).
+class _RowCache {
+  Object? key;
+  final rows = <int, (int, ui.Picture)>{};
+  final runs = <String, TextPainter>{}; // insertion-ordered: LRU
+  static const maxRuns = 2048;
+
+  /// Drops everything (the font, colors or cell size changed).
+  void clear(Object? newKey) {
+    key = newKey;
+    for (final (_, p) in rows.values) {
+      p.dispose();
+    }
+    rows.clear();
+    for (final t in runs.values) {
+      t.dispose();
+    }
+    runs.clear();
+  }
+
+  TextPainter run(String key, InlineSpan Function() span) {
+    final hit = runs.remove(key);
+    if (hit != null) return runs[key] = hit; // most recent last
+    if (runs.length >= maxRuns) runs.remove(runs.keys.first)?.dispose();
+    return runs[key] = TextPainter(
+      text: span(),
+      textDirection: TextDirection.ltr,
+    )..layout();
+  }
+}
+
 class _GridPainter extends CustomPainter {
-  _GridPainter(this.grid, this.style, this.cell, this.scheme);
+  _GridPainter(this.grid, this.style, this.cell, this.scheme, this.cache);
 
   final GridState grid;
   final TextStyle style;
   final Size cell;
   final ColorScheme scheme;
+  final _RowCache cache;
 
   @override
   void paint(Canvas canvas, Size size) {
-    for (var r = 0; r < grid.lines.length; r++) {
-      final line = grid.lines[r];
-      final y = r * cell.height;
-      // Runs of cells with the same look are drawn as one span.
-      var c = 0;
-      while (c < line.length) {
-        final first = line[c];
-        var end = c + 1;
-        while (end < line.length && _sameLook(line[end], first)) {
-          end++;
-        }
-        final run = line.sublist(c, end);
-        var fg = first.fg ?? scheme.foreground;
-        var bg = first.bg;
-        if (first.has(TermCell.inverse)) {
-          (fg, bg) = (bg ?? scheme.background, fg);
-        }
-        final rect = Rect.fromLTWH(
-          c * cell.width,
-          y,
-          (end - c) * cell.width,
-          cell.height,
-        );
-        if (bg != null) canvas.drawRect(rect, Paint()..color = bg);
-        final text = run
-            .where((x) => !x.has(TermCell.wideSpacer))
-            .map((x) => x.text)
-            .join();
-        if (text.trim().isNotEmpty) {
-          TextPainter(
-              text: TextSpan(
-                text: text,
-                style: style.copyWith(
-                  color: first.has(TermCell.dim)
-                      ? fg.withValues(alpha: 0.6)
-                      : fg,
-                  fontWeight: first.has(TermCell.bold)
-                      ? FontWeight.w700
-                      : FontWeight.w400,
-                  fontStyle: first.has(TermCell.italic)
-                      ? FontStyle.italic
-                      : FontStyle.normal,
-                  decoration: TextDecoration.combine([
-                    if (first.has(TermCell.underline)) TextDecoration.underline,
-                    if (first.has(TermCell.strike)) TextDecoration.lineThrough,
-                  ]),
-                ),
-              ),
-              textDirection: TextDirection.ltr,
-            )
-            ..layout()
-            ..paint(canvas, rect.topLeft);
-        }
-        c = end;
+    final key = (style, cell, scheme.foreground, scheme.background);
+    if (cache.key != key) cache.clear(key);
+    final rows = grid.lines.length;
+    cache.rows.removeWhere((r, entry) {
+      final gone = r >= rows;
+      if (gone) entry.$2.dispose();
+      return gone;
+    });
+    for (var r = 0; r < rows; r++) {
+      final version = r < grid.versions.length ? grid.versions[r] : -1;
+      var entry = cache.rows[r];
+      if (entry == null || entry.$1 != version) {
+        entry?.$2.dispose();
+        entry = (version, _record(grid.lines[r]));
+        cache.rows[r] = entry;
       }
+      canvas.save();
+      canvas.translate(0, r * cell.height);
+      canvas.drawPicture(entry.$2);
+      canvas.restore();
     }
     if (grid.cursorVisible) {
       canvas.drawRect(
@@ -195,10 +203,68 @@ class _GridPainter extends CustomPainter {
     }
   }
 
+  /// One row, at y = 0: backgrounds, then runs of same-looking cells.
+  ui.Picture _record(List<TermCell> line) {
+    debugRowsRecorded++;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    var c = 0;
+    while (c < line.length) {
+      final first = line[c];
+      var end = c + 1;
+      while (end < line.length && _sameLook(line[end], first)) {
+        end++;
+      }
+      var fg = first.fg ?? scheme.foreground;
+      var bg = first.bg;
+      if (first.has(TermCell.inverse)) {
+        (fg, bg) = (bg ?? scheme.background, fg);
+      }
+      final rect = Rect.fromLTWH(
+        c * cell.width,
+        0,
+        (end - c) * cell.width,
+        cell.height,
+      );
+      if (bg != null) canvas.drawRect(rect, Paint()..color = bg);
+      final buf = StringBuffer();
+      for (var i = c; i < end; i++) {
+        if (!line[i].has(TermCell.wideSpacer)) buf.write(line[i].text);
+      }
+      final text = buf.toString();
+      if (text.trim().isNotEmpty) {
+        final color = first.has(TermCell.dim) ? fg.withValues(alpha: 0.6) : fg;
+        cache
+            .run(
+              '${first.flags}|${color.toARGB32()}|$text',
+              () => TextSpan(
+                text: text,
+                style: style.copyWith(
+                  color: color,
+                  fontWeight: first.has(TermCell.bold)
+                      ? FontWeight.w700
+                      : FontWeight.w400,
+                  fontStyle: first.has(TermCell.italic)
+                      ? FontStyle.italic
+                      : FontStyle.normal,
+                  decoration: TextDecoration.combine([
+                    if (first.has(TermCell.underline)) TextDecoration.underline,
+                    if (first.has(TermCell.strike)) TextDecoration.lineThrough,
+                  ]),
+                ),
+              ),
+            )
+            .paint(canvas, rect.topLeft);
+      }
+      c = end;
+    }
+    return recorder.endRecording();
+  }
+
   static bool _sameLook(TermCell a, TermCell b) =>
       a.fg == b.fg && a.bg == b.bg && a.flags == b.flags;
 
-  // The grid object is mutated in place; repaint on every rebuild.
+  // The grid object is mutated in place; unchanged rows are pictures.
   @override
   bool shouldRepaint(_GridPainter old) => true;
 }

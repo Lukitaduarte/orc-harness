@@ -87,7 +87,7 @@ fn main() -> std::io::Result<()> {
                 // Same port across restarts: paired apps dial the ticket's addresses.
                 let port_file = home.join("link-port");
                 let saved: u16 = std::fs::read_to_string(&port_file).ok().and_then(|p| p.trim().parse().ok()).unwrap_or(0);
-                let alpns = [orc_link::ALPN_PAIR, orc_link::ALPN_MAIN];
+                let alpns = [orc_link::ALPN_PAIR, orc_link::ALPN_MAIN, orc_link::ALPN_FRAMED];
                 let relay = orc_link::Relay::parse(relay_cfg.as_deref()).map_err(std::io::Error::other)?;
                 match &relay {
                     orc_link::Relay::Off => eprintln!("orcd: sem relay: apps alcançam o daemon só na mesma rede"),

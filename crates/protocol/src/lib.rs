@@ -109,6 +109,8 @@ pub enum TermColor {
     Rgb { r: u8, g: u8, b: u8 },
 }
 
+pub mod wire;
+
 pub mod cell_flags {
     pub const BOLD: u8 = 1;
     pub const ITALIC: u8 = 1 << 1;

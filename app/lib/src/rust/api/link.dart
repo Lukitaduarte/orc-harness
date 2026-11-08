@@ -24,10 +24,11 @@ Future<DaemonLink> connectDaemon({required String identity}) =>
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<DaemonLink>>
 abstract class DaemonLink implements RustOpaqueInterface {
-  /// Daemon messages as JSON, from the moment of connecting (nothing is
-  /// lost before Dart listens). Ends after a final
-  /// `{"type":"link_closed","reason":…}`. Can be listened to once.
-  Stream<String> listen();
+  /// Daemon messages from the moment of connecting (nothing is lost
+  /// before Dart listens): `[kind, …payload]`, kind 0 JSON, 1 a binary
+  /// grid. Ends after a final JSON `{"type":"link_closed","reason":…}`.
+  /// Can be listened to once.
+  Stream<Uint8List> listen();
 
   /// Sends one client message (JSON).
   Future<void> send({required String json});

@@ -8,7 +8,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use iroh::endpoint::Connection;
 use iroh::{Endpoint, EndpointId, TransportAddr};
-use orc_link::{ALPN_MAIN, ALPN_PAIR, PairRequest, PairResponse, Ticket, write_line};
+use orc_link::{ALPN_FRAMED, ALPN_MAIN, ALPN_PAIR, PairRequest, PairResponse, Ticket, write_line};
 use orc_protocol::{ClientMessage, DaemonMessage};
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -177,7 +177,8 @@ impl Remote {
                 let Ok(conn) = incoming.await else { return };
                 let result = match conn.alpn() {
                     a if a == ALPN_PAIR => remote.pair(&conn).await,
-                    a if a == ALPN_MAIN => remote.main(&conn, daemon).await,
+                    a if a == ALPN_MAIN => remote.main(&conn, daemon, false).await,
+                    a if a == ALPN_FRAMED => remote.main(&conn, daemon, true).await,
                     _ => Ok(()),
                 };
                 if result.is_err() {
@@ -208,7 +209,9 @@ impl Remote {
         Ok(())
     }
 
-    async fn main(&self, conn: &Connection, daemon: Daemon) -> std::io::Result<()> {
+    /// A paired client's session. `framed` (ALPN orc/2): answers go as
+    /// frames, grids binary; otherwise JSON lines.
+    async fn main(&self, conn: &Connection, daemon: Daemon, framed: bool) -> std::io::Result<()> {
         let name = self
             .devices
             .lock()
@@ -227,7 +230,7 @@ impl Remote {
         let (mut send, recv) = conn.accept_bi().await.map_err(std::io::Error::other)?;
         let mut events = daemon.events.subscribe();
         for m in daemon.hello() {
-            write_line(&mut send, &m).await?;
+            send_msg(&mut send, &m, framed).await?;
         }
         let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonMessage>(256);
         let (remote, me_reader) = (self.clone(), me.clone());
@@ -272,7 +275,7 @@ impl Remote {
                     Err(RecvError::Closed) => break,
                 },
             };
-            if write_line(&mut send, &msg).await.is_err() {
+            if send_msg(&mut send, &msg, framed).await.is_err() {
                 break;
             }
         }
@@ -280,4 +283,13 @@ impl Remote {
         self.connected.lock().unwrap().remove(&me);
         Ok(())
     }
+}
+
+async fn send_msg<W: tokio::io::AsyncWrite + Unpin>(w: &mut W, msg: &DaemonMessage, framed: bool) -> std::io::Result<()> {
+    if !framed {
+        return write_line(w, msg).await;
+    }
+    use tokio::io::AsyncWriteExt;
+    w.write_all(&orc_protocol::wire::encode_message(msg)).await?;
+    w.flush().await
 }
