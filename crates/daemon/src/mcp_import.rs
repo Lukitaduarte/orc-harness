@@ -247,8 +247,18 @@ pub fn skill_meta(dir: &Path) -> (String, String) {
     let folder = dir.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
     let raw = std::fs::read_to_string(dir.join("SKILL.md")).unwrap_or_default();
     let front = raw.strip_prefix("---").and_then(|r| r.split_once("\n---")).map(|(f, _)| f).unwrap_or_default();
+    // `key: value`, or a YAML block (`key: >-` / `|`) on the indented
+    // lines after it.
     let field = |k: &str| {
-        front.lines().find_map(|l| l.strip_prefix(k).and_then(|r| r.strip_prefix(':'))).map(|v| v.trim().trim_matches('"').to_string())
+        let lines: Vec<&str> = front.lines().collect();
+        let at = lines.iter().position(|l| l.strip_prefix(k).is_some_and(|r| r.starts_with(':')))?;
+        let value = lines[at][k.len() + 1..].trim();
+        if matches!(value, ">" | ">-" | ">+" | "|" | "|-" | "|+") {
+            let block: Vec<&str> =
+                lines[at + 1..].iter().take_while(|l| l.starts_with(' ') || l.starts_with('\t') || l.is_empty()).map(|l| l.trim()).collect();
+            return Some(block.join(" ").split_whitespace().collect::<Vec<_>>().join(" "));
+        }
+        Some(value.trim_matches('"').trim_matches('\'').to_string())
     };
     let name = field("name").filter(|n| !n.is_empty()).unwrap_or(folder);
     let mut description = field("description").unwrap_or_default();
@@ -448,6 +458,7 @@ mod tests {
         // The project's own files and skills.
         write(&repo.join(".mcp.json"), &json!({ "mcpServers": { "lint": { "command": "lint-mcp" } } }).to_string());
         skill(&repo.join(".claude/skills/deploy"), "name: deploy\ndescription: \"Ships it\"");
+        skill(&home.join(".claude/skills/stripe"), "name: stripe-pay\ndescription: >-\n  Takes payments\n  with Stripe.\nlicense: MIT");
 
         let scan = scan_all(home, &[], &[]);
         let mcps: Vec<(&str, &str)> = scan.mcps.iter().map(|f| (f.name.as_str(), f.label.as_str())).collect();
@@ -478,6 +489,7 @@ mod tests {
             assert!(skills.contains(&want), "{want:?} not in {skills:?}");
         }
         assert_eq!(scan.skills.iter().find(|s| s.name == "deploy").unwrap().description, "Ships it");
+        assert_eq!(scan.skills.iter().find(|s| s.name == "stripe-pay").unwrap().description, "Takes payments with Stripe.");
     }
 
     #[test]

@@ -502,5 +502,12 @@
   "onboardUpdateTitle": "Actualizando el servicio en segundo plano",
   "onboardUpdateWhy": "Esta versión trae un orcd nuevo. Aún no está firmado por Apple, así que macOS lo ve como un programa nuevo y puede preguntar otra vez: acceso al Llavero (la clave del daemon), elige Permitir siempre; y, con el firewall activo, conexiones entrantes. Para que no pregunte en cada versión, ejecuta una vez: orcd install --sign \"<tu identidad>\" (lístalas con security find-identity -v -p codesigning).",
   "onboardUpdateGo": "Actualizar",
-  "shellNoDaemonToSave": "El daemon no está conectado, así que esto no se puede guardar. Revisa ⚙ → Conectar daemon."
+  "shellNoDaemonToSave": "El daemon no está conectado, así que esto no se puede guardar. Revisa ⚙ → Conectar daemon.",
+  "shellProfileSearch": "Buscar skills, MCPs, envs",
+  "shellProfileOnOf": "{on} de {total} activas",
+  "shellProfileShowAvailable": "Mostrar las {count} disponibles",
+  "shellProfileHide": "Mostrar solo las activas",
+  "shellProfileRefine": "{count} más: afina la búsqueda",
+  "toolsShowAll": "Mostrar todas ({count})",
+  "toolsCatalogSearch": "Buscar en el catálogo"
 }

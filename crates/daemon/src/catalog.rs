@@ -30,10 +30,17 @@ pub struct Catalog {
 impl Catalog {
     pub fn load(home: &Path) -> std::io::Result<Self> {
         let file = home.join("catalog.json");
-        let entries = match std::fs::read(&file) {
+        let mut entries: Vec<CatalogEntry> = match std::fs::read(&file) {
             Ok(raw) => serde_json::from_slice(&raw)?,
             Err(_) => Vec::new(),
         };
+        // Skills imported before YAML block descriptions were read kept
+        // the marker (`>-`) as their description.
+        for e in entries.iter_mut().filter(|e| e.kind == "skill" && matches!(e.description.trim(), ">" | ">-" | ">+" | "|" | "|-" | "|+")) {
+            if let Some(path) = &e.path {
+                e.description = crate::mcp_import::skill_meta(Path::new(path)).1;
+            }
+        }
         let templates_dir = home.join("templates");
         if !templates_dir.exists() {
             std::fs::create_dir_all(&templates_dir)?;

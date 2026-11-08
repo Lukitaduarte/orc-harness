@@ -8,10 +8,37 @@ import 'template_editor.dart';
 
 /// Global catalog of skills, MCPs and envs: configured once here, then
 /// switched on per session in the profile panel.
-class CatalogView extends StatelessWidget {
+class CatalogView extends StatefulWidget {
   const CatalogView(this.store, {super.key});
 
   final HarnessStore store;
+
+  @override
+  State<CatalogView> createState() => _CatalogViewState();
+}
+
+class _CatalogViewState extends State<CatalogView> {
+  String _query = '';
+  final _all = <CatalogKind>{};
+
+  /// Per kind, until "show all" (hundreds of skills after an import).
+  static const cap = 30;
+
+  HarnessStore get store => widget.store;
+
+  List<CatalogItem> _items(CatalogKind kind) {
+    final q = _query.toLowerCase();
+    return store.catalog
+        .where((i) => i.kind == kind)
+        .where(
+          (i) =>
+              q.isEmpty ||
+              '${i.name} ${i.description} ${i.detail}'.toLowerCase().contains(
+                q,
+              ),
+        )
+        .toList();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,14 +75,27 @@ class CatalogView extends StatelessWidget {
             ),
           ],
         ),
+        const Gap(12),
+        TextField(
+          placeholder: Text(context.l10n.toolsCatalogSearch),
+          onChanged: (v) => setState(() => _query = v.trim()),
+        ),
         const Gap(16),
         for (final kind in CatalogKind.values) ...[
           Text(
-            _kindTitle(context, kind).toUpperCase(),
+            '${_kindTitle(context, kind).toUpperCase()} · ${_items(kind).length}',
           ).xSmall().semiBold().muted(),
           const Gap(8),
-          for (final item in store.catalog.where((i) => i.kind == kind))
+          for (final item in _items(
+            kind,
+          ).take(_all.contains(kind) ? 100000 : cap))
             _ItemRow(store, item),
+          if (!_all.contains(kind) && _items(kind).length > cap)
+            GhostButton(
+              size: ButtonSize.small,
+              onPressed: () => setState(() => _all.add(kind)),
+              child: Text(context.l10n.toolsShowAll(_items(kind).length)),
+            ),
           const Gap(16),
         ],
         Row(

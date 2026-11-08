@@ -1810,4 +1810,33 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get shellNoDaemonToSave =>
       'The daemon isn\'t connected, so this can\'t be saved. Check ⚙ → Connect daemon.';
+
+  @override
+  String get shellProfileSearch => 'Search skills, MCPs, envs';
+
+  @override
+  String shellProfileOnOf(int on, int total) {
+    return '$on of $total on';
+  }
+
+  @override
+  String shellProfileShowAvailable(int count) {
+    return 'Show the $count available';
+  }
+
+  @override
+  String get shellProfileHide => 'Show only the ones on';
+
+  @override
+  String shellProfileRefine(int count) {
+    return '$count more: narrow the search';
+  }
+
+  @override
+  String toolsShowAll(int count) {
+    return 'Show all $count';
+  }
+
+  @override
+  String get toolsCatalogSearch => 'Search the catalog';
 }

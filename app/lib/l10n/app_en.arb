@@ -1564,5 +1564,56 @@
   "shellNoDaemonToSave": "The daemon isn't connected, so this can't be saved. Check ⚙ → Connect daemon.",
   "@shellNoDaemonToSave": {
     "description": "Workspace dialog when the daemon is not connected"
+  },
+  "shellProfileSearch": "Search skills, MCPs, envs",
+  "@shellProfileSearch": {
+    "description": "Profile panel / catalog with many items"
+  },
+  "shellProfileOnOf": "{on} of {total} on",
+  "@shellProfileOnOf": {
+    "description": "Profile panel / catalog with many items",
+    "placeholders": {
+      "on": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "shellProfileShowAvailable": "Show the {count} available",
+  "@shellProfileShowAvailable": {
+    "description": "Profile panel / catalog with many items",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shellProfileHide": "Show only the ones on",
+  "@shellProfileHide": {
+    "description": "Profile panel / catalog with many items"
+  },
+  "shellProfileRefine": "{count} more: narrow the search",
+  "@shellProfileRefine": {
+    "description": "Profile panel / catalog with many items",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "toolsShowAll": "Show all {count}",
+  "@toolsShowAll": {
+    "description": "Profile panel / catalog with many items",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "toolsCatalogSearch": "Search the catalog",
+  "@toolsCatalogSearch": {
+    "description": "Profile panel / catalog with many items"
   }
 }

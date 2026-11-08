@@ -3123,6 +3123,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The daemon isn\'t connected, so this can\'t be saved. Check ⚙ → Connect daemon.'**
   String get shellNoDaemonToSave;
+
+  /// Profile panel / catalog with many items
+  ///
+  /// In en, this message translates to:
+  /// **'Search skills, MCPs, envs'**
+  String get shellProfileSearch;
+
+  /// Profile panel / catalog with many items
+  ///
+  /// In en, this message translates to:
+  /// **'{on} of {total} on'**
+  String shellProfileOnOf(int on, int total);
+
+  /// Profile panel / catalog with many items
+  ///
+  /// In en, this message translates to:
+  /// **'Show the {count} available'**
+  String shellProfileShowAvailable(int count);
+
+  /// Profile panel / catalog with many items
+  ///
+  /// In en, this message translates to:
+  /// **'Show only the ones on'**
+  String get shellProfileHide;
+
+  /// Profile panel / catalog with many items
+  ///
+  /// In en, this message translates to:
+  /// **'{count} more: narrow the search'**
+  String shellProfileRefine(int count);
+
+  /// Profile panel / catalog with many items
+  ///
+  /// In en, this message translates to:
+  /// **'Show all {count}'**
+  String toolsShowAll(int count);
+
+  /// Profile panel / catalog with many items
+  ///
+  /// In en, this message translates to:
+  /// **'Search the catalog'**
+  String get toolsCatalogSearch;
 }
 
 class _AppLocalizationsDelegate

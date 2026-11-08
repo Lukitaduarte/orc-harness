@@ -76,6 +76,9 @@ fn main() -> std::io::Result<()> {
                 Some(c) => eprintln!("orcd: navegador dos workspaces: {}", c.display()),
                 None => eprintln!("orcd: nenhum Chrome/Chromium/Brave/Edge; navegador dos workspaces desligado"),
             }
+            // The socket first: resumed sessions report SessionStart through
+            // it right away (the Keychain and iroh below can take a while).
+            let listener = runtime.block_on(async { orc_daemon::server::bind_socket(&socket) })?;
             let restored = daemon.sessions.lock().unwrap().restore();
             if restored > 0 {
                 eprintln!("orcd: {restored} sessão(ões) retomada(s)");
@@ -119,7 +122,7 @@ fn main() -> std::io::Result<()> {
                 tokio::spawn(daemon.devices.clone().report_use(daemon.events.clone()));
                 // Cards move with their PRs on GitHub.
                 tokio::spawn(daemon.clone().watch_plans(Duration::from_secs(60)));
-                daemon.serve(socket).await
+                daemon.serve_on(listener).await
             })
         }
         Some("pair") => {

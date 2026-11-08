@@ -1835,9 +1835,12 @@ impl Daemon {
     /// Serves the local socket until the task is dropped. The socket file is
     /// owner-only: only this user's processes can talk to the daemon.
     pub async fn serve(self, path: PathBuf) -> std::io::Result<()> {
-        let _ = std::fs::remove_file(&path);
-        let listener = UnixListener::bind(&path)?;
-        set_owner_only(&path)?;
+        let listener = bind_socket(&path)?;
+        self.serve_on(listener).await
+    }
+
+    /// Serves an already bound socket (see [`bind_socket`]).
+    pub async fn serve_on(self, listener: UnixListener) -> std::io::Result<()> {
         loop {
             let (stream, _) = listener.accept().await?;
             let daemon = self.clone();
@@ -1961,6 +1964,15 @@ fn gh_pr(cwd: &std::path::Path, branch: &str, gh_dir: Option<&std::path::Path>) 
         .and_then(|o| serde_json::from_slice(&o.stdout).ok())
 }
 
+/// Binds the owner-only local socket. Bound before sessions start: their
+/// first hook (SessionStart) waits in the backlog instead of being lost.
+pub fn bind_socket(path: &std::path::Path) -> std::io::Result<UnixListener> {
+    let _ = std::fs::remove_file(path);
+    let listener = UnixListener::bind(path)?;
+    set_owner_only(path)?;
+    Ok(listener)
+}
+
 fn set_owner_only(path: &std::path::Path) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
@@ -1983,3 +1995,4 @@ mod mcp_request_tests {
         assert!(check_mcp_request("../x", &json!({ "command": "a" })).is_err());
     }
 }
+
