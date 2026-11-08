@@ -98,6 +98,8 @@ To reach the daemon away from your network, set a relay in `~/.orc/config.json`:
 
 ## Architecture
 
+The big picture, a session's life and the path from a plan to merged code: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ```mermaid
 flowchart LR
   subgraph Mac

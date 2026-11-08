@@ -51,6 +51,8 @@ Um harness para o Claude Code. Roda várias sessões em paralelo, em várias con
 
 ## Arquitetura
 
+O big picture, a vida de uma sessão e o caminho do plano ao merge, em diagramas: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 - **`orcd`, o daemon em Rust**: dono das sessões (PTY e terminal emulado), dos processos, do estado e dos segredos.
 - **App em Flutter** (`shadcn_flutter`): só cliente, no desktop e no celular.
 - **Transporte via iroh (QUIC P2P)**: só chaves pareadas entram. O relay é opcional e o tráfego é cifrado de ponta a ponta.
