@@ -193,8 +193,9 @@ class DaemonClient extends ChangeNotifier {
   }
 
   /// Brings them in; their secret values go to the Keychain on the daemon.
-  void importMcps(List<String> keys) =>
-      send({'type': 'import_mcps', 'keys': keys});
+  /// Envs they need belong to [workspace] (null: every workspace).
+  void importMcps(List<String> keys, {String? workspace}) =>
+      send({'type': 'import_mcps', 'keys': keys, 'workspace': workspace});
 
   /// Approving adds it to the catalog and restarts that session with it.
   void resolveMcpRequest(String id, bool approve) {

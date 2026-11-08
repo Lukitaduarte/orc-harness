@@ -198,6 +198,7 @@ impl Daemon {
     /// Gives each account's sessions its workspace's external memory MCP
     /// (the harness's own needs nothing: its tools are in `orc`).
     fn sync_memory_providers(&self) {
+        self.sync_env_scope();
         let all = self.sessions.lock().unwrap().account_ids();
         let view = self.workspaces.lock().unwrap().view(&all);
         let catalog = self.catalog.lock().unwrap().list();
@@ -210,6 +211,36 @@ impl Daemon {
             }
         }
         self.sessions.lock().unwrap().set_extra_mcp(extra);
+    }
+
+    /// Tells the session manager which workspace owns each account and env.
+    fn sync_env_scope(&self) {
+        let all = self.sessions.lock().unwrap().account_ids();
+        let accounts: HashMap<String, String> = self
+            .workspaces
+            .lock()
+            .unwrap()
+            .view(&all)
+            .into_iter()
+            .flat_map(|w| w.accounts.into_iter().map(move |a| (a, w.id.clone())))
+            .collect();
+        let mut owners: HashMap<String, Vec<Option<String>>> = HashMap::new();
+        for e in self.catalog.lock().unwrap().list().into_iter().filter(|e| e.kind == "env") {
+            owners.entry(e.name).or_default().push(e.workspace);
+        }
+        self.sessions.lock().unwrap().set_env_scope(accounts, owners);
+    }
+
+    /// After the catalog changed: scopes follow, clients hear.
+    fn catalog_changed(&self) -> DaemonMessage {
+        self.sync_env_scope();
+        self.catalog_message()
+    }
+
+    /// The workspace a session belongs to (through its account).
+    fn session_workspace(&self, session_id: &str) -> Option<String> {
+        let account = self.sessions.lock().unwrap().summary(session_id)?.account_id;
+        self.workspace_of(&account).map(|w| w.id)
     }
 
     fn workspaces_message(&self) -> DaemonMessage {
@@ -448,7 +479,12 @@ impl Daemon {
         let me = self.sessions.lock().unwrap().summary(session_id).ok_or("sessão desconhecida")?;
         match tool {
             "list_sessions" => {
-                let list = self.sessions.lock().unwrap().list();
+                // Only this session's workspace: others are none of its business.
+                let mine = self.session_workspace(&me.id);
+                // Copied out first: workspace_of takes the sessions lock too.
+                let all = self.sessions.lock().unwrap().list();
+                let list: Vec<_> =
+                    all.into_iter().filter(|s| s.id == me.id || self.workspace_of(&s.account_id).map(|w| w.id) == mine).collect();
                 Ok(list
                     .iter()
                     .map(|s| {
@@ -467,7 +503,9 @@ impl Daemon {
             "send_message" => {
                 let to = arg("to").ok_or("falta `to`")?;
                 let body = arg("body").ok_or("falta `body`")?;
-                if self.sessions.lock().unwrap().summary(&to).is_none() {
+                // Sessions of another workspace look like they do not exist.
+                let exists = self.sessions.lock().unwrap().summary(&to).is_some();
+                if !exists || self.session_workspace(&to) != self.session_workspace(&me.id) {
                     return Err(format!("sessão {to} não existe; veja list_sessions"));
                 }
                 self.deliver(&me.id, &to, &body);
@@ -535,8 +573,14 @@ impl Daemon {
                 // The session cannot start with an env that has no value:
                 // values first, then the server.
                 let secrets = self.sessions.lock().unwrap().secrets.clone();
-                let missing: Vec<String> =
-                    env_refs(&config).into_iter().filter(|n| secrets.get(&crate::secrets::env_key(n)).is_none()).collect();
+                let ws = self.session_workspace(&me.id);
+                let missing: Vec<String> = env_refs(&config)
+                    .into_iter()
+                    .filter(|n| {
+                        let owners = self.catalog.lock().unwrap().env_owners(n);
+                        crate::catalog::env_secret_key(&owners, ws.as_deref(), n).ok().and_then(|k| secrets.get(&k)).is_none()
+                    })
+                    .collect();
                 if !missing.is_empty() {
                     return Err(format!(
                         "antes, peça o valor de {} com request_env_change; depois que o usuário aprovar, peça o MCP de novo",
@@ -596,13 +640,14 @@ impl Daemon {
                 // Names and whether they have a value; values never.
                 let mine = self.sessions.lock().unwrap().profile(&me.id).map(|p| p.env_names.clone()).unwrap_or_default();
                 let secrets = self.sessions.lock().unwrap().secrets.clone();
+                let ws = self.session_workspace(&me.id);
                 let envs: Vec<String> = self
                     .catalog
                     .lock()
                     .unwrap()
                     .entries(&secrets)
                     .into_iter()
-                    .filter(|e| e.kind == "env")
+                    .filter(|e| e.kind == "env" && (e.workspace.is_none() || e.workspace == ws))
                     .map(|e| {
                         format!(
                             "{} · {} · {}{}",
@@ -1203,50 +1248,50 @@ impl Daemon {
             ClientMessage::NewPairingTicket => {
                 return vec![DaemonMessage::Error { message: "use orcd pair".into() }];
             }
-            ClientMessage::SetSecret { name, value } => {
+            ClientMessage::SetSecret { name, value, workspace } => {
                 if !crate::secrets::valid_env_name(&name) {
                     return vec![DaemonMessage::Error { message: format!("nome de env inválido: {name}") }];
                 }
                 let secrets = self.sessions.lock().unwrap().secrets.clone();
-                if let Err(e) = secrets.set(&crate::secrets::env_key(&name), &value) {
+                if let Err(e) = secrets.set(&crate::secrets::env_key_in(workspace.as_deref(), &name), &value) {
                     return error(e);
                 }
                 emit(DaemonMessage::Secret { name, stored: true });
-                emit(self.catalog_message());
+                emit(self.catalog_changed());
             }
-            ClientMessage::DeleteSecret { name } => {
+            ClientMessage::DeleteSecret { name, workspace } => {
                 let secrets = self.sessions.lock().unwrap().secrets.clone();
-                if let Err(e) = secrets.delete(&crate::secrets::env_key(&name)) {
+                if let Err(e) = secrets.delete(&crate::secrets::env_key_in(workspace.as_deref(), &name)) {
                     return error(e);
                 }
                 emit(DaemonMessage::Secret { name, stored: false });
-                emit(self.catalog_message());
+                emit(self.catalog_changed());
             }
             ClientMessage::UpsertCatalog { entry } => {
                 if let Err(e) = self.catalog.lock().unwrap().upsert(entry) {
                     return error(e);
                 }
                 self.sync_memory_providers();
-                emit(self.catalog_message());
+                emit(self.catalog_changed());
             }
             ClientMessage::RemoveCatalog { id } => {
                 if let Err(e) = self.catalog.lock().unwrap().remove(&id) {
                     return error(e);
                 }
                 self.sync_memory_providers();
-                emit(self.catalog_message());
+                emit(self.catalog_changed());
             }
             ClientMessage::UpsertTemplate { template } => {
                 if let Err(e) = self.catalog.lock().unwrap().upsert_template(&template) {
                     return error(e);
                 }
-                emit(self.catalog_message());
+                emit(self.catalog_changed());
             }
             ClientMessage::RemoveTemplate { id } => {
                 if let Err(e) = self.catalog.lock().unwrap().remove_template(&id) {
                     return error(e);
                 }
-                emit(self.catalog_message());
+                emit(self.catalog_changed());
             }
             ClientMessage::TestMcp { id } => {
                 let Some(config) = self.catalog.lock().unwrap().get(&id).and_then(|e| e.mcp.clone()) else {
@@ -1399,11 +1444,16 @@ impl Daemon {
                     return vec![DaemonMessage::Error { message: "pedido de env não encontrado".into() }];
                 };
                 if approve {
+                    // An agent's value belongs to its workspace.
+                    let ws = self.session_workspace(&session);
                     let secrets = self.sessions.lock().unwrap().secrets.clone();
-                    if let Err(e) = secrets.set(&crate::secrets::env_key(&name), &value) {
+                    if let Err(e) = secrets.set(&crate::secrets::env_key_in(ws.as_deref(), &name), &value) {
                         return error(e);
                     }
-                    emit(self.catalog_message());
+                    if let Err(e) = self.catalog.lock().unwrap().ensure_env(&name, ws.as_deref(), "pedida por um agente") {
+                        return error(e);
+                    }
+                    emit(self.catalog_changed());
                 }
                 let verdict = if approve { "aprovou" } else { "recusou" };
                 self.deliver("harness", &session, &format!("O usuário {verdict} gravar {name}."));
@@ -1419,6 +1469,7 @@ impl Daemon {
                     return Vec::new();
                 }
                 let needs = env_refs(&config);
+                let ws = self.session_workspace(&session);
                 {
                     let mut catalog = self.catalog.lock().unwrap();
                     // Same name: the agent's version replaces it.
@@ -1435,28 +1486,32 @@ impl Daemon {
                         path: None,
                         mcp: Some(config.clone()),
                         has_value: false,
+                        workspace: None,
                     };
                     if let Err(e) = catalog.upsert(entry) {
                         return error(e);
                     }
+                    let secrets = self.sessions.lock().unwrap().secrets.clone();
                     for env in &needs {
-                        if !catalog.list().iter().any(|e| e.kind == "env" && &e.name == env) {
-                            let entry = CatalogEntry {
-                                id: format!("env-{env}"),
-                                kind: "env".into(),
-                                name: env.clone(),
-                                description: format!("usada pelo MCP {name}"),
-                                path: None,
-                                mcp: None,
-                                has_value: false,
-                            };
-                            if let Err(e) = catalog.upsert(entry) {
-                                return error(e);
-                            }
+                        // Already there for this workspace or every one.
+                        let owners = catalog.env_owners(env);
+                        if owners.iter().any(|o| o.is_none() || *o == ws) {
+                            continue;
+                        }
+                        // A value already shared (set before the catalog
+                        // listed it) stays shared; otherwise it is this
+                        // workspace's.
+                        let owner = if owners.is_empty() && secrets.get(&crate::secrets::env_key(env)).is_some() {
+                            None
+                        } else {
+                            ws.as_deref()
+                        };
+                        if let Err(e) = catalog.ensure_env(env, owner, &format!("usada pelo MCP {name}")) {
+                            return error(e);
                         }
                     }
                 }
-                emit(self.catalog_message());
+                emit(self.catalog_changed());
                 // On in that session, with the envs it references.
                 {
                     let mut sessions = self.sessions.lock().unwrap();
@@ -1497,7 +1552,7 @@ impl Daemon {
                     let _ = events.send(reply);
                 });
             }
-            ClientMessage::ImportMcps { keys } => {
+            ClientMessage::ImportMcps { keys, workspace } => {
                 let scan = self.scan_imports();
                 let secrets = self.sessions.lock().unwrap().secrets.clone();
                 {
@@ -1522,6 +1577,7 @@ impl Daemon {
                             path: Some(path),
                             mcp: None,
                             has_value: false,
+                            workspace: None,
                         };
                         if let Err(e) = catalog.upsert(entry) {
                             return error(e);
@@ -1530,22 +1586,11 @@ impl Daemon {
                     for f in scan.mcps.iter().filter(|f| keys.contains(&f.key)) {
                         let (config, values) = crate::mcp_import::sanitize(&f.name, &f.config);
                         for (env, value) in &values {
-                            if let Err(e) = secrets.set(&crate::secrets::env_key(env), value) {
+                            if let Err(e) = secrets.set(&crate::secrets::env_key_in(workspace.as_deref(), env), value) {
                                 return error(e);
                             }
-                            if !catalog.list().iter().any(|e| e.kind == "env" && &e.name == env) {
-                                let entry = CatalogEntry {
-                                    id: format!("env-{env}"),
-                                    kind: "env".into(),
-                                    name: env.clone(),
-                                    description: format!("usada pelo MCP {}", f.name),
-                                    path: None,
-                                    mcp: None,
-                                    has_value: false,
-                                };
-                                if let Err(e) = catalog.upsert(entry) {
-                                    return error(e);
-                                }
+                            if let Err(e) = catalog.ensure_env(env, workspace.as_deref(), &format!("usada pelo MCP {}", f.name)) {
+                                return error(e);
                             }
                         }
                         let id = catalog
@@ -1561,13 +1606,14 @@ impl Daemon {
                             path: None,
                             mcp: Some(config),
                             has_value: false,
+                            workspace: None,
                         };
                         if let Err(e) = catalog.upsert(entry) {
                             return error(e);
                         }
                     }
                 }
-                emit(self.catalog_message());
+                emit(self.catalog_changed());
                 return vec![self.mcp_imports()];
             }
             ClientMessage::SavePlan { plan } => {

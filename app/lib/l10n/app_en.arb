@@ -1539,5 +1539,14 @@
   "toolsImportInCatalog": "· already in the catalog",
   "@toolsImportInCatalog": {
     "description": "Import dialog"
+  },
+  "toolsEnvOnlyHere": "Only in {workspace}: its own value, and other workspaces' sessions can't use it",
+  "@toolsEnvOnlyHere": {
+    "description": "Add env form: scope",
+    "placeholders": {
+      "workspace": {
+        "type": "String"
+      }
+    }
   }
 }

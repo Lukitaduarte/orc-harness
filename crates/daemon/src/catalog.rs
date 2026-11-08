@@ -11,7 +11,7 @@ use std::time::Duration;
 use orc_protocol::{CatalogEntry, PlanTemplateFile};
 use serde_json::{Value, json};
 
-use crate::secrets::{SecretStore, env_key, valid_env_name};
+use crate::secrets::{SecretStore, env_key, env_key_in, valid_env_name};
 
 /// Templates installed on first run; afterwards the files are the user's.
 const DEFAULT_TEMPLATES: [(&str, &str); 4] = [
@@ -51,7 +51,7 @@ impl Catalog {
             .cloned()
             .map(|mut e| {
                 if e.kind == "env" {
-                    e.has_value = secrets.get(&env_key(&e.name)).is_some();
+                    e.has_value = secrets.get(&env_key_in(e.workspace.as_deref(), &e.name)).is_some();
                 }
                 e
             })
@@ -89,6 +89,9 @@ impl Catalog {
                 if !valid_env_name(&entry.name) {
                     return Err(std::io::Error::other(format!("nome de env inválido: {}", entry.name)));
                 }
+                if entry.workspace.as_deref().is_some_and(|w| w.is_empty() || w.contains('/')) {
+                    return Err(std::io::Error::other("workspace inválido"));
+                }
                 // Never persisted here, whatever a client sends.
                 entry.path = None;
                 entry.mcp = None;
@@ -101,6 +104,33 @@ impl Catalog {
             None => self.entries.push(entry),
         }
         self.save()
+    }
+
+    /// Who has an env: `Some(workspace)` for its own value, None for every
+    /// workspace. Empty when the catalog does not list it.
+    pub fn env_owners(&self, name: &str) -> Vec<Option<String>> {
+        self.entries.iter().filter(|e| e.kind == "env" && e.name == name).map(|e| e.workspace.clone()).collect()
+    }
+
+    /// Lists an env for a workspace (or for every one) if it is not there
+    /// yet.
+    pub fn ensure_env(&mut self, name: &str, workspace: Option<&str>, description: &str) -> std::io::Result<()> {
+        if self.env_owners(name).iter().any(|w| w.as_deref() == workspace) {
+            return Ok(());
+        }
+        self.upsert(CatalogEntry {
+            id: match workspace {
+                Some(w) => format!("env-{w}-{name}"),
+                None => format!("env-{name}"),
+            },
+            kind: "env".into(),
+            name: name.into(),
+            description: description.into(),
+            path: None,
+            mcp: None,
+            has_value: false,
+            workspace: workspace.map(String::from),
+        })
     }
 
     pub fn remove(&mut self, id: &str) -> std::io::Result<()> {
@@ -224,6 +254,25 @@ pub fn test_mcp(config: &Value, env: &[(String, String)], timeout: Duration) -> 
     result
 }
 
+/// The Keychain entry a session of `workspace` reads for an env: its
+/// workspace's own value, else the one for every workspace. An env only
+/// other workspaces have is refused. `owners` empty (not in the catalog):
+/// the shared one.
+pub fn env_secret_key(owners: &[Option<String>], workspace: Option<&str>, name: &str) -> Result<String, String> {
+    if owners.is_empty() {
+        return Ok(env_key(name));
+    }
+    if let Some(w) = workspace
+        && owners.iter().any(|o| o.as_deref() == Some(w))
+    {
+        return Ok(env_key_in(Some(w), name));
+    }
+    if owners.iter().any(Option::is_none) {
+        return Ok(env_key(name));
+    }
+    Err(format!("{name} é de outro workspace; esta sessão não pode usá-la"))
+}
+
 /// Env values for an MCP from the Keychain, by the names it declares in
 /// `env_names` (values are never stored in the catalog).
 pub fn mcp_env(config: &Value, secrets: &SecretStore) -> Vec<(String, String)> {
@@ -241,6 +290,16 @@ pub fn mcp_env(config: &Value, secrets: &SecretStore) -> Vec<(String, String)> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_workspace_env_beats_the_shared_one_and_stays_home() {
+        let shared_and_casa = [None, Some("casa".to_string())];
+        assert_eq!(env_secret_key(&shared_and_casa, Some("casa"), "T").unwrap(), "env/@casa/T");
+        assert_eq!(env_secret_key(&shared_and_casa, Some("trabalho"), "T").unwrap(), "env/T");
+        assert!(env_secret_key(&[Some("casa".to_string())], Some("trabalho"), "T").is_err());
+        assert!(env_secret_key(&[Some("casa".to_string())], None, "T").is_err());
+        assert_eq!(env_secret_key(&[], Some("x"), "T").unwrap(), "env/T", "not in the catalog: the shared one");
+    }
+
     fn entry(kind: &str, name: &str) -> CatalogEntry {
         CatalogEntry {
             id: name.into(),
@@ -250,6 +309,7 @@ mod tests {
             path: None,
             mcp: None,
             has_value: false,
+            workspace: None,
         }
     }
 

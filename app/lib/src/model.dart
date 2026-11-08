@@ -9,12 +9,17 @@ class CatalogItem {
     this.name,
     this.description, {
     this.detail = '',
+    this.workspaceId,
   });
 
   final String id;
   final CatalogKind kind;
   final String name;
   final String description;
+
+  /// Env: the workspace it belongs to (with its own value); null for every
+  /// workspace.
+  final String? workspaceId;
 
   /// MCP: command or URL. Env: where the value lives (never the value).
   final String detail;

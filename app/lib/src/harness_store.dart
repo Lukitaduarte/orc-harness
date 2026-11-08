@@ -611,9 +611,12 @@ class HarnessStore extends ChangeNotifier {
     daemon?.browser(workspaceId, {'action': 'open', 'url': null});
   }
 
-  /// The catalog plus, live, this workspace's browser for the agent.
+  /// The catalog plus, live, this workspace's browser for the agent. Envs
+  /// of other workspaces are not offered (the daemon refuses them too).
   List<CatalogItem> get profileItems => [
-    ...catalog,
+    ...catalog.where(
+      (i) => i.workspaceId == null || i.workspaceId == workspaceId,
+    ),
     if (isLive)
       const CatalogItem(
         workspaceBrowserItem,
@@ -637,6 +640,7 @@ class HarnessStore extends ChangeNotifier {
         },
         e['name'] as String,
         e['description'] as String? ?? '',
+        workspaceId: e['workspace'] as String?,
         detail: switch (e['kind']) {
           'skill' => e['path'] as String? ?? '',
           'mcp' => _mcpText(e['mcp']),
@@ -858,6 +862,7 @@ class HarnessStore extends ChangeNotifier {
     String description,
     String detail, {
     String? secretValue,
+    bool onlyThisWorkspace = false,
   }) {
     if (isLive) {
       final kindName = switch (kind) {
@@ -865,11 +870,16 @@ class HarnessStore extends ChangeNotifier {
         CatalogKind.mcp => 'mcp',
         CatalogKind.env => 'env',
       };
+      // An env of this workspace only: its own value, its sessions only.
+      final owner = kind == CatalogKind.env && onlyThisWorkspace
+          ? workspaceId
+          : null;
+      final slug = foldAccents(name).replaceAll(RegExp(r'[^a-z0-9]+'), '-');
       daemon!.send({
         'type': 'upsert_catalog',
         'entry': {
-          'id':
-              '$kindName-${foldAccents(name).replaceAll(RegExp(r'[^a-z0-9]+'), '-')}',
+          'id': owner == null ? '$kindName-$slug' : '$kindName-$owner-$slug',
+          'workspace': owner,
           'kind': kindName,
           'name': name,
           'description': description,
@@ -886,6 +896,7 @@ class HarnessStore extends ChangeNotifier {
           'type': 'set_secret',
           'name': name,
           'value': secretValue,
+          'workspace': owner,
         });
       }
       return;
@@ -900,7 +911,11 @@ class HarnessStore extends ChangeNotifier {
     if (isLive) {
       daemon!.send({'type': 'remove_catalog', 'id': item.id});
       if (item.kind == CatalogKind.env) {
-        daemon!.send({'type': 'delete_secret', 'name': item.name});
+        daemon!.send({
+          'type': 'delete_secret',
+          'name': item.name,
+          'workspace': item.workspaceId,
+        });
       }
     } else {
       _mockCatalog.remove(item);

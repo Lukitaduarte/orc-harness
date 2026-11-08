@@ -102,6 +102,15 @@ pub fn env_key(name: &str) -> String {
     format!("env/{name}")
 }
 
+/// An env's Keychain entry: a workspace's own value, or the one for every
+/// workspace.
+pub fn env_key_in(workspace: Option<&str>, name: &str) -> String {
+    match workspace {
+        Some(w) => format!("env/@{w}/{name}"),
+        None => env_key(name),
+    }
+}
+
 /// Env names must be shell-safe identifiers; anything else is refused
 /// before it reaches the Keychain or a process environment.
 pub fn valid_env_name(name: &str) -> bool {

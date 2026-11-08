@@ -1793,4 +1793,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get toolsImportInCatalog => '· ya está en el catálogo';
+
+  @override
+  String toolsEnvOnlyHere(String workspace) {
+    return 'Solo en $workspace: valor propio, y las sesiones de otros workspaces no pueden usarla';
+  }
 }

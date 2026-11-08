@@ -17,8 +17,11 @@ use std::path::{Path, PathBuf};
 use orc_protocol::{Profile, SessionState, SessionSummary};
 use serde_json::json;
 
-use crate::secrets::{SecretStore, env_key, valid_env_name};
+use crate::secrets::{SecretStore, valid_env_name};
 use crate::session::{Session, SessionSpec};
+
+/// Env name → its owners (`Some(workspace)`, or None for every workspace).
+pub type EnvOwners = HashMap<String, Vec<Option<String>>>;
 
 #[derive(Debug, Clone)]
 pub struct Account {
@@ -93,6 +96,8 @@ pub struct SessionManager {
     /// MCP servers every session of an account gets (its workspace's
     /// memory provider), set by the daemon.
     extra_mcp: HashMap<String, BTreeMap<String, serde_json::Value>>,
+    /// (account → workspace, env name → owners), see `set_env_scope`.
+    env_scope: (HashMap<String, String>, EnvOwners),
     sessions: BTreeMap<String, Managed>,
     next: u32,
 }
@@ -113,6 +118,7 @@ impl SessionManager {
             secrets,
             accounts: accounts.into_iter().map(|a| (a.id.clone(), a)).collect(),
             extra_mcp: HashMap::new(),
+            env_scope: Default::default(),
             sessions: BTreeMap::new(),
             next: 0,
         }
@@ -121,6 +127,13 @@ impl SessionManager {
     /// Servers added to new and restarted sessions of each account.
     pub fn set_extra_mcp(&mut self, extra: HashMap<String, BTreeMap<String, serde_json::Value>>) {
         self.extra_mcp = extra;
+    }
+
+    /// Which workspace each account is in, and who has each env (see
+    /// catalog::env_secret_key): a session gets its workspace's values and
+    /// cannot start with another workspace's env.
+    pub fn set_env_scope(&mut self, accounts: HashMap<String, String>, owners: EnvOwners) {
+        self.env_scope = (accounts, owners);
     }
 
     /// Ends the account's sessions and forgets it.
@@ -472,7 +485,10 @@ impl SessionManager {
             if !valid_env_name(name) {
                 return Err(std::io::Error::other(format!("nome de env inválido: {name}")));
             }
-            let value = self.secrets.get(&env_key(name)).ok_or_else(|| {
+            let owners = self.env_scope.1.get(name).cloned().unwrap_or_default();
+            let workspace = self.env_scope.0.get(&account.id).map(String::as_str);
+            let key = crate::catalog::env_secret_key(&owners, workspace, name).map_err(std::io::Error::other)?;
+            let value = self.secrets.get(&key).ok_or_else(|| {
                 std::io::Error::other(format!("{name} não tem valor no Keychain do daemon"))
             })?;
             env.insert(name.clone(), value);

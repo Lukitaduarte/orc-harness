@@ -324,6 +324,10 @@ pub struct CatalogEntry {
     /// Env: whether the Keychain has a value. Filled by the daemon.
     #[serde(default)]
     pub has_value: bool,
+    /// Env: the workspace it belongs to, with its own value; only that
+    /// workspace's sessions can turn it on. None: every workspace.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
 }
 
 /// An MCP server or skill found on this Mac, offered for the catalog.
@@ -587,8 +591,18 @@ pub enum ClientMessage {
     NewPairingTicket,
     /// Stores an env value in the daemon's Keychain. The value is never
     /// sent back to any client.
-    SetSecret { name: String, value: String },
-    DeleteSecret { name: String },
+    SetSecret {
+        name: String,
+        value: String,
+        /// The workspace's own value; None for every workspace.
+        #[serde(default)]
+        workspace: Option<String>,
+    },
+    DeleteSecret {
+        name: String,
+        #[serde(default)]
+        workspace: Option<String>,
+    },
     UpsertCatalog { entry: CatalogEntry },
     RemoveCatalog { id: String },
     /// Starts the MCP and lists its tools, to check it works.
@@ -640,7 +654,12 @@ pub enum ClientMessage {
     /// The account's claude.ai connectors (slow: Claude Code checks each).
     ListConnectors { account_id: String },
     /// Brings those (by key) into the catalog; secrets go to the Keychain.
-    ImportMcps { keys: Vec<String> },
+    ImportMcps {
+        keys: Vec<String>,
+        /// Envs created for them belong to this workspace (None: every one).
+        #[serde(default)]
+        workspace: Option<String>,
+    },
     /// Saves a plan (new or updated) with its review state.
     SavePlan { plan: PlanDoc },
     /// Deletes a plan. A plan running cards is refused unless `force`,

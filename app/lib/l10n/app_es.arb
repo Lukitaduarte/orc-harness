@@ -497,5 +497,6 @@
   "devEmulatorHome": "Inicio",
   "devEmulatorSwitch": "Otro dispositivo",
   "toolsImportSearch": "Buscar por nombre u origen",
-  "toolsImportInCatalog": "· ya está en el catálogo"
+  "toolsImportInCatalog": "· ya está en el catálogo",
+  "toolsEnvOnlyHere": "Solo en {workspace}: valor propio, y las sesiones de otros workspaces no pueden usarla"
 }

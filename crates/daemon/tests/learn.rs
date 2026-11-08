@@ -60,6 +60,7 @@ fn comments_become_accepted_skill_edits() {
             path: Some(skill.display().to_string()),
             mcp: None,
             has_value: false,
+            workspace: None,
         },
     });
     daemon.handle(ClientMessage::AddProject { name: "Web".into(), repo: repo.display().to_string(), base_branch: "main".into(), workspace_id: None });

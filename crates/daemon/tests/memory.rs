@@ -83,6 +83,7 @@ fn a_workspace_remembers_across_sessions() {
             path: None,
             mcp: Some(json!({ "command": "npx", "args": ["-y", "mem0-mcp"] })),
             has_value: false,
+            workspace: None,
         },
     });
     daemon.handle(ClientMessage::UpsertWorkspace { workspace: ws("trabalho", &["w"], Some("mcp-mem0")) });

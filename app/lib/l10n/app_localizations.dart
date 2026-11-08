@@ -3093,6 +3093,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'· already in the catalog'**
   String get toolsImportInCatalog;
+
+  /// Add env form: scope
+  ///
+  /// In en, this message translates to:
+  /// **'Only in {workspace}: its own value, and other workspaces\' sessions can\'t use it'**
+  String toolsEnvOnlyHere(String workspace);
 }
 
 class _AppLocalizationsDelegate

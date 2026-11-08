@@ -32,7 +32,11 @@ class CatalogView extends StatelessWidget {
             if (store.isLive) ...[
               OutlineButton(
                 leading: const Icon(LucideIcons.download, size: 14),
-                onPressed: () => _showImportDialog(context, store.daemon!),
+                onPressed: () => _showImportDialog(
+                  context,
+                  store.daemon!,
+                  store.workspaceId,
+                ),
                 child: Text(context.l10n.toolsImportMcps),
               ),
               const Gap(8),
@@ -150,8 +154,25 @@ class _ItemRow extends StatelessWidget {
                   Row(
                     children: [
                       Text(item.name).small().semiBold(),
+                      if (item.workspaceId != null) ...[
+                        const Gap(6),
+                        SecondaryBadge(
+                          child: Text(
+                            store.workspaces
+                                    .where((w) => w.id == item.workspaceId)
+                                    .map((w) => w.name)
+                                    .firstOrNull ??
+                                item.workspaceId!,
+                          ),
+                        ),
+                      ],
                       const Gap(8),
-                      Text(item.description).xSmall().muted(),
+                      Flexible(
+                        child: Text(
+                          item.description,
+                          overflow: TextOverflow.ellipsis,
+                        ).xSmall().muted(),
+                      ),
                     ],
                   ),
                   if (item.detail.isNotEmpty) ...[
@@ -221,7 +242,11 @@ class _ItemRow extends StatelessWidget {
   }
 }
 
-Future<void> _showImportDialog(BuildContext context, DaemonClient daemon) {
+Future<void> _showImportDialog(
+  BuildContext context,
+  DaemonClient daemon,
+  String workspace,
+) {
   daemon.scanMcpImports();
   return showOverlay<void>(
     context,
@@ -235,7 +260,7 @@ Future<void> _showImportDialog(BuildContext context, DaemonClient daemon) {
             child: OutlinedContainer(
               backgroundColor: theme.colorScheme.popover,
               padding: const EdgeInsets.all(20),
-              child: McpImportForm(daemon),
+              child: McpImportForm(daemon, workspace: workspace),
             ),
           ),
         );
@@ -249,9 +274,12 @@ Future<void> _showImportDialog(BuildContext context, DaemonClient daemon) {
 /// they were found, with a search. Secret values never come here: the
 /// daemon moves them to the Keychain and shows only their names.
 class McpImportForm extends StatefulWidget {
-  const McpImportForm(this.daemon, {super.key});
+  const McpImportForm(this.daemon, {super.key, this.workspace});
 
   final DaemonClient daemon;
+
+  /// Envs the imported servers need belong to it.
+  final String? workspace;
 
   @override
   State<McpImportForm> createState() => _McpImportFormState();
@@ -347,7 +375,10 @@ class _McpImportFormState extends State<McpImportForm> {
                   onPressed: picked == null || picked.isEmpty
                       ? null
                       : () {
-                          widget.daemon.importMcps(picked.toList());
+                          widget.daemon.importMcps(
+                            picked.toList(),
+                            workspace: widget.workspace,
+                          );
                           closeOverlay(context);
                         },
                   child: Text(l10n.toolsImportCount(picked?.length ?? 0)),
@@ -526,6 +557,9 @@ class _AddItemFormState extends State<_AddItemForm> {
   final _description = TextEditingController();
   final _detail = TextEditingController();
 
+  /// An env only for the workspace you are in (its own value).
+  bool _onlyHere = true;
+
   @override
   void initState() {
     super.initState();
@@ -555,6 +589,7 @@ class _AddItemFormState extends State<_AddItemForm> {
       _description.text.trim(),
       detail,
       secretValue: isEnv ? _detail.text : null,
+      onlyThisWorkspace: isEnv && _onlyHere,
     );
     _detail.clear();
     closeOverlay(context);
@@ -603,6 +638,19 @@ class _AddItemFormState extends State<_AddItemForm> {
         Text(detailLabel).small().medium(),
         const Gap(6),
         TextField(controller: _detail, obscureText: _kind == CatalogKind.env),
+        if (_kind == CatalogKind.env && widget.store.isLive) ...[
+          const Gap(12),
+          Checkbox(
+            state: _onlyHere ? CheckboxState.checked : CheckboxState.unchecked,
+            onChanged: (v) =>
+                setState(() => _onlyHere = v == CheckboxState.checked),
+            trailing: Expanded(
+              child: Text(
+                context.l10n.toolsEnvOnlyHere(widget.store.workspace.name),
+              ).small(),
+            ),
+          ),
+        ],
         const Gap(20),
         Row(
           mainAxisAlignment: MainAxisAlignment.end,

@@ -160,7 +160,11 @@ async fn sessions_talk_delegate_and_ask_for_envs() {
     assert_eq!(secrets.get("env/API_TOKEN"), None);
     // From the app (paired client path): approved and stored.
     daemon.handle(ClientMessage::ResolveEnvRequest { id, approve: true });
-    assert_eq!(secrets.get("env/API_TOKEN").as_deref(), Some("s3cret"));
+    // Stored for the session's workspace, and listed for it.
+    let listed = daemon.catalog.lock().unwrap().list().into_iter().find(|e| e.name == "API_TOKEN").unwrap();
+    let ws = listed.workspace.clone().expect("the session's workspace");
+    assert_eq!(secrets.get(&format!("env/@{ws}/API_TOKEN")).as_deref(), Some("s3cret"));
+    assert_eq!(secrets.get("env/API_TOKEN"), None);
     let sock = socket.clone();
     let r = tokio::task::spawn_blocking(move || mcp(&sock, &s1, &[call(1, "read_inbox", json!({}))]))
         .await
@@ -169,15 +173,7 @@ async fn sessions_talk_delegate_and_ask_for_envs() {
 
     // The agent sees the env names and state, never the value.
     daemon.handle(ClientMessage::UpsertCatalog {
-        entry: orc_protocol::CatalogEntry {
-            id: "env-API_TOKEN".into(),
-            kind: "env".into(),
-            name: "API_TOKEN".into(),
-            description: "token da API".into(),
-            path: None,
-            mcp: None,
-            has_value: false,
-        },
+        entry: orc_protocol::CatalogEntry { description: "token da API".into(), ..listed },
     });
     let sock = socket.clone();
     let s1c = daemon.sessions.lock().unwrap().list()[0].id.clone();
