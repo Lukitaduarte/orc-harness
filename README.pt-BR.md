@@ -37,6 +37,7 @@ Um harness para o Claude Code. Roda várias sessões em paralelo, em várias con
 - **Learn**: os comentários nos cards viram propostas de edição nas skills, aplicadas só com o seu OK.
 - **Memória por workspace**: a do harness ou um MCP de memória do catálogo (mem0, basic-memory…).
 - **Navegador por workspace**: Chrome headless com perfil próprio, onde ficam cookies e logins. Ele aparece num pane e os agentes o usam pelo Playwright MCP.
+- **Emuladores e simuladores**: simuladores iOS e emuladores Android rodam sem janela e aparecem num pane, onde você toca, arrasta e digita (o iOS precisa do [AXe](https://github.com/cameroncooke/AXe): `brew install cameroncooke/axe/axe`). O ícone na barra acende enquanto um agente usa um deles.
 - **IDE**:
   - árvore e abas, autocomplete, erros, ir para definição, informação do símbolo e formatação, pelo servidor de linguagem (Dart, TypeScript, Kotlin, Swift);
   - abrir no Xcode, Android Studio ou Zed;

@@ -34,6 +34,7 @@ English · [Português](README.pt-BR.md)
 - **Learn**: comments on cards become proposed edits to your skills, applied only with your OK.
 - **Memory per workspace**: the harness's own, or a memory MCP from the catalog (mem0, basic-memory…).
 - **Browser per workspace**: headless Chrome with its own profile (cookies and logins persist), shown in a pane and driven by agents through Playwright MCP. The toolbar shows when an agent is using it.
+- **Emulators and simulators**: iOS simulators and Android emulators run without a window and show in a pane, where you tap, swipe and type (iOS needs [AXe](https://github.com/cameroncooke/AXe): `brew install cameroncooke/axe/axe`). The toolbar lights up while an agent drives one.
 - **IDE**: file tree and tabs, completion, diagnostics, go to definition, hover and formatting through language servers (Dart, TypeScript, Kotlin, Swift); diff against base, commit, push and merge; open in Xcode, Android Studio or Zed.
 - **Analytics**: tokens and cost straight from Claude Code (OpenTelemetry) by day, account, model, plan and branch; cache hit rate; monthly budgets per workspace.
 - **Phone**: the same app, with quotas on top, sessions with a typing bar, and plan review and approval. Pair by scanning a QR code.
