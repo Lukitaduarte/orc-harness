@@ -4,6 +4,7 @@ pub mod browser;
 pub mod catalog;
 pub mod cdp_proxy;
 pub mod db;
+pub mod devices;
 pub mod config;
 pub mod connectors;
 pub mod gates;

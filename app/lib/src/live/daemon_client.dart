@@ -108,6 +108,27 @@ class LiveBrowser extends ChangeNotifier {
   int height = 0;
 }
 
+/// An Android emulator or iOS simulator the daemon can run in a pane.
+class LiveEmulator extends ChangeNotifier {
+  LiveEmulator(this.id);
+
+  /// `ios:<udid>` or `android:<avd>`.
+  final String id;
+  String platform = '';
+  String name = '';
+
+  /// `off`, `booting` or `on`.
+  String state = 'off';
+
+  /// The session whose agent is driving it now, if any.
+  String? usedBy;
+
+  /// Last screen (PNG or JPEG) and its size in pixels.
+  Uint8List? frame;
+  int width = 0;
+  int height = 0;
+}
+
 /// The app's connection to orcd: pairing, connecting (with retry), and the
 /// live state it reports. Notifies on session, account and quota changes.
 class DaemonClient extends ChangeNotifier {
@@ -375,6 +396,25 @@ class DaemonClient extends ChangeNotifier {
 
   /// Workspace browsers by profile.
   final browsers = <String, LiveBrowser>{};
+
+  /// Emulators and simulators, by id (filled by [listEmulators]).
+  final emulators = <String, LiveEmulator>{};
+
+  /// Whether the daemon answered [listEmulators] yet.
+  bool emulatorsListed = false;
+
+  LiveEmulator emulatorOf(String id) =>
+      emulators.putIfAbsent(id, () => LiveEmulator(id));
+
+  void listEmulators() => send({'type': 'list_emulators'});
+
+  /// [action] is orc_protocol::EmulatorAction JSON (`{'type': 'tap', …}`).
+  void emulator(String id, Map<String, Object?> action) =>
+      send({'type': 'emulator', 'id': id, 'action': action});
+
+  /// The session driving any emulator now, if one is.
+  String? get emulatorUsedBy =>
+      emulators.values.map((e) => e.usedBy).nonNulls.firstOrNull;
 
   LiveBrowser browserOf(String profile) =>
       browsers.putIfAbsent(profile, LiveBrowser.new);
@@ -818,6 +858,27 @@ class DaemonClient extends ChangeNotifier {
         browserOf(m['profile'] as String)
           ..open = m['open'] as bool
           ..url = m['url'] as String
+          ..notifyListeners();
+        notifyListeners();
+      case 'emulators':
+        emulatorsListed = true;
+        for (final e in (m['emulators'] as List).cast<Map<String, dynamic>>()) {
+          emulatorOf(e['id'] as String)
+            ..platform = e['platform'] as String
+            ..name = e['name'] as String
+            ..state = e['state'] as String
+            ..notifyListeners();
+        }
+        notifyListeners();
+      case 'emulator_frame':
+        emulatorOf(m['id'] as String)
+          ..frame = base64Decode(m['image'] as String)
+          ..width = m['width'] as int
+          ..height = m['height'] as int
+          ..notifyListeners();
+      case 'emulator_use':
+        emulatorOf(m['id'] as String)
+          ..usedBy = m['session_id'] as String?
           ..notifyListeners();
         notifyListeners();
       case 'browser_use':

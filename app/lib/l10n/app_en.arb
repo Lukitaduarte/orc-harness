@@ -1491,5 +1491,45 @@
   "shellConnectorFailed": "Didn't answer the last check",
   "@shellConnectorFailed": {
     "description": "Connector status"
+  },
+  "shellEmulators": "Emulators and simulators",
+  "@shellEmulators": {
+    "description": "Toolbar tool and pane title"
+  },
+  "devEmulatorPick": "Pick a device. It runs here, without its own window.",
+  "@devEmulatorPick": {
+    "description": "Emulator pane: device list hint"
+  },
+  "devEmulatorNone": "No emulators or simulators found. Install Xcode (iOS) or Android Studio with an AVD.",
+  "@devEmulatorNone": {
+    "description": "Emulator pane: nothing found"
+  },
+  "devEmulatorOn": "on",
+  "@devEmulatorOn": {
+    "description": "Device state"
+  },
+  "devEmulatorOff": "off",
+  "@devEmulatorOff": {
+    "description": "Device state"
+  },
+  "devEmulatorBooting": "turning on…",
+  "@devEmulatorBooting": {
+    "description": "Device state"
+  },
+  "devEmulatorBoot": "Turn on",
+  "@devEmulatorBoot": {
+    "description": "Button"
+  },
+  "devEmulatorShutdown": "Turn off",
+  "@devEmulatorShutdown": {
+    "description": "Button"
+  },
+  "devEmulatorHome": "Home",
+  "@devEmulatorHome": {
+    "description": "Device home button"
+  },
+  "devEmulatorSwitch": "Other device",
+  "@devEmulatorSwitch": {
+    "description": "Back to the device list"
   }
 }

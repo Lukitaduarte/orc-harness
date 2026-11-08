@@ -223,6 +223,14 @@ class _Toolbar extends StatelessWidget {
             label: store.daemon!.sessionLabel,
             onPressed: () => store.openBrowser(store.focusedLeafId),
           ),
+        if (store.isLive && store.daemon != null)
+          _ToolIcon(
+            icon: LucideIcons.smartphone,
+            name: context.l10n.shellEmulators,
+            usedBy: store.daemon!.emulatorUsedBy,
+            label: store.daemon!.sessionLabel,
+            onPressed: () => store.openEmulator(store.focusedLeafId),
+          ),
         // The session's profile (skills, MCPs, envs): only with a session.
         if (store.focusedSession != null)
           GhostButton(

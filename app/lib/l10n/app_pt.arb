@@ -485,5 +485,15 @@
   "shellConnectorsLoading": "Perguntando ao Claude Code (ele testa cada um)…",
   "shellConnectorsNone": "Nenhum conector nesta conta (ou ela entrou com chave de API).",
   "shellConnectorNeedsAuth": "Não conectado: conecte no claude.ai",
-  "shellConnectorFailed": "Não respondeu no último teste"
+  "shellConnectorFailed": "Não respondeu no último teste",
+  "shellEmulators": "Emuladores e simuladores",
+  "devEmulatorPick": "Escolha um dispositivo. Ele roda aqui, sem janela própria.",
+  "devEmulatorNone": "Nenhum emulador ou simulador encontrado. Instale o Xcode (iOS) ou o Android Studio com um AVD.",
+  "devEmulatorOn": "ligado",
+  "devEmulatorOff": "desligado",
+  "devEmulatorBooting": "ligando…",
+  "devEmulatorBoot": "Ligar",
+  "devEmulatorShutdown": "Desligar",
+  "devEmulatorHome": "Início",
+  "devEmulatorSwitch": "Outro dispositivo"
 }

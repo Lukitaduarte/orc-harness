@@ -1745,4 +1745,36 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get shellConnectorFailed => 'Não respondeu no último teste';
+
+  @override
+  String get shellEmulators => 'Emuladores e simuladores';
+
+  @override
+  String get devEmulatorPick =>
+      'Escolha um dispositivo. Ele roda aqui, sem janela própria.';
+
+  @override
+  String get devEmulatorNone =>
+      'Nenhum emulador ou simulador encontrado. Instale o Xcode (iOS) ou o Android Studio com um AVD.';
+
+  @override
+  String get devEmulatorOn => 'ligado';
+
+  @override
+  String get devEmulatorOff => 'desligado';
+
+  @override
+  String get devEmulatorBooting => 'ligando…';
+
+  @override
+  String get devEmulatorBoot => 'Ligar';
+
+  @override
+  String get devEmulatorShutdown => 'Desligar';
+
+  @override
+  String get devEmulatorHome => 'Início';
+
+  @override
+  String get devEmulatorSwitch => 'Outro dispositivo';
 }

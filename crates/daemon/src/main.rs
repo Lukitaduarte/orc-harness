@@ -116,6 +116,7 @@ fn main() -> std::io::Result<()> {
                 let cdp = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
                 let _ = daemon.cdp_proxy_port.set(cdp.local_addr()?.port());
                 tokio::spawn(orc_daemon::cdp_proxy::serve(cdp, daemon.clone()));
+                tokio::spawn(daemon.devices.clone().report_use(daemon.events.clone()));
                 // Cards move with their PRs on GitHub.
                 tokio::spawn(daemon.clone().watch_plans(Duration::from_secs(60)));
                 daemon.serve(socket).await

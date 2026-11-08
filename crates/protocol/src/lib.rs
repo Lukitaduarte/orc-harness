@@ -275,6 +275,35 @@ pub enum BrowserAction {
     Close,
 }
 
+/// An emulator or simulator that can open in a pane.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EmulatorInfo {
+    /// `ios:<udid>` or `android:<avd>`.
+    pub id: String,
+    /// `ios` or `android`.
+    pub platform: String,
+    pub name: String,
+    /// `off`, `booting` or `on`.
+    pub state: String,
+}
+
+/// What you do to a device in its pane. Positions are fractions of the
+/// screen (0 to 1), whatever its size.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum EmulatorAction {
+    Boot,
+    Shutdown,
+    /// Start or stop sending its screen.
+    Watch,
+    Unwatch,
+    Tap { x: f64, y: f64 },
+    Swipe { x1: f64, y1: f64, x2: f64, y2: f64 },
+    Text { text: String },
+    /// `home`, `back` (Android), `enter`, `backspace`, `lock`, `recents`.
+    Key { key: String },
+}
+
 /// One item of the global catalog, configured once, enabled per session.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CatalogEntry {
@@ -620,6 +649,9 @@ pub enum ClientMessage {
     /// Code's folder trust question once for all worktrees.
     TrustWorktrees { account_id: String },
     Browser { profile: String, action: BrowserAction },
+    /// Lists the emulators and simulators.
+    ListEmulators,
+    Emulator { id: String, action: EmulatorAction },
     /// IDE: files under the session's folder; paths are relative to it.
     ListDir { session_id: String, path: String },
     ReadFile { session_id: String, path: String },
@@ -716,6 +748,11 @@ pub enum DaemonMessage {
     /// A screen of a workspace browser: JPEG in base64, page size in CSS
     /// pixels.
     BrowserFrame { profile: String, jpeg: String, width: u32, height: u32 },
+    Emulators { emulators: Vec<EmulatorInfo> },
+    /// An emulator's screen (PNG or JPEG, base64) and its size in pixels.
+    EmulatorFrame { id: String, image: String, width: u32, height: u32 },
+    /// An agent started (session) or stopped (none) driving an emulator.
+    EmulatorUse { id: String, session_id: Option<String> },
     /// Where each loop of a running plan is.
     PlanRun { plan_id: String, cards: Vec<CardRun> },
     /// Reply to an `McpCall`: text for the agent.

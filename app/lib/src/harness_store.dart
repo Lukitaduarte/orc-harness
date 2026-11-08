@@ -483,6 +483,7 @@ class HarnessStore extends ChangeNotifier {
       n.sessionId == null ||
               ids.contains(n.sessionId) ||
               isBrowserPane(n.sessionId) ||
+              isEmulatorPane(n.sessionId) ||
               (isCodePane(n.sessionId) &&
                   ids.contains(n.sessionId!.substring(codePrefix.length)))
           ? n
@@ -579,6 +580,19 @@ class HarnessStore extends ChangeNotifier {
 
   static bool isBrowserPane(String? id) =>
       id?.startsWith(browserPrefix) ?? false;
+
+  /// Pane ids that show an emulator or simulator (`emulator:` alone is the
+  /// device list).
+  static const emulatorPrefix = 'emulator:';
+
+  static bool isEmulatorPane(String? id) =>
+      id?.startsWith(emulatorPrefix) ?? false;
+
+  /// Shows the device list in [leafId]; picking one shows it there.
+  void openEmulator(String leafId, [String device = '']) {
+    attach(leafId, '$emulatorPrefix$device');
+    daemon?.listEmulators();
+  }
 
   /// Pane ids that show the IDE on a session's folder.
   static const codePrefix = 'code:';
@@ -699,7 +713,10 @@ class HarnessStore extends ChangeNotifier {
   Session? get focusedSession {
     final leaf = _findLeaf(layout, focusedLeafId);
     final id = leaf?.sessionId;
-    return id == null || isBrowserPane(id) || isCodePane(id)
+    return id == null ||
+            isBrowserPane(id) ||
+            isEmulatorPane(id) ||
+            isCodePane(id)
         ? null
         : session(id);
   }

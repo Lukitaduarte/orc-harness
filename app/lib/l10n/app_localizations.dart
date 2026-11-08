@@ -3021,6 +3021,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Didn\'t answer the last check'**
   String get shellConnectorFailed;
+
+  /// Toolbar tool and pane title
+  ///
+  /// In en, this message translates to:
+  /// **'Emulators and simulators'**
+  String get shellEmulators;
+
+  /// Emulator pane: device list hint
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a device. It runs here, without its own window.'**
+  String get devEmulatorPick;
+
+  /// Emulator pane: nothing found
+  ///
+  /// In en, this message translates to:
+  /// **'No emulators or simulators found. Install Xcode (iOS) or Android Studio with an AVD.'**
+  String get devEmulatorNone;
+
+  /// Device state
+  ///
+  /// In en, this message translates to:
+  /// **'on'**
+  String get devEmulatorOn;
+
+  /// Device state
+  ///
+  /// In en, this message translates to:
+  /// **'off'**
+  String get devEmulatorOff;
+
+  /// Device state
+  ///
+  /// In en, this message translates to:
+  /// **'turning on…'**
+  String get devEmulatorBooting;
+
+  /// Button
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on'**
+  String get devEmulatorBoot;
+
+  /// Button
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off'**
+  String get devEmulatorShutdown;
+
+  /// Device home button
+  ///
+  /// In en, this message translates to:
+  /// **'Home'**
+  String get devEmulatorHome;
+
+  /// Back to the device list
+  ///
+  /// In en, this message translates to:
+  /// **'Other device'**
+  String get devEmulatorSwitch;
 }
 
 class _AppLocalizationsDelegate

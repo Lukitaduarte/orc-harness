@@ -26,6 +26,7 @@ name = "orc-hook"
 path = "src/bin/orc-hook.rs"
 
 [dependencies]
+base64 = "0.22.1"
 orc-protocol.workspace = true
 orc-link.workspace = true
 iroh.workspace = true

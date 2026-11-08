@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
-use orc_protocol::{BrowserAction, CatalogEntry, ClientMessage, DaemonMessage, ProjectInfo, Profile};
+use orc_protocol::{BrowserAction, CatalogEntry, ClientMessage, DaemonMessage, EmulatorAction, ProjectInfo, Profile};
 use orc_protocol::GridSnapshot;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
@@ -124,6 +124,7 @@ pub struct Daemon {
     browser_urls: Arc<Mutex<HashMap<String, String>>>,
     /// Agents' last traffic per browser (through the CDP proxy).
     pub browser_use: crate::cdp_proxy::BrowserUse,
+    pub devices: crate::devices::Devices,
     /// The CDP proxy's port, once it listens.
     pub cdp_proxy_port: Arc<OnceLock<u16>>,
     /// Browser actions run one at a time, in arrival order (a click must
@@ -166,6 +167,7 @@ impl Daemon {
             browsers: Arc::new(Browsers::new(PathBuf::new(), None)),
             browser_urls: Arc::default(),
             browser_use: Arc::default(),
+            devices: crate::devices::Devices::new(),
             cdp_proxy_port: Arc::default(),
             browser_queue: Arc::default(),
             language_servers: Default::default(),
@@ -1161,6 +1163,35 @@ impl Daemon {
                 });
                 let _ = queue.send((profile, action));
             }
+            ClientMessage::ListEmulators | ClientMessage::Emulator { .. } => {
+                // simctl, adb and AXe take a while: off the message loop.
+                let (d, events) = (self.devices.clone(), self.events.clone());
+                std::thread::spawn(move || {
+                    let refresh = match msg {
+                        ClientMessage::Emulator { id, action } => {
+                            let changes = matches!(action, EmulatorAction::Boot | EmulatorAction::Shutdown);
+                            let result = match action {
+                                EmulatorAction::Boot => d.boot(&id),
+                                EmulatorAction::Shutdown => d.shutdown(&id),
+                                EmulatorAction::Watch => d.watch(&id, events.clone()),
+                                EmulatorAction::Unwatch => {
+                                    d.unwatch(&id);
+                                    Ok(())
+                                }
+                                other => d.act(&id, other),
+                            };
+                            if let Err(message) = result {
+                                let _ = events.send(DaemonMessage::Error { message });
+                            }
+                            changes
+                        }
+                        _ => true,
+                    };
+                    if refresh {
+                        let _ = events.send(DaemonMessage::Emulators { emulators: d.list() });
+                    }
+                });
+            }
             ClientMessage::StopSession { session_id } => {
                 self.language_servers.stop(&session_id);
                 let mut sessions = self.sessions.lock().unwrap();
@@ -1778,6 +1809,11 @@ impl Daemon {
     /// like waits for your decision in the app (refused after
     /// APPROVAL_TIMEOUT).
     pub async fn gate(&self, session_id: &str, tool: &str, input: &serde_json::Value) -> DaemonMessage {
+        // Every tool call passes here: the ones driving a device light it up.
+        if crate::devices::platform_of_call(tool, input).is_some() {
+            let (d, s, t, i) = (self.devices.clone(), session_id.to_string(), tool.to_string(), input.clone());
+            std::thread::spawn(move || d.note_call(&s, &t, &i));
+        }
         let Some(action) = crate::gates::needs_ok(tool, input) else {
             return DaemonMessage::GateDecision { allow: true, reason: String::new() };
         };

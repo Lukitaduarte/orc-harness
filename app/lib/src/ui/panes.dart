@@ -7,6 +7,7 @@ import '../live/grid.dart';
 import '../live/live_terminal.dart';
 import 'browser_pane.dart';
 import 'code_pane.dart';
+import 'emulator_pane.dart';
 import 'orc_sprite.dart';
 import 'diff_dialog.dart';
 import 'format.dart';
@@ -57,7 +58,14 @@ class _Pane extends StatelessWidget {
     final code = HarnessStore.isCodePane(leaf.sessionId)
         ? leaf.sessionId!.substring(HarnessStore.codePrefix.length)
         : null;
-    final session = leaf.sessionId == null || browser != null || code != null
+    final emulator = HarnessStore.isEmulatorPane(leaf.sessionId)
+        ? leaf.sessionId!.substring(HarnessStore.emulatorPrefix.length)
+        : null;
+    final session =
+        leaf.sessionId == null ||
+            browser != null ||
+            code != null ||
+            emulator != null
         ? null
         : store.session(leaf.sessionId!);
     return Listener(
@@ -68,10 +76,23 @@ class _Pane extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _header(context, session, browser: browser, code: code),
+            _header(
+              context,
+              session,
+              browser: browser,
+              code: code,
+              emulator: emulator,
+            ),
             const Divider(),
             Expanded(
-              child: code != null && store.daemon != null
+              child: emulator != null && store.daemon != null
+                  ? EmulatorPane(
+                      daemon: store.daemon!,
+                      id: emulator,
+                      focused: focused,
+                      onPick: (id) => store.openEmulator(leaf.id, id),
+                    )
+                  : code != null && store.daemon != null
                   ? CodePane(daemon: store.daemon!, sessionId: code)
                   : browser != null && store.daemon != null
                   ? BrowserPane(
@@ -152,6 +173,7 @@ class _Pane extends StatelessWidget {
     Session? s, {
     String? browser,
     String? code,
+    String? emulator,
   }) => SizedBox(
     height: 36,
     child: Padding(
@@ -200,6 +222,18 @@ class _Pane extends StatelessWidget {
                                     .firstOrNull ??
                                 code,
                           ),
+                          overflow: TextOverflow.ellipsis,
+                        ).small().semiBold(),
+                      ),
+                    ] else if (emulator != null) ...[
+                      const Icon(LucideIcons.smartphone, size: 14),
+                      const Gap(8),
+                      Flexible(
+                        child: Text(
+                          emulator.isEmpty
+                              ? context.l10n.shellEmulators
+                              : store.daemon?.emulators[emulator]?.name ??
+                                    emulator,
                           overflow: TextOverflow.ellipsis,
                         ).small().semiBold(),
                       ),
