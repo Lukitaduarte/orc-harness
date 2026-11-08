@@ -1648,7 +1648,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get onboardWelcomeWhy =>
-      'Ejecuta muchas sesiones de Claude Code lado a lado. Antes, tres permisos, uno a la vez: cada uno dice por qué hace falta, y puedes saltar cualquiera.';
+      'Ejecuta muchas sesiones de Claude Code lado a lado. Antes, algunos permisos, uno a la vez: cada uno dice por qué hace falta, y puedes saltar cualquiera.';
 
   @override
   String get onboardNotificationsTitle => 'Notificaciones';
@@ -1665,11 +1665,11 @@ class AppLocalizationsEs extends AppLocalizations {
       'Las sesiones corren en orcd, un servicio pequeño que arranca al iniciar sesión, así siguen con la app cerrada. macOS avisará que se agregó un ítem en segundo plano (puedes desactivarlo en Ajustes del Sistema → General → Ítems de inicio). Guarda su clave en el Llavero: si pregunta, elige Permitir siempre.';
 
   @override
-  String get onboardNetworkTitle => 'Red local';
+  String get onboardNetworkTitle => 'Conectar al servicio';
 
   @override
   String get onboardNetworkWhy =>
-      'La app habla con el servicio, y luego con tu teléfono, por una conexión cifrada en tu red. macOS preguntará si Orc Harness puede encontrar dispositivos en la red local: permítelo, o la app no podrá conectarse.';
+      'La app habla con el servicio en esta misma Mac, cifrado y sin pasar por la red, así que no hay nada que permitir. Para usar el teléfono después, ejecuta orcd pair: entonces macOS puede pedir acceso a la red local para el servicio.';
 
   @override
   String get onboardNotNow => 'Ahora no';
@@ -1798,4 +1798,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String toolsEnvOnlyHere(String workspace) {
     return 'Solo en $workspace: valor propio, y las sesiones de otros workspaces no pueden usarla';
   }
+
+  @override
+  String get onboardUpdateTitle => 'Actualizando el servicio en segundo plano';
+
+  @override
+  String get onboardUpdateWhy =>
+      'Esta versión trae un orcd nuevo. Aún no está firmado por Apple, así que macOS lo ve como un programa nuevo y puede preguntar otra vez: acceso al Llavero (la clave del daemon), elige Permitir siempre; y, con el firewall activo, conexiones entrantes. Para que no pregunte en cada versión, ejecuta una vez: orcd install --sign \"<tu identidad>\" (lístalas con security find-identity -v -p codesigning).';
+
+  @override
+  String get onboardUpdateGo => 'Actualizar';
+
+  @override
+  String get shellNoDaemonToSave =>
+      'El daemon no está conectado, así que esto no se puede guardar. Revisa ⚙ → Conectar daemon.';
 }

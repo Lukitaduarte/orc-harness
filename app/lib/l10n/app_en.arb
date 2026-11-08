@@ -1333,7 +1333,7 @@
   "@onboardWelcomeTitle": {
     "description": "Onboarding, first screen title"
   },
-  "onboardWelcomeWhy": "Run many Claude Code sessions side by side. First, three permissions, one at a time: each one says why it's needed, and you can skip any of them.",
+  "onboardWelcomeWhy": "Run many Claude Code sessions side by side. First, a couple of permissions, one at a time: each one says why it's needed, and you can skip any of them.",
   "@onboardWelcomeWhy": {
     "description": "Onboarding, first screen text"
   },
@@ -1353,11 +1353,11 @@
   "@onboardServiceWhy": {
     "description": "Onboarding: why the background service"
   },
-  "onboardNetworkTitle": "Local network",
+  "onboardNetworkTitle": "Connect to the service",
   "@onboardNetworkTitle": {
     "description": "Onboarding step title"
   },
-  "onboardNetworkWhy": "The app talks to the service, and later to your phone, over an encrypted connection on your network. macOS will ask whether Orc Harness may find devices on your local network: allow it, or the app can't connect.",
+  "onboardNetworkWhy": "The app talks to the service on this Mac itself, encrypted and without going through the network, so there's nothing to allow. To use your phone later, run orcd pair: then macOS may ask the service for local network access.",
   "@onboardNetworkWhy": {
     "description": "Onboarding: why local network"
   },
@@ -1548,5 +1548,21 @@
         "type": "String"
       }
     }
+  },
+  "onboardUpdateTitle": "Updating the background service",
+  "@onboardUpdateTitle": {
+    "description": "Onboarding"
+  },
+  "onboardUpdateWhy": "This version brings a new orcd. It isn't signed by Apple yet, so macOS sees a new program and may ask again: access to the Keychain (the daemon's key), choose Always Allow; and, with the firewall on, incoming connections. To stop the questions on every version, run once: orcd install --sign \"<your identity>\" (list them with security find-identity -v -p codesigning).",
+  "@onboardUpdateWhy": {
+    "description": "Onboarding"
+  },
+  "onboardUpdateGo": "Update",
+  "@onboardUpdateGo": {
+    "description": "Onboarding"
+  },
+  "shellNoDaemonToSave": "The daemon isn't connected, so this can't be saved. Check ⚙ → Connect daemon.",
+  "@shellNoDaemonToSave": {
+    "description": "Workspace dialog when the daemon is not connected"
   }
 }

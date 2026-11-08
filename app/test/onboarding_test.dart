@@ -43,4 +43,34 @@ void main() {
     expect(done, isTrue);
     d.dispose();
   });
+
+  testWidgets('an update is one screen: what macOS asks, then update', (
+    tester,
+  ) async {
+    final d = DaemonClient(local: LocalDaemon(bundled: null));
+    var done = false;
+    tester.view.physicalSize = const Size(1600, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: Onboarding(
+          daemon: d,
+          update: true,
+          requestNotifications: () async {},
+          onDone: () => done = true,
+        ),
+      ),
+    );
+    expect(find.text('Atualizando o serviço em segundo plano'), findsOneWidget);
+    expect(find.textContaining('Permitir Sempre'), findsOneWidget);
+    expect(find.text('1 de 1'), findsOneWidget);
+    await tester.tap(find.text('Atualizar'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump();
+    expect(done, isTrue);
+    d.dispose();
+  });
 }

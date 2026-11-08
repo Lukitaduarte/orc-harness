@@ -37,7 +37,7 @@ class LocalDaemon {
     final have = File(installed);
     if (!await have.exists()) {
       if (onlyUpdate) return;
-    } else if (await _same(File(from), have) && await _running()) {
+    } else if (await _sameDaemon(from, have.path) && await _running()) {
       return;
     }
     final r = await Process.run(from, ['install']);
@@ -48,6 +48,18 @@ class LocalDaemon {
     for (var i = 0; i < 100 && !await _running(); i++) {
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
+  }
+
+  /// This Mac runs the harness's service (its socket is there).
+  Future<bool> serviceHere() async =>
+      bundled != null && await File(installed).exists();
+
+  /// The app carries a daemon different from the installed one, or the
+  /// service is not running: the update screen comes first.
+  Future<bool> needsUpdate() async {
+    final from = bundled;
+    if (from == null || !await File(installed).exists()) return false;
+    return !await _running() || !await _sameDaemon(from, installed);
   }
 
   /// A one-time pairing ticket from the local service, installing it first
@@ -74,6 +86,24 @@ class LocalDaemon {
     } catch (_) {
       return false;
     }
+  }
+
+  /// Same release: by `orcd version` (the installed copy may be re-signed,
+  /// so its bytes differ), or by bytes for daemons that predate it.
+  static Future<bool> _sameDaemon(String bundled, String installed) async {
+    Future<String?> version(String path) async {
+      try {
+        final r = await Process.run(path, ['version']);
+        final v = '${r.stdout}'.trim();
+        return r.exitCode == 0 && v.isNotEmpty ? v : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final (a, b) = (await version(bundled), await version(installed));
+    if (a != null && b != null) return a == b;
+    return _same(File(bundled), File(installed));
   }
 
   static Future<bool> _same(File a, File b) async {

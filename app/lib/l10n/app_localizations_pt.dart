@@ -1638,7 +1638,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get onboardWelcomeWhy =>
-      'Rode várias sessões do Claude Code lado a lado. Antes, três permissões, uma por vez: cada uma diz por que é preciso, e você pode pular qualquer uma.';
+      'Rode várias sessões do Claude Code lado a lado. Antes, algumas permissões, uma por vez: cada uma diz por que é preciso, e você pode pular qualquer uma.';
 
   @override
   String get onboardNotificationsTitle => 'Notificações';
@@ -1655,11 +1655,11 @@ class AppLocalizationsPt extends AppLocalizations {
       'As sessões rodam no orcd, um serviço pequeno que sobe no login, então continuam com o app fechado. O macOS vai avisar que um item em segundo plano foi adicionado (dá para desligar em Ajustes do Sistema → Geral → Itens de Início). Ele guarda a chave no Keychain: se perguntar, escolha Permitir Sempre.';
 
   @override
-  String get onboardNetworkTitle => 'Rede local';
+  String get onboardNetworkTitle => 'Conectar ao serviço';
 
   @override
   String get onboardNetworkWhy =>
-      'O app conversa com o serviço, e depois com o seu celular, por uma conexão cifrada na sua rede. O macOS vai perguntar se o Orc Harness pode encontrar dispositivos na rede local: permita, senão o app não conecta.';
+      'O app conversa com o serviço pelo próprio Mac, cifrado e sem passar pela rede, então não há nada para permitir. Para usar o celular depois, rode orcd pair: aí o macOS pode pedir acesso à rede local para o serviço.';
 
   @override
   String get onboardNotNow => 'Agora não';
@@ -1788,4 +1788,18 @@ class AppLocalizationsPt extends AppLocalizations {
   String toolsEnvOnlyHere(String workspace) {
     return 'Só em $workspace: valor próprio, e sessões de outros workspaces não podem usar';
   }
+
+  @override
+  String get onboardUpdateTitle => 'Atualizando o serviço em segundo plano';
+
+  @override
+  String get onboardUpdateWhy =>
+      'Esta versão traz um orcd novo. Ele ainda não é assinado pela Apple, então o macOS o vê como um programa novo e pode perguntar de novo: acesso ao Keychain (a chave do daemon), escolha Permitir Sempre; e, com o firewall ligado, conexões de entrada. Para não perguntar mais a cada versão, rode uma vez: orcd install --sign \"<sua identidade>\" (liste com security find-identity -v -p codesigning).';
+
+  @override
+  String get onboardUpdateGo => 'Atualizar';
+
+  @override
+  String get shellNoDaemonToSave =>
+      'O daemon não está conectado, então isso não pode ser salvo. Veja em ⚙ → Conectar daemon.';
 }

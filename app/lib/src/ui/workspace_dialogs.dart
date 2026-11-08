@@ -2,6 +2,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../harness_store.dart';
 import '../i18n.dart';
+import '../live/daemon_client.dart';
 import '../model.dart';
 
 Future<void> _dialog(BuildContext context, Widget child) => showOverlay<void>(
@@ -210,6 +211,11 @@ class _WorkspaceFormState extends State<_WorkspaceForm> {
           ),
         ),
         const Gap(20),
+        // Workspaces live in the daemon: without it nothing can be saved.
+        if (store.daemon!.status != LinkStatus.connected) ...[
+          Text(l10n.shellNoDaemonToSave).small().muted(),
+          const Gap(12),
+        ],
         Row(
           children: [
             if (canDelete)
@@ -227,7 +233,9 @@ class _WorkspaceFormState extends State<_WorkspaceForm> {
             ),
             const Gap(8),
             PrimaryButton(
-              onPressed: _name.text.trim().isEmpty
+              onPressed:
+                  _name.text.trim().isEmpty ||
+                      store.daemon!.status != LinkStatus.connected
                   ? null
                   : () {
                       store.saveWorkspace(

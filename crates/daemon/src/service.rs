@@ -76,16 +76,21 @@ pub fn install(home: &Path, sign: Option<&str>) -> std::io::Result<PathBuf> {
     std::fs::create_dir_all(&bin)?;
     // Unload first: the running orcd holds the old binary.
     let _ = uninstall_agent();
+    // Run from ~/.orc/bin itself: nothing to copy (removing the target
+    // first would delete the source).
+    let in_place = from.canonicalize().ok() == bin.canonicalize().ok();
     for name in BINARIES {
         let src = from.join(name);
         if !src.exists() {
             return Err(std::io::Error::other(format!("{} não encontrado ao lado do orcd", src.display())));
         }
         let dst = bin.join(name);
-        // A new file (not overwritten in place) keeps the old signature's
-        // cached pages away from the new code.
-        let _ = std::fs::remove_file(&dst);
-        std::fs::copy(&src, &dst)?;
+        if !in_place {
+            // A new file (not overwritten in place) keeps the old
+            // signature's cached pages away from the new code.
+            let _ = std::fs::remove_file(&dst);
+            std::fs::copy(&src, &dst)?;
+        }
         std::fs::set_permissions(&dst, std::os::unix::fs::PermissionsExt::from_mode(0o755))?;
         if let Some(identity) = sign {
             run(Command::new("codesign").args(["--force", "--sign", identity, "--identifier", &format!("{LABEL}.{name}")]).arg(&dst))?;

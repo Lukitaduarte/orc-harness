@@ -2845,7 +2845,7 @@ abstract class AppLocalizations {
   /// Onboarding, first screen text
   ///
   /// In en, this message translates to:
-  /// **'Run many Claude Code sessions side by side. First, three permissions, one at a time: each one says why it\'s needed, and you can skip any of them.'**
+  /// **'Run many Claude Code sessions side by side. First, a couple of permissions, one at a time: each one says why it\'s needed, and you can skip any of them.'**
   String get onboardWelcomeWhy;
 
   /// Onboarding step title
@@ -2875,13 +2875,13 @@ abstract class AppLocalizations {
   /// Onboarding step title
   ///
   /// In en, this message translates to:
-  /// **'Local network'**
+  /// **'Connect to the service'**
   String get onboardNetworkTitle;
 
   /// Onboarding: why local network
   ///
   /// In en, this message translates to:
-  /// **'The app talks to the service, and later to your phone, over an encrypted connection on your network. macOS will ask whether Orc Harness may find devices on your local network: allow it, or the app can\'t connect.'**
+  /// **'The app talks to the service on this Mac itself, encrypted and without going through the network, so there\'s nothing to allow. To use your phone later, run orcd pair: then macOS may ask the service for local network access.'**
   String get onboardNetworkWhy;
 
   /// Onboarding: skip this step
@@ -3099,6 +3099,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Only in {workspace}: its own value, and other workspaces\' sessions can\'t use it'**
   String toolsEnvOnlyHere(String workspace);
+
+  /// Onboarding
+  ///
+  /// In en, this message translates to:
+  /// **'Updating the background service'**
+  String get onboardUpdateTitle;
+
+  /// Onboarding
+  ///
+  /// In en, this message translates to:
+  /// **'This version brings a new orcd. It isn\'t signed by Apple yet, so macOS sees a new program and may ask again: access to the Keychain (the daemon\'s key), choose Always Allow; and, with the firewall on, incoming connections. To stop the questions on every version, run once: orcd install --sign \"<your identity>\" (list them with security find-identity -v -p codesigning).'**
+  String get onboardUpdateWhy;
+
+  /// Onboarding
+  ///
+  /// In en, this message translates to:
+  /// **'Update'**
+  String get onboardUpdateGo;
+
+  /// Workspace dialog when the daemon is not connected
+  ///
+  /// In en, this message translates to:
+  /// **'The daemon isn\'t connected, so this can\'t be saved. Check ⚙ → Connect daemon.'**
+  String get shellNoDaemonToSave;
 }
 
 class _AppLocalizationsDelegate

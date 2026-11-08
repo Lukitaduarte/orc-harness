@@ -1645,7 +1645,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardWelcomeWhy =>
-      'Run many Claude Code sessions side by side. First, three permissions, one at a time: each one says why it\'s needed, and you can skip any of them.';
+      'Run many Claude Code sessions side by side. First, a couple of permissions, one at a time: each one says why it\'s needed, and you can skip any of them.';
 
   @override
   String get onboardNotificationsTitle => 'Notifications';
@@ -1662,11 +1662,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'Sessions run in orcd, a small service that starts when you log in, so they keep going with the app closed. macOS will say a background item was added (you can turn it off in System Settings → General → Login Items). It keeps its key in your Keychain: if asked, choose Always Allow.';
 
   @override
-  String get onboardNetworkTitle => 'Local network';
+  String get onboardNetworkTitle => 'Connect to the service';
 
   @override
   String get onboardNetworkWhy =>
-      'The app talks to the service, and later to your phone, over an encrypted connection on your network. macOS will ask whether Orc Harness may find devices on your local network: allow it, or the app can\'t connect.';
+      'The app talks to the service on this Mac itself, encrypted and without going through the network, so there\'s nothing to allow. To use your phone later, run orcd pair: then macOS may ask the service for local network access.';
 
   @override
   String get onboardNotNow => 'Not now';
@@ -1796,4 +1796,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String toolsEnvOnlyHere(String workspace) {
     return 'Only in $workspace: its own value, and other workspaces\' sessions can\'t use it';
   }
+
+  @override
+  String get onboardUpdateTitle => 'Updating the background service';
+
+  @override
+  String get onboardUpdateWhy =>
+      'This version brings a new orcd. It isn\'t signed by Apple yet, so macOS sees a new program and may ask again: access to the Keychain (the daemon\'s key), choose Always Allow; and, with the firewall on, incoming connections. To stop the questions on every version, run once: orcd install --sign \"<your identity>\" (list them with security find-identity -v -p codesigning).';
+
+  @override
+  String get onboardUpdateGo => 'Update';
+
+  @override
+  String get shellNoDaemonToSave =>
+      'The daemon isn\'t connected, so this can\'t be saved. Check ⚙ → Connect daemon.';
 }

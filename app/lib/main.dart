@@ -18,11 +18,15 @@ Future<void> main() async {
   final daemon = DaemonClient()..onAlert = await _systemAlerts(notifications);
   // A first launch asks for each permission in turn, in the onboarding.
   final onboarding = await needsOnboarding(daemon);
-  daemon.start(autoPair: !onboarding);
+  // A new version's daemon (or a service that is down) gets one screen
+  // first, saying what macOS will ask again.
+  final update = !onboarding && await daemon.local.needsUpdate();
+  daemon.start(autoPair: !onboarding, updateDaemon: !update);
   runApp(
     OrcHarnessApp(
       HarnessStore(daemon: daemon),
-      onboarding: onboarding,
+      onboarding: onboarding || update,
+      update: update,
       requestNotifications: () async {
         await notifications
             .resolvePlatformSpecificImplementation<
@@ -78,11 +82,13 @@ class OrcHarnessApp extends StatefulWidget {
     this.store, {
     super.key,
     this.onboarding = false,
+    this.update = false,
     this.requestNotifications,
   });
 
   final HarnessStore store;
   final bool onboarding;
+  final bool update;
   final Future<void> Function()? requestNotifications;
 
   @override
@@ -110,6 +116,7 @@ class _OrcHarnessAppState extends State<OrcHarnessApp> {
           ? Onboarding(
               daemon: widget.store.daemon!,
               requestNotifications: widget.requestNotifications ?? () async {},
+              update: widget.update,
               onDone: () => setState(() => _onboarding = false),
             )
           : WorkspaceScreen(widget.store),

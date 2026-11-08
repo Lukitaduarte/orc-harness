@@ -70,4 +70,40 @@ esac
   test('a build without a daemon pairs by ticket, as before', () async {
     expect(await LocalDaemon(home: home, bundled: null).ticket(), isNull);
   });
+
+  test(
+    'an update or a service that is down asks for the update screen',
+    () async {
+      final d = LocalDaemon(home: home, bundled: bundled);
+      expect(
+        await d.needsUpdate(),
+        isFalse,
+        reason: 'not installed: onboarding',
+      );
+      await d.ensureInstalled();
+      expect(await d.needsUpdate(), isFalse);
+      await File(bundled).writeAsString('\n# v2', mode: FileMode.append);
+      expect(await d.needsUpdate(), isTrue, reason: 'a new daemon');
+      await d.ensureInstalled();
+      expect(await d.needsUpdate(), isFalse);
+      await service?.close();
+      service = null;
+      expect(await d.needsUpdate(), isTrue, reason: 'service down');
+    },
+  );
+
+  test('a daemon that reports its version is compared by it', () async {
+    // Same version, different bytes (the installed copy was re-signed).
+    await File(bundled).writeAsString('''#!/bin/sh
+case "\$1" in
+  version) echo 0.1.4;;
+  install) mkdir -p "$home/bin"; cp "\$0" "$home/bin/orcd"; echo "# signed" >> "$home/bin/orcd"; echo install >> "$home/log";;
+esac
+''');
+    final d = LocalDaemon(home: home, bundled: bundled);
+    await d.ensureInstalled();
+    await d.ensureInstalled(onlyUpdate: true);
+    expect(await installs(), 1, reason: 'same version: no reinstall');
+    expect(await d.needsUpdate(), isFalse);
+  });
 }

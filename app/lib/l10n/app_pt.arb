@@ -456,13 +456,13 @@
   "sessionReopen": "Reabrir",
   "sessionCloseEnded": "Fechar",
   "onboardWelcomeTitle": "Boas-vindas ao Orc Harness",
-  "onboardWelcomeWhy": "Rode várias sessões do Claude Code lado a lado. Antes, três permissões, uma por vez: cada uma diz por que é preciso, e você pode pular qualquer uma.",
+  "onboardWelcomeWhy": "Rode várias sessões do Claude Code lado a lado. Antes, algumas permissões, uma por vez: cada uma diz por que é preciso, e você pode pular qualquer uma.",
   "onboardNotificationsTitle": "Notificações",
   "onboardNotificationsWhy": "Para você saber quando uma sessão espera você, um deploy precisa do seu OK ou um card termina. Só aparecem com o app em segundo plano.",
   "onboardServiceTitle": "Serviço em segundo plano",
   "onboardServiceWhy": "As sessões rodam no orcd, um serviço pequeno que sobe no login, então continuam com o app fechado. O macOS vai avisar que um item em segundo plano foi adicionado (dá para desligar em Ajustes do Sistema → Geral → Itens de Início). Ele guarda a chave no Keychain: se perguntar, escolha Permitir Sempre.",
-  "onboardNetworkTitle": "Rede local",
-  "onboardNetworkWhy": "O app conversa com o serviço, e depois com o seu celular, por uma conexão cifrada na sua rede. O macOS vai perguntar se o Orc Harness pode encontrar dispositivos na rede local: permita, senão o app não conecta.",
+  "onboardNetworkTitle": "Conectar ao serviço",
+  "onboardNetworkWhy": "O app conversa com o serviço pelo próprio Mac, cifrado e sem passar pela rede, então não há nada para permitir. Para usar o celular depois, rode orcd pair: aí o macOS pode pedir acesso à rede local para o serviço.",
   "onboardNotNow": "Agora não",
   "onboardStart": "Vamos lá",
   "onboardGrant": "Conceder",
@@ -498,5 +498,9 @@
   "devEmulatorSwitch": "Outro dispositivo",
   "toolsImportSearch": "Buscar por nome ou origem",
   "toolsImportInCatalog": "· já está no catálogo",
-  "toolsEnvOnlyHere": "Só em {workspace}: valor próprio, e sessões de outros workspaces não podem usar"
+  "toolsEnvOnlyHere": "Só em {workspace}: valor próprio, e sessões de outros workspaces não podem usar",
+  "onboardUpdateTitle": "Atualizando o serviço em segundo plano",
+  "onboardUpdateWhy": "Esta versão traz um orcd novo. Ele ainda não é assinado pela Apple, então o macOS o vê como um programa novo e pode perguntar de novo: acesso ao Keychain (a chave do daemon), escolha Permitir Sempre; e, com o firewall ligado, conexões de entrada. Para não perguntar mais a cada versão, rode uma vez: orcd install --sign \"<sua identidade>\" (liste com security find-identity -v -p codesigning).",
+  "onboardUpdateGo": "Atualizar",
+  "shellNoDaemonToSave": "O daemon não está conectado, então isso não pode ser salvo. Veja em ⚙ → Conectar daemon."
 }

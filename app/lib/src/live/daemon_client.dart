@@ -517,7 +517,7 @@ class DaemonClient extends ChangeNotifier {
     notifyListeners();
     try {
       final ticket = await local.ticket();
-      if (ticket != null) await pair(ticket);
+      if (ticket != null) await pair(ticket, local: true);
     } catch (e) {
       _fail('$e');
     }
@@ -526,16 +526,21 @@ class DaemonClient extends ChangeNotifier {
   /// Loads a stored pairing and connects. Without one, and with
   /// [autoPair], the app's own daemon is installed and paired with (the
   /// first launch does that step by step, in the onboarding).
-  Future<void> start({bool autoPair = true}) async {
+  ///
+  /// With [updateDaemon] false the app's daemon is left as it is (the
+  /// update screen installs it, telling you what macOS will ask first).
+  Future<void> start({bool autoPair = true, bool updateDaemon = true}) async {
     try {
       final f = await _identityFile();
       if (await f.exists()) {
-        _identity = await f.readAsString();
+        _identity = await _markLocal(await f.readAsString());
         // A new app version brings its daemon along.
-        try {
-          await local.ensureInstalled(onlyUpdate: true);
-        } catch (e) {
-          debugPrint('$e');
+        if (updateDaemon) {
+          try {
+            await local.ensureInstalled(onlyUpdate: true);
+          } catch (e) {
+            debugPrint('$e');
+          }
         }
         await connect();
       } else if (autoPair && local.bundled != null) {
@@ -546,8 +551,25 @@ class DaemonClient extends ChangeNotifier {
     }
   }
 
+  /// Marks a pairing with this Mac's own daemon as local, so the link uses
+  /// loopback only and macOS never asks for local network access. Pairings
+  /// made before this get it when the Mac runs the harness's service.
+  Future<String> _markLocal(String identity, {bool? local}) async {
+    final isLocal = local ?? await this.local.serviceHere();
+    if (!isLocal) return identity;
+    final j = jsonDecode(identity) as Map<String, dynamic>;
+    if (j['local'] == true) return identity;
+    j['local'] = true;
+    final marked = jsonEncode(j);
+    try {
+      await (await _identityFile()).writeAsString(marked);
+    } catch (_) {}
+    return marked;
+  }
+
   /// Pairs with the ticket from `orcd pair`, stores the identity, connects.
-  Future<void> pair(String ticket) async {
+  /// [local]: the ticket came from this Mac's own daemon.
+  Future<void> pair(String ticket, {bool local = false}) async {
     status = LinkStatus.connecting;
     error = null;
     notifyListeners();
@@ -559,7 +581,7 @@ class DaemonClient extends ChangeNotifier {
       final f = await _identityFile();
       await f.create(recursive: true);
       await f.writeAsString(identity);
-      _identity = identity;
+      _identity = local ? await _markLocal(identity, local: true) : identity;
       await connect();
     } catch (e) {
       _fail('$e');

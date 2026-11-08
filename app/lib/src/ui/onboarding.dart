@@ -40,9 +40,14 @@ class Onboarding extends StatefulWidget {
     required this.daemon,
     required this.requestNotifications,
     required this.onDone,
+    this.update = false,
   });
 
   final DaemonClient daemon;
+
+  /// An update: one screen that says what macOS will ask again, then
+  /// installs the new daemon.
+  final bool update;
 
   /// Shows the system's notification prompt.
   final Future<void> Function() requestNotifications;
@@ -60,6 +65,19 @@ class _OnboardingState extends State<Onboarding> {
   List<_Step> _steps(BuildContext context) {
     final l = context.l10n;
     final d = widget.daemon;
+    if (widget.update) {
+      return [
+        _Step(
+          LucideIcons.refreshCw,
+          l.onboardUpdateTitle,
+          l.onboardUpdateWhy,
+          () async {
+            await d.local.ensureInstalled();
+            await d.connect();
+          },
+        ),
+      ];
+    }
     return [
       _Step(LucideIcons.hand, l.onboardWelcomeTitle, l.onboardWelcomeWhy, null),
       _Step(
@@ -183,6 +201,8 @@ class _OnboardingState extends State<Onboarding> {
                                     ? l.onboardStart
                                     : _error != null
                                     ? l.onboardRetry
+                                    : widget.update
+                                    ? l.onboardUpdateGo
                                     : last
                                     ? l.onboardGrantFinish
                                     : l.onboardGrant,

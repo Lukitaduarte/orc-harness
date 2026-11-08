@@ -14,6 +14,29 @@ use tokio::sync::mpsc;
 pub struct Identity {
     pub device_key: String,
     pub daemon: EndpointAddr,
+    /// Paired with a daemon on this same machine (over its local socket):
+    /// connect over loopback only, so the OS never asks for local network
+    /// access.
+    #[serde(default)]
+    pub local: bool,
+}
+
+/// The daemon's address to dial: loopback only for a same-machine daemon
+/// (when it has loopback addresses), all of them otherwise.
+pub fn dial_addr(identity: &Identity) -> EndpointAddr {
+    let mut addr = identity.daemon.clone();
+    if identity.local {
+        let lo: std::collections::BTreeSet<_> = addr
+            .addrs
+            .iter()
+            .filter(|a| matches!(a, iroh::TransportAddr::Ip(ip) if ip.ip().is_loopback()))
+            .cloned()
+            .collect();
+        if !lo.is_empty() {
+            addr.addrs = lo;
+        }
+    }
+    addr
 }
 
 fn err(e: impl std::fmt::Display) -> String {
@@ -46,7 +69,7 @@ pub async fn pair(ticket: &str, device_name: &str) -> Result<String, String> {
     if !response.ok {
         return Err(response.message);
     }
-    serde_json::to_string(&Identity { device_key: key_to_hex(&key), daemon: ticket.addr })
+    serde_json::to_string(&Identity { device_key: key_to_hex(&key), daemon: ticket.addr, local: false })
         .map_err(err)
 }
 
@@ -107,15 +130,33 @@ async fn connect_with(
     let identity: Identity = serde_json::from_str(identity_json).map_err(err)?;
     let key = key_from_hex(&identity.device_key)?;
     let endpoint = orc_link::endpoint(key, &[], orc_link::relay_for(&identity.daemon)).await.map_err(err)?;
-    let (conn, framed) = if framed {
-        match endpoint.connect(identity.daemon.clone(), ALPN_FRAMED).await {
-            Ok(c) => (c, true),
-            // An older daemon: no orc/2.
-            Err(_) => (endpoint.connect(identity.daemon, ALPN_MAIN).await.map_err(err)?, false),
+    // Loopback first for a same-machine daemon; every address if that
+    // fails (an identity marked local by mistake).
+    let mut tries = vec![dial_addr(&identity)];
+    if identity.local {
+        tries.push(identity.daemon.clone());
+    }
+    let mut last = String::new();
+    let mut connected = None;
+    for daemon in tries {
+        let attempt = if framed {
+            match endpoint.connect(daemon.clone(), ALPN_FRAMED).await {
+                Ok(c) => Ok((c, true)),
+                // An older daemon: no orc/2.
+                Err(_) => endpoint.connect(daemon, ALPN_MAIN).await.map(|c| (c, false)),
+            }
+        } else {
+            endpoint.connect(daemon, ALPN_MAIN).await.map(|c| (c, false))
+        };
+        match attempt {
+            Ok(c) => {
+                connected = Some(c);
+                break;
+            }
+            Err(e) => last = e.to_string(),
         }
-    } else {
-        (endpoint.connect(identity.daemon, ALPN_MAIN).await.map_err(err)?, false)
-    };
+    }
+    let (conn, framed) = connected.ok_or(last)?;
     let (mut send, recv) = conn.open_bi().await.map_err(err)?;
     // The daemon only accepts the stream once something is sent on it.
     write_line(&mut send, &serde_json::json!({ "type": "list_sessions" }))

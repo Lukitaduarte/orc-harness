@@ -203,12 +203,19 @@ fn main() -> std::io::Result<()> {
             let sign = args.iter().position(|a| a == "--sign").and_then(|i| args.get(i + 1)).cloned();
             let home = config::orc_home();
             std::fs::create_dir_all(&home)?;
+            // Remembered: the app's updates sign the same way.
+            let sign = config::sign_identity(&home.join("config.json"), sign.as_deref())?;
             let plist = orc_daemon::service::install(&home, sign.as_deref())?;
             eprintln!("orcd instalado: {} (sobe no login, volta se cair)", plist.display());
             eprintln!("log em {}", home.join("orcd.log").display());
             if sign.is_none() {
                 eprintln!("sem assinatura: o Keychain e o firewall vão perguntar de novo a cada atualização (use --sign)");
             }
+            Ok(())
+        }
+        Some("version") => {
+            // Set by the release build; the app compares it to update.
+            println!("{}", option_env!("ORC_VERSION").unwrap_or(concat!(env!("CARGO_PKG_VERSION"), "-dev")));
             Ok(())
         }
         Some("uninstall") => {
@@ -225,7 +232,7 @@ fn main() -> std::io::Result<()> {
         }
         _ => {
             eprintln!(
-                "uso: orcd serve [--socket PATH] | orcd pair | orcd install [--sign IDENTIDADE] | orcd uninstall | orcd status | orcd run -- PROGRAMA [ARGS]"
+                "uso: orcd serve [--socket PATH] | orcd pair | orcd install [--sign IDENTIDADE] | orcd uninstall | orcd status | orcd version | orcd run -- PROGRAMA [ARGS]"
             );
             std::process::exit(2);
         }

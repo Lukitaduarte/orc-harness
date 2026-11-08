@@ -136,6 +136,7 @@ async fn unpaired_devices_are_refused() {
         device_key: orc_link::key_to_hex(&iroh::SecretKey::generate()),
         // The address a real client has: the ticket's (with loopback).
         daemon: remote.new_ticket().await.addr,
+        local: false,
     };
     let (tx, rx) = mpsc::channel();
     let (closed_tx, closed_rx) = mpsc::channel();
@@ -252,4 +253,27 @@ async fn framed_link_sends_binary_grids_and_falls_back() {
         assert!(json > 0, "the rest stays JSON");
         assert_eq!(grids > 0, framed_daemon, "binary grids only from a daemon with orc/2");
     }
+}
+
+
+/// A same-machine app dials loopback only (no local network access asked)
+/// and still connects.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_local_app_connects_over_loopback_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let (_daemon, remote) = start_daemon(dir.path()).await;
+    let paired = pair(&remote.new_ticket().await.encode(), "este mac").await.unwrap();
+    let mut identity: Identity = serde_json::from_str(&paired).unwrap();
+    assert!(!identity.local, "pairing alone does not know it is local");
+    identity.local = true;
+    let dial = orc_client_core::dial_addr(&identity);
+    assert!(!dial.addrs.is_empty());
+    assert!(dial.addrs.iter().all(|a| matches!(a, iroh::TransportAddr::Ip(ip) if ip.ip().is_loopback())), "{dial:?}");
+    let (tx, rx) = mpsc::channel();
+    let _conn = connect(&serde_json::to_string(&identity).unwrap(), move |m| { let _ = tx.send(m); }, |_| {}).await.unwrap();
+    let accounts = wait(&rx, |m| match m {
+        DaemonMessage::Hello { accounts } => Some(accounts),
+        _ => None,
+    });
+    assert_eq!(accounts, ["work-main"]);
 }

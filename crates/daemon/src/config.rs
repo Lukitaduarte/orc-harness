@@ -69,6 +69,25 @@ pub fn add_account(path: &Path, home: &Path, id: &str) -> std::io::Result<Accoun
     Ok(Account { id: id.into(), config_dir: Some(dir), gh_config_dir: Some(gh) })
 }
 
+/// The codesigning identity `orcd install` uses (`sign_identity` in
+/// config.json): given once with `--sign`, every later install (the app
+/// updating its daemon) signs the same way, so macOS keeps the Keychain
+/// and firewall answers across updates.
+pub fn sign_identity(path: &Path, given: Option<&str>) -> std::io::Result<Option<String>> {
+    let mut v: serde_json::Value = match std::fs::read(path) {
+        Ok(raw) => serde_json::from_slice(&raw)?,
+        Err(_) => serde_json::json!({ "accounts": [{ "id": "default" }] }),
+    };
+    match given {
+        Some(identity) => {
+            v["sign_identity"] = serde_json::json!(identity);
+            std::fs::write(path, serde_json::to_vec_pretty(&v)?)?;
+            Ok(Some(identity.to_string()))
+        }
+        None => Ok(v["sign_identity"].as_str().map(String::from)),
+    }
+}
+
 /// Takes account `id` out of `config.json` (a missing file had only the
 /// implicit `default`).
 pub fn remove_account(path: &Path, id: &str) -> std::io::Result<()> {
@@ -126,6 +145,18 @@ pub fn load(path: &Path) -> std::io::Result<Config> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_signing_identity_is_remembered() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        std::fs::write(&path, r#"{"accounts":[{"id":"work"}]}"#).unwrap();
+        assert_eq!(sign_identity(&path, None).unwrap(), None);
+        assert_eq!(sign_identity(&path, Some("Apple Development: X (T)")).unwrap().as_deref(), Some("Apple Development: X (T)"));
+        assert_eq!(sign_identity(&path, None).unwrap().as_deref(), Some("Apple Development: X (T)"));
+        // The accounts stay.
+        assert_eq!(load(&path).unwrap().accounts[0].id, "work");
+    }
 
     #[test]
     fn reads_accounts_and_defaults() {

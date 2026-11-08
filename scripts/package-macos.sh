@@ -12,6 +12,8 @@ rm -rf "$dist" && mkdir -p "$dist"
 bins=(orcd orc-statusline orc-commit-check orc-mcp orc-hook)
 
 # 1. The daemon, universal (Apple silicon + Intel).
+# `orcd version` reports it; the app compares it to update its daemon.
+export ORC_VERSION="$version"
 for t in aarch64-apple-darwin x86_64-apple-darwin; do
   cargo build --release --locked --bins --target "$t"
 done
