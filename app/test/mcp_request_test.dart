@@ -81,31 +81,49 @@ void main() {
     d.dispose();
   });
 
-  testWidgets('MCPs from Claude Code: new ones picked, secrets by name only', (
+  testWidgets('import from this Mac: grouped by source, searchable, skills too', (
     tester,
   ) async {
     final d = DaemonClient();
     final sent = <Map<String, Object?>>[];
     d.sendHook = sent.add;
-    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.physicalSize = const Size(1400, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(ShadcnApp(home: McpImportForm(d)));
     d.handle(
       '{"type":"mcp_imports","items":['
-      '{"key":"a","label":"default · Claude Code","name":"railway","mcp":{"command":"npx","args":["railway-mcp"]},"secrets":["RAILWAY_TOKEN"],"in_catalog":false},'
-      '{"key":"b","label":"default · app","name":"gh","mcp":{"type":"http","url":"https://gh/mcp"},"secrets":[],"in_catalog":true}]}',
+      '{"key":"a","kind":"mcp","label":"Claude Code ~/.claude-personal","name":"railway","mcp":{"command":"npx","args":["railway-mcp"]},"secrets":["RAILWAY_TOKEN"],"in_catalog":false},'
+      '{"key":"b","kind":"mcp","label":"Cursor","name":"gh","mcp":{"type":"http","url":"https://gh/mcp"},"secrets":[],"in_catalog":true},'
+      '{"key":"s1","kind":"skill","label":"plugin dart-flutter · ~/.claude","name":"dart-add-test","description":"Write unit tests","mcp":null,"secrets":[],"in_catalog":false},'
+      '{"key":"s2","kind":"skill","label":"plugin dart-flutter · ~/.claude","name":"dart-fix","description":"","mcp":null,"secrets":[],"in_catalog":false}]}',
     );
     await tester.pump();
-    expect(find.text('railway'), findsOneWidget);
+    // Sources are groups with counts; new MCPs picked, skills not.
+    expect(find.text('Claude Code ~/.claude-personal  ·  1'), findsOneWidget);
+    expect(find.text('plugin dart-flutter · ~/.claude  ·  2'), findsOneWidget);
+    expect(find.text('Importar 1'), findsOneWidget);
+    expect(find.text('railway'), findsNothing, reason: 'groups start closed');
+
+    // A search opens the groups that match.
+    await tester.enterText(find.byType(TextField), 'railway');
+    await tester.pump();
+    // The field holds the query too.
+    expect(find.text('railway'), findsNWidgets(2));
     expect(find.text('Para o Keychain: RAILWAY_TOKEN'), findsOneWidget);
-    expect(find.text('https://gh/mcp'), findsOneWidget);
-    await tester.tap(find.text('Importar 1'));
+    expect(find.text('dart-add-test'), findsNothing);
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pump();
+
+    // Picking a whole source: groups are closed, one box each (the
+    // skills group is the third).
+    expect(find.byType(Checkbox), findsNWidgets(3));
+    await tester.tap(find.byType(Checkbox).at(2));
+    await tester.pump();
+    await tester.tap(find.text('Importar 3'));
     await tester.pumpAndSettle();
-    expect(sent.last, {
-      'type': 'import_mcps',
-      'keys': ['a'],
-    });
+    expect(sent.last['type'], 'import_mcps');
+    expect((sent.last['keys'] as List).toSet(), {'a', 's1', 's2'});
     d.dispose();
   });
 

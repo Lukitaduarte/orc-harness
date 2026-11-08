@@ -474,9 +474,9 @@
   "coreAlertMcpBody": "{session} pede para adicionar {name}",
   "shellMcpRequest": "{session} pede para adicionar o MCP {name}",
   "shellMcpApprove": "Aprovar e reiniciar",
-  "toolsImportMcps": "Importar do Claude Code",
-  "toolsImportMcpsHint": "MCPs das configurações do Claude Code das suas contas e dos .mcp.json dos repositórios. Os valores secretos vão para o Keychain; o catálogo guarda só referências.",
-  "toolsImportNone": "Nenhum MCP encontrado no Claude Code.",
+  "toolsImportMcps": "Importar deste Mac",
+  "toolsImportMcpsHint": "MCPs e skills que já estão neste Mac: todas as configurações do Claude Code (~/.claude*), outras ferramentas (Claude Desktop, Cursor, Windsurf, VS Code, Gemini CLI, Codex…), os seus projetos e plugins. Os valores secretos vão para o Keychain; o catálogo guarda só referências.",
+  "toolsImportNone": "Nenhum MCP ou skill encontrado neste Mac.",
   "toolsImportReplaces": "· substitui o do catálogo",
   "toolsImportSecrets": "Para o Keychain: {names}",
   "toolsImportCount": "Importar {count}",
@@ -495,5 +495,7 @@
   "devEmulatorBoot": "Ligar",
   "devEmulatorShutdown": "Desligar",
   "devEmulatorHome": "Início",
-  "devEmulatorSwitch": "Outro dispositivo"
+  "devEmulatorSwitch": "Outro dispositivo",
+  "toolsImportSearch": "Buscar por nome ou origem",
+  "toolsImportInCatalog": "· já está no catálogo"
 }

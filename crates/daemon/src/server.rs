@@ -1006,43 +1006,34 @@ impl Daemon {
         Vec::new()
     }
 
-    /// MCP servers in the accounts' Claude Code configs and the known
-    /// repositories' `.mcp.json`.
-    fn scan_mcps(&self) -> Vec<crate::mcp_import::Found> {
+    /// MCP servers and skills set up on this Mac (see mcp_import).
+    fn scan_imports(&self) -> crate::mcp_import::Scan {
         let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
-        let claude_jsons: Vec<(String, PathBuf)> = {
+        let accounts: Vec<PathBuf> = {
             let sessions = self.sessions.lock().unwrap();
-            sessions
-                .account_ids()
-                .into_iter()
-                .filter_map(|id| {
-                    let a = sessions.account(&id)?;
-                    let file = a.config_dir.as_ref().map_or_else(|| home.join(".claude.json"), |d| d.join(".claude.json"));
-                    Some((id, file))
-                })
-                .collect()
+            sessions.account_ids().iter().filter_map(|id| sessions.account(id)?.config_dir.clone()).collect()
         };
-        let mcp_jsons: Vec<(String, PathBuf)> = self
-            .projects
-            .lock()
-            .unwrap()
-            .list()
-            .into_iter()
-            .map(|p| (p.name, crate::catalog::expand(&p.repo).join(".mcp.json")))
-            .collect();
-        crate::mcp_import::scan(&claude_jsons, &mcp_jsons)
+        let projects: Vec<(String, PathBuf)> =
+            self.projects.lock().unwrap().list().into_iter().map(|p| (p.name, crate::catalog::expand(&p.repo))).collect();
+        crate::mcp_import::scan_all(&home, &accounts, &projects)
     }
 
     fn mcp_imports(&self) -> DaemonMessage {
-        let have: Vec<String> =
-            self.catalog.lock().unwrap().list().into_iter().filter(|e| e.kind == "mcp").map(|e| e.name).collect();
-        let items = self
-            .scan_mcps()
+        let catalog = self.catalog.lock().unwrap().list();
+        let has_mcp = |n: &str| catalog.iter().any(|e| e.kind == "mcp" && e.name == n);
+        let has_skill = |p: &std::path::Path| {
+            catalog.iter().any(|e| e.kind == "skill" && e.path.as_deref().map(std::path::Path::new) == Some(p))
+        };
+        let scan = self.scan_imports();
+        let mut items: Vec<orc_protocol::McpImport> = scan
+            .mcps
             .into_iter()
             .map(|f| {
                 let (mcp, secrets) = crate::mcp_import::sanitize(&f.name, &f.config);
                 orc_protocol::McpImport {
-                    in_catalog: have.contains(&f.name),
+                    in_catalog: has_mcp(&f.name),
+                    kind: "mcp".into(),
+                    description: String::new(),
                     key: f.key,
                     label: f.label,
                     name: f.name,
@@ -1051,6 +1042,16 @@ impl Daemon {
                 }
             })
             .collect();
+        items.extend(scan.skills.into_iter().map(|s| orc_protocol::McpImport {
+            in_catalog: has_skill(&s.path),
+            kind: "skill".into(),
+            description: s.description,
+            key: s.key,
+            label: s.label,
+            name: s.name,
+            mcp: serde_json::Value::Null,
+            secrets: Vec::new(),
+        }));
         DaemonMessage::McpImports { items }
     }
 
@@ -1497,11 +1498,36 @@ impl Daemon {
                 });
             }
             ClientMessage::ImportMcps { keys } => {
-                let found = self.scan_mcps();
+                let scan = self.scan_imports();
                 let secrets = self.sessions.lock().unwrap().secrets.clone();
                 {
                     let mut catalog = self.catalog.lock().unwrap();
-                    for f in found.iter().filter(|f| keys.contains(&f.key)) {
+                    for s in scan.skills.iter().filter(|s| keys.contains(&s.key)) {
+                        let path = s.path.display().to_string();
+                        let list = catalog.list();
+                        if list.iter().any(|e| e.kind == "skill" && e.path.as_deref() == Some(&path)) {
+                            continue;
+                        }
+                        // Two skills may share a name: the id gets a number.
+                        let base = format!("skill-{}", s.name);
+                        let id = (1..)
+                            .map(|n| if n == 1 { base.clone() } else { format!("{base}-{n}") })
+                            .find(|id| !list.iter().any(|e| &e.id == id))
+                            .unwrap_or(base);
+                        let entry = CatalogEntry {
+                            id,
+                            kind: "skill".into(),
+                            name: s.name.clone(),
+                            description: if s.description.is_empty() { format!("importada de {}", s.label) } else { s.description.clone() },
+                            path: Some(path),
+                            mcp: None,
+                            has_value: false,
+                        };
+                        if let Err(e) = catalog.upsert(entry) {
+                            return error(e);
+                        }
+                    }
+                    for f in scan.mcps.iter().filter(|f| keys.contains(&f.key)) {
                         let (config, values) = crate::mcp_import::sanitize(&f.name, &f.config);
                         for (env, value) in &values {
                             if let Err(e) = secrets.set(&crate::secrets::env_key(env), value) {

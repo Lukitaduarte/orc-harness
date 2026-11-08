@@ -1434,15 +1434,15 @@
   "@shellMcpApprove": {
     "description": "Button: add the MCP and restart that session (resuming its conversation)"
   },
-  "toolsImportMcps": "Import from Claude Code",
+  "toolsImportMcps": "Import from this Mac",
   "@toolsImportMcps": {
     "description": "Button and dialog title: bring MCP servers already set up in Claude Code into the catalog"
   },
-  "toolsImportMcpsHint": "MCP servers in your accounts' Claude Code settings and in your repositories' .mcp.json. Secret values go to the Keychain; the catalog keeps only references.",
+  "toolsImportMcpsHint": "MCP servers and skills already on this Mac: every Claude Code setup (~/.claude*), other tools (Claude Desktop, Cursor, Windsurf, VS Code, Gemini CLI, Codex…), your projects and plugins. Secret values go to the Keychain; the catalog keeps only references.",
   "@toolsImportMcpsHint": {
     "description": "Import dialog hint"
   },
-  "toolsImportNone": "No MCP servers found in Claude Code.",
+  "toolsImportNone": "No MCP servers or skills found on this Mac.",
   "@toolsImportNone": {
     "description": "Import dialog: nothing found"
   },
@@ -1531,5 +1531,13 @@
   "devEmulatorSwitch": "Other device",
   "@devEmulatorSwitch": {
     "description": "Back to the device list"
+  },
+  "toolsImportSearch": "Search by name or source",
+  "@toolsImportSearch": {
+    "description": "Import dialog"
+  },
+  "toolsImportInCatalog": "· already in the catalog",
+  "@toolsImportInCatalog": {
+    "description": "Import dialog"
   }
 }

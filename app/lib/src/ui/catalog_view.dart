@@ -244,9 +244,10 @@ Future<void> _showImportDialog(BuildContext context, DaemonClient daemon) {
   ).future;
 }
 
-/// The MCP servers you already use in Claude Code, to pick into the
-/// catalog. Secret values never come here: the daemon moves them to the
-/// Keychain and shows only their names.
+/// MCP servers and skills already on this Mac (Claude Code setups, other
+/// tools, projects, plugins), to pick into the catalog. Grouped by where
+/// they were found, with a search. Secret values never come here: the
+/// daemon moves them to the Keychain and shows only their names.
 class McpImportForm extends StatefulWidget {
   const McpImportForm(this.daemon, {super.key});
 
@@ -258,6 +259,16 @@ class McpImportForm extends StatefulWidget {
 
 class _McpImportFormState extends State<McpImportForm> {
   Set<String>? _picked;
+  final _open = <String>{};
+  String _query = '';
+
+  bool _matches(Map<String, dynamic> i) {
+    if (_query.isEmpty) return true;
+    final q = _query.toLowerCase();
+    return '${i['name']} ${i['label']} ${i['description'] ?? ''}'
+        .toLowerCase()
+        .contains(q);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -266,13 +277,25 @@ class _McpImportFormState extends State<McpImportForm> {
       listenable: widget.daemon,
       builder: (context, _) {
         final items = widget.daemon.mcpImports;
-        // New ones start picked; ones already in the catalog don't.
+        // New MCP servers start picked; skills (often hundreds) don't.
         final picked = _picked ??= items == null
             ? null
             : {
                 for (final i in items)
-                  if (i['in_catalog'] != true) i['key'] as String,
+                  if (i['in_catalog'] != true && i['kind'] != 'skill')
+                    i['key'] as String,
               };
+        final shown = (items ?? const <Map<String, dynamic>>[])
+            .where(_matches)
+            .toList();
+        // kind → source → items, in the order found.
+        final groups = <String, Map<String, List<Map<String, dynamic>>>>{};
+        for (final i in shown) {
+          groups
+              .putIfAbsent(i['kind'] as String? ?? 'mcp', () => {})
+              .putIfAbsent(i['label'] as String, () => [])
+              .add(i);
+        }
         return Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -284,14 +307,33 @@ class _McpImportFormState extends State<McpImportForm> {
               Center(child: Text(l10n.devLoading).small().muted())
             else if (items.isEmpty)
               Text(l10n.toolsImportNone).small().muted()
-            else
+            else ...[
+              TextField(
+                placeholder: Text(l10n.toolsImportSearch),
+                onChanged: (v) => setState(() => _query = v.trim()),
+              ),
+              const Gap(8),
               ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 360),
+                constraints: const BoxConstraints(maxHeight: 420),
                 child: ListView(
                   shrinkWrap: true,
-                  children: [for (final i in items) _row(i, picked!)],
+                  children: [
+                    for (final kind in ['mcp', 'skill'])
+                      if (groups[kind] != null) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8, bottom: 4),
+                          child: Text(
+                            (kind == 'mcp' ? 'MCPs' : 'Skills').toUpperCase(),
+                          ).xSmall().semiBold().muted(),
+                        ),
+                        for (final MapEntry(key: label, value: list)
+                            in groups[kind]!.entries)
+                          ..._group(kind, label, list, picked!),
+                      ],
+                  ],
                 ),
               ),
+            ],
             const Gap(16),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -318,16 +360,76 @@ class _McpImportFormState extends State<McpImportForm> {
     );
   }
 
+  /// A source: a header with its count and a pick-all box; open shows
+  /// its items (a search opens every group).
+  List<Widget> _group(
+    String kind,
+    String label,
+    List<Map<String, dynamic>> list,
+    Set<String> picked,
+  ) {
+    final id = '$kind|$label';
+    final open = _query.isNotEmpty || _open.contains(id);
+    final keys = [for (final i in list) i['key'] as String];
+    final on = keys.where(picked.contains).length;
+    return [
+      Row(
+        children: [
+          Checkbox(
+            state: on == 0
+                ? CheckboxState.unchecked
+                : on == keys.length
+                ? CheckboxState.checked
+                : CheckboxState.indeterminate,
+            tristate: true,
+            onChanged: (_) => setState(() {
+              on == keys.length ? picked.removeAll(keys) : picked.addAll(keys);
+            }),
+          ),
+          const Gap(4),
+          Expanded(
+            child: GhostButton(
+              alignment: Alignment.centerLeft,
+              density: ButtonDensity.compact,
+              onPressed: () => setState(() {
+                if (!_open.remove(id)) _open.add(id);
+              }),
+              trailing: Icon(
+                open ? LucideIcons.chevronDown : LucideIcons.chevronRight,
+                size: 12,
+              ),
+              child: Text(
+                '$label  ·  ${list.length}',
+                overflow: TextOverflow.ellipsis,
+              ).small().medium(),
+            ),
+          ),
+        ],
+      ),
+      if (open)
+        for (final i in list)
+          Padding(
+            padding: const EdgeInsets.only(left: 24),
+            child: _row(i, picked),
+          ),
+    ];
+  }
+
   Widget _row(Map<String, dynamic> i, Set<String> picked) {
     final l10n = context.l10n;
     final key = i['key'] as String;
-    final mcp = i['mcp'] as Map<String, dynamic>;
-    final secrets = (i['secrets'] as List).cast<String>();
-    final runs =
-        mcp['url'] as String? ??
-        [mcp['command'], ...(mcp['args'] as List? ?? const [])].join(' ');
+    final skill = i['kind'] == 'skill';
+    final mcp = i['mcp'] as Map<String, dynamic>?;
+    final secrets = (i['secrets'] as List? ?? const []).cast<String>();
+    final detail = skill
+        ? (i['description'] as String? ?? '')
+        : mcp?['url'] as String? ??
+              [
+                mcp?['command'],
+                ...(mcp?['args'] as List? ?? const []),
+              ].join(' ');
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -346,25 +448,34 @@ class _McpImportFormState extends State<McpImportForm> {
               children: [
                 Row(
                   children: [
-                    Text(i['name'] as String).small().semiBold(),
-                    const Gap(6),
                     Flexible(
                       child: Text(
-                        i['label'] as String,
+                        i['name'] as String,
                         overflow: TextOverflow.ellipsis,
-                      ).xSmall().muted(),
+                      ).small().semiBold(),
                     ),
                     if (i['in_catalog'] == true) ...[
                       const Gap(6),
-                      Text(l10n.toolsImportReplaces).xSmall().muted(),
+                      Text(
+                        skill
+                            ? l10n.toolsImportInCatalog
+                            : l10n.toolsImportReplaces,
+                      ).xSmall().muted(),
                     ],
                   ],
                 ),
-                Text(
-                  runs,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ).mono().xSmall().muted(),
+                if (detail.isNotEmpty)
+                  skill
+                      ? Text(
+                          detail,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ).xSmall().muted()
+                      : Text(
+                          detail,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ).mono().xSmall().muted(),
                 if (secrets.isNotEmpty)
                   Text(
                     l10n.toolsImportSecrets(secrets.join(', ')),

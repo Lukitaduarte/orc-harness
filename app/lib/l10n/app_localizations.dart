@@ -2953,19 +2953,19 @@ abstract class AppLocalizations {
   /// Button and dialog title: bring MCP servers already set up in Claude Code into the catalog
   ///
   /// In en, this message translates to:
-  /// **'Import from Claude Code'**
+  /// **'Import from this Mac'**
   String get toolsImportMcps;
 
   /// Import dialog hint
   ///
   /// In en, this message translates to:
-  /// **'MCP servers in your accounts\' Claude Code settings and in your repositories\' .mcp.json. Secret values go to the Keychain; the catalog keeps only references.'**
+  /// **'MCP servers and skills already on this Mac: every Claude Code setup (~/.claude*), other tools (Claude Desktop, Cursor, Windsurf, VS Code, Gemini CLI, Codex…), your projects and plugins. Secret values go to the Keychain; the catalog keeps only references.'**
   String get toolsImportMcpsHint;
 
   /// Import dialog: nothing found
   ///
   /// In en, this message translates to:
-  /// **'No MCP servers found in Claude Code.'**
+  /// **'No MCP servers or skills found on this Mac.'**
   String get toolsImportNone;
 
   /// Import row: a catalog MCP has this name
@@ -3081,6 +3081,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Other device'**
   String get devEmulatorSwitch;
+
+  /// Import dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Search by name or source'**
+  String get toolsImportSearch;
+
+  /// Import dialog
+  ///
+  /// In en, this message translates to:
+  /// **'· already in the catalog'**
+  String get toolsImportInCatalog;
 }
 
 class _AppLocalizationsDelegate

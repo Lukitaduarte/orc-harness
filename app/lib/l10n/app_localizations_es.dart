@@ -1713,14 +1713,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String get shellMcpApprove => 'Aprobar y reiniciar';
 
   @override
-  String get toolsImportMcps => 'Importar de Claude Code';
+  String get toolsImportMcps => 'Importar de esta Mac';
 
   @override
   String get toolsImportMcpsHint =>
-      'MCPs de la configuración de Claude Code de tus cuentas y de los .mcp.json de los repositorios. Los valores secretos van al Llavero; el catálogo guarda solo referencias.';
+      'MCPs y skills que ya están en esta Mac: todas las configuraciones de Claude Code (~/.claude*), otras herramientas (Claude Desktop, Cursor, Windsurf, VS Code, Gemini CLI, Codex…), tus proyectos y plugins. Los valores secretos van al Llavero; el catálogo guarda solo referencias.';
 
   @override
-  String get toolsImportNone => 'No se encontraron MCPs en Claude Code.';
+  String get toolsImportNone => 'No se encontraron MCPs ni skills en esta Mac.';
 
   @override
   String get toolsImportReplaces => '· reemplaza el del catálogo';
@@ -1787,4 +1787,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get devEmulatorSwitch => 'Otro dispositivo';
+
+  @override
+  String get toolsImportSearch => 'Buscar por nombre u origen';
+
+  @override
+  String get toolsImportInCatalog => '· ya está en el catálogo';
 }

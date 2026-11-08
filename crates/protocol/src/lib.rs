@@ -326,11 +326,16 @@ pub struct CatalogEntry {
     pub has_value: bool,
 }
 
-/// An MCP server found in your Claude Code config, offered for the
-/// catalog. Secret values were already replaced by `${NAME}` references.
+/// An MCP server or skill found on this Mac, offered for the catalog.
+/// MCP secret values were already replaced by `${NAME}` references.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct McpImport {
     pub key: String,
+    /// `mcp` or `skill`.
+    #[serde(default = "mcp_kind")]
+    pub kind: String,
+    #[serde(default)]
+    pub description: String,
     /// Where it was found (account and project, or repository).
     pub label: String,
     pub name: String,
@@ -338,9 +343,13 @@ pub struct McpImport {
     /// Envs whose values move to the Keychain on import.
     #[serde(default)]
     pub secrets: Vec<String>,
-    /// The catalog already has an MCP with this name.
+    /// The catalog already has it (an MCP by name, a skill by folder).
     #[serde(default)]
     pub in_catalog: bool,
+}
+
+fn mcp_kind() -> String {
+    "mcp".into()
 }
 
 /// A plan mode template: markdown in `~/.orc/templates/<id>.md`.
