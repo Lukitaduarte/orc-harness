@@ -75,6 +75,42 @@ struct Saved {
     rows: u16,
 }
 
+/// The account's Claude Code state file (where folder trust lives): in its
+/// config folder, or `~/.claude.json` for the default one.
+pub fn claude_json(account: &Account) -> PathBuf {
+    match &account.config_dir {
+        Some(dir) => dir.join(".claude.json"),
+        None => PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".claude.json"),
+    }
+}
+
+/// Marks `dir` trusted in a Claude Code state file, as answering "Yes, I
+/// trust this folder" does; everything else in the file stays. Written to
+/// a temporary file and renamed, so Claude Code never reads half of it.
+pub fn trust_folder(state: &Path, dir: &Path) -> std::io::Result<()> {
+    let mut doc: serde_json::Value = match fs::read(state) {
+        Ok(raw) => serde_json::from_slice(&raw).map_err(std::io::Error::other)?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => json!({}),
+        Err(e) => return Err(e),
+    };
+    let key = dir.to_string_lossy().into_owned();
+    let entry = &mut doc["projects"][&key];
+    if entry["hasTrustDialogAccepted"] == json!(true) {
+        return Ok(());
+    }
+    if !entry.is_object() {
+        *entry = json!({});
+    }
+    entry["hasTrustDialogAccepted"] = json!(true);
+    if let Some(parent) = state.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let tmp = state.with_extension(format!("orc-{}", std::process::id()));
+    fs::write(&tmp, serde_json::to_vec_pretty(&doc)?)?;
+    fs::set_permissions(&tmp, std::os::unix::fs::PermissionsExt::from_mode(0o600))?;
+    fs::rename(&tmp, state)
+}
+
 /// Claude Code keeps a conversation as `<config>/projects/<folder>/<id>.jsonl`;
 /// one that never got a message has no file and cannot be resumed.
 fn has_transcript(account: &Account, claude_session_id: &str) -> bool {
@@ -229,6 +265,11 @@ impl SessionManager {
             branch: project.map(|p| p.1),
             profile: None,
         };
+        // A worktree the harness made: answered for you, so Claude Code does
+        // not stop on its folder trust question.
+        if summary.project_id.is_some() {
+            trust_folder(&claude_json(&account), &cwd)?;
+        }
         let mut spec = self.prepare(&summary, &account, &profile, cols, rows, false)?;
         if let Some(p) = prompt {
             // Claude Code's interactive mode takes an initial prompt.
@@ -687,6 +728,24 @@ mod tests {
         assert_eq!(mcp["mcpServers"]["orc"]["env"]["ORC_SESSION"], s.id.as_str());
         let link = dir.join("plugin/skills/code-review");
         assert_eq!(fs::read_link(link).unwrap(), Path::new("/catalog/skills/code-review"));
+    }
+
+    #[test]
+    fn trusting_a_folder_keeps_the_rest_of_claude_code_state() {
+        let tmp = tempfile::tempdir().unwrap();
+        let state = tmp.path().join(".claude.json");
+        fs::write(&state, r#"{"numStartups": 7, "projects": {"/a": {"allowedTools": ["x"]}}}"#).unwrap();
+        trust_folder(&state, Path::new("/a")).unwrap();
+        trust_folder(&state, Path::new("/w/b")).unwrap();
+        let doc: serde_json::Value = serde_json::from_slice(&fs::read(&state).unwrap()).unwrap();
+        assert_eq!(doc["numStartups"], 7);
+        assert_eq!(doc["projects"]["/a"]["allowedTools"][0], "x");
+        assert_eq!(doc["projects"]["/a"]["hasTrustDialogAccepted"], true);
+        assert_eq!(doc["projects"]["/w/b"]["hasTrustDialogAccepted"], true);
+        // A missing file is created.
+        let fresh = tmp.path().join("acct/.claude.json");
+        trust_folder(&fresh, Path::new("/x")).unwrap();
+        assert!(fresh.exists());
     }
 
     #[test]

@@ -1841,4 +1841,17 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get toolsCatalogSearch => 'Buscar en el catálogo';
+
+  @override
+  String get devEditRepo => 'Configuración del repositorio';
+
+  @override
+  String get devRemoveRepo => 'Quitar repositorio';
+
+  @override
+  String get devRemoveRepoSure => 'Quitar de verdad';
+
+  @override
+  String get devRemoveRepoConfirm =>
+      'Sale del harness; la carpeta, los worktrees y las ramas siguen en git.';
 }

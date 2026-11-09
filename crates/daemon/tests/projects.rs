@@ -43,7 +43,7 @@ fn worktree_session_enforces_conventional_commits() {
                 otlp_metrics: None,
             orc_mcp: None,
             },
-            vec![Account { id: "work".into(), config_dir: None, gh_config_dir: None }],
+            vec![Account { id: "work".into(), config_dir: Some(dir.join("claude-work")), gh_config_dir: None }],
             std::sync::Arc::new(orc_daemon::secrets::SecretStore::memory()),
         ),
         orc_daemon::catalog::Catalog::load(dir).unwrap(),
@@ -62,13 +62,24 @@ fn worktree_session_enforces_conventional_commits() {
         repo: dir.display().to_string(),
         base_branch: "main".into(), workspace_id: None });
     assert!(matches!(&bad[..], [DaemonMessage::Error { .. }]));
-    assert!(daemon.handle(ClientMessage::AddProject {
+    // A base branch the clone does not have is refused.
+    let wrong = daemon.handle(ClientMessage::AddProject {
         name: "Plataforma Web".into(),
+        repo: r.display().to_string(),
+        base_branch: "develop".into(), workspace_id: None });
+    assert!(matches!(&wrong[..], [DaemonMessage::Error { message }] if message.contains("develop")), "{wrong:?}");
+    assert!(daemon.handle(ClientMessage::AddProject {
+        name: "Plataforma".into(),
         repo: r.display().to_string(),
         base_branch: "main".into(), workspace_id: None })
     .is_empty());
+    // Renamed later; the base must still exist.
+    let id = daemon.projects.lock().unwrap().list()[0].id.clone();
+    let bad = daemon.handle(ClientMessage::UpdateProject { id: id.clone(), name: "Plataforma Web".into(), base_branch: "develop".into() });
+    assert!(matches!(&bad[..], [DaemonMessage::Error { .. }]));
+    assert!(daemon.handle(ClientMessage::UpdateProject { id: id.clone(), name: "Plataforma Web".into(), base_branch: "main".into() }).is_empty());
     let project = daemon.projects.lock().unwrap().list()[0].clone();
-    assert_eq!(project.id, "plataforma-web");
+    assert_eq!((project.id.as_str(), project.name.as_str()), ("plataforma", "Plataforma Web"));
 
     assert!(daemon.handle(ClientMessage::CreateWorktreeSession {
         project_id: project.id.clone(),
@@ -83,6 +94,11 @@ fn worktree_session_enforces_conventional_commits() {
     assert_eq!(s.branch.as_deref(), Some("feat/1-login"));
     let wt = Path::new(&s.cwd);
     assert!(wt.starts_with(dir.join("worktrees")));
+    // The worktree is trusted in the account's Claude Code state: no trust
+    // question stops the session.
+    let state: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(dir.join("claude-work/.claude.json")).unwrap()).unwrap();
+    assert_eq!(state["projects"][s.cwd.as_str()]["hasTrustDialogAccepted"], true);
 
     std::fs::write(wt.join("login.rs"), "fn login() {}\n").unwrap();
     assert!(git(wt, &["add", "."]));
@@ -126,4 +142,8 @@ fn worktree_session_enforces_conventional_commits() {
     };
     assert!(ok, "{out}");
     assert!(git(remote.path(), &["rev-parse", "--verify", "refs/heads/feat/1-login"]));
+
+    // And it can go (worktrees and branches stay in git).
+    assert!(daemon.handle(ClientMessage::RemoveProject { id: project.id.clone() }).is_empty());
+    assert!(daemon.projects.lock().unwrap().list().is_empty());
 }

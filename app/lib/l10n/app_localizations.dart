@@ -3165,6 +3165,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Search the catalog'**
   String get toolsCatalogSearch;
+
+  /// Repository settings dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Repository settings'**
+  String get devEditRepo;
+
+  /// Repository settings dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Remove repository'**
+  String get devRemoveRepo;
+
+  /// Repository settings dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Remove for good'**
+  String get devRemoveRepoSure;
+
+  /// Repository settings dialog
+  ///
+  /// In en, this message translates to:
+  /// **'It leaves the harness; its folder, worktrees and branches stay in git.'**
+  String get devRemoveRepoConfirm;
 }
 
 class _AppLocalizationsDelegate

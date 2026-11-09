@@ -509,5 +509,9 @@
   "shellProfileHide": "Mostrar só as ligadas",
   "shellProfileRefine": "Mais {count}: refine a busca",
   "toolsShowAll": "Mostrar todas ({count})",
-  "toolsCatalogSearch": "Buscar no catálogo"
+  "toolsCatalogSearch": "Buscar no catálogo",
+  "devEditRepo": "Configurações do repositório",
+  "devRemoveRepo": "Remover repositório",
+  "devRemoveRepoSure": "Remover mesmo",
+  "devRemoveRepoConfirm": "Ele sai do harness; a pasta, as worktrees e as branches continuam no git."
 }

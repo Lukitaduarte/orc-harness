@@ -1615,5 +1615,21 @@
   "toolsCatalogSearch": "Search the catalog",
   "@toolsCatalogSearch": {
     "description": "Profile panel / catalog with many items"
+  },
+  "devEditRepo": "Repository settings",
+  "@devEditRepo": {
+    "description": "Repository settings dialog"
+  },
+  "devRemoveRepo": "Remove repository",
+  "@devRemoveRepo": {
+    "description": "Repository settings dialog"
+  },
+  "devRemoveRepoSure": "Remove for good",
+  "@devRemoveRepoSure": {
+    "description": "Repository settings dialog"
+  },
+  "devRemoveRepoConfirm": "It leaves the harness; its folder, worktrees and branches stay in git.",
+  "@devRemoveRepoConfirm": {
+    "description": "Repository settings dialog"
   }
 }

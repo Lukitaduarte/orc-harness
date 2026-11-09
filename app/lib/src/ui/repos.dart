@@ -12,7 +12,6 @@ class RepoSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final d = store.daemon!;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -37,6 +36,17 @@ class RepoSection extends StatelessWidget {
                     ],
                   ),
                 ),
+                // Name, base branch, or take it out.
+                Tooltip(
+                  tooltip: (context) =>
+                      TooltipContainer(child: Text(context.l10n.devEditRepo)),
+                  child: GhostButton(
+                    density: ButtonDensity.icon,
+                    size: ButtonSize.small,
+                    onPressed: () => _dialog(context, _EditRepo(store, p)),
+                    child: const Icon(LucideIcons.settings2, size: 14),
+                  ),
+                ),
                 Tooltip(
                   tooltip: (context) => TooltipContainer(
                     child: Text(context.l10n.devNewWorktreeSession),
@@ -58,25 +68,102 @@ class RepoSection extends StatelessWidget {
               ],
             ),
           ),
-        if (store.workspaceRepos.isNotEmpty &&
-            store.workspaceAccounts.isNotEmpty)
-          Tooltip(
-            tooltip: (context) => TooltipContainer(
-              child: Text(context.l10n.devTrustWorktreesHint),
+      ],
+    );
+  }
+}
+
+/// A repository's name and base branch (the daemon checks the branch
+/// exists), and removing it: its worktrees and branches stay in git.
+class _EditRepo extends StatefulWidget {
+  const _EditRepo(this.store, this.repo);
+
+  final HarnessStore store;
+  final Map<String, dynamic> repo;
+
+  @override
+  State<_EditRepo> createState() => _EditRepoState();
+}
+
+class _EditRepoState extends State<_EditRepo> {
+  late final _name = TextEditingController(text: widget.repo['name'] as String);
+  late final _base = TextEditingController(
+    text: widget.repo['base_branch'] as String,
+  );
+  bool _confirmRemove = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _base.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final d = widget.store.daemon!;
+    final id = widget.repo['id'] as String;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(l10n.devEditRepo).large().semiBold(),
+        Text('${widget.repo['repo']}').xSmall().muted(),
+        const Gap(16),
+        Text(l10n.devName).small().medium(),
+        const Gap(6),
+        TextField(controller: _name),
+        const Gap(12),
+        Text(l10n.devBaseBranch).small().medium(),
+        const Gap(6),
+        TextField(controller: _base),
+        const Gap(20),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            OutlineButton(
+              onPressed: () => closeOverlay(context),
+              child: Text(l10n.devCancel),
             ),
-            child: GhostButton(
-              alignment: Alignment.centerLeft,
-              leading: const Icon(LucideIcons.shieldCheck, size: 16),
+            const Gap(8),
+            PrimaryButton(
               onPressed: () {
-                store.prepareLiveAttach();
                 d.send({
-                  'type': 'trust_worktrees',
-                  'account_id': store.workspaceAccounts.first.id,
+                  'type': 'update_project',
+                  'id': id,
+                  'name': _name.text.trim(),
+                  'base_branch': _base.text.trim(),
                 });
+                closeOverlay(context);
               },
-              child: Text(context.l10n.devTrustWorktrees).small(),
+              child: Text(l10n.shellSave),
+            ),
+          ],
+        ),
+        const Gap(16),
+        const Divider(),
+        const Gap(12),
+        if (_confirmRemove) ...[
+          Text(l10n.devRemoveRepoConfirm).small().muted(),
+          const Gap(8),
+        ],
+        Align(
+          alignment: Alignment.centerLeft,
+          child: DestructiveButton(
+            onPressed: () {
+              if (!_confirmRemove) {
+                setState(() => _confirmRemove = true);
+                return;
+              }
+              d.send({'type': 'remove_project', 'id': id});
+              closeOverlay(context);
+            },
+            child: Text(
+              _confirmRemove ? l10n.devRemoveRepoSure : l10n.devRemoveRepo,
             ),
           ),
+        ),
       ],
     );
   }

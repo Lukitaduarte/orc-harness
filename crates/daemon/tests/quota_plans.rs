@@ -40,7 +40,7 @@ fn cards_follow_the_quota() {
     let fake = dir.join("fake-claude");
     std::fs::write(&fake, "#!/bin/sh\nexec cat\n").unwrap();
     std::fs::set_permissions(&fake, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
-    let account = |id: &str| Account { id: id.into(), config_dir: None, gh_config_dir: None };
+    let account = |id: &str| Account { id: id.into(), config_dir: Some(dir.join(format!("claude-{id}"))), gh_config_dir: None };
     let daemon = Daemon::new(
         SessionManager::new(
             ManagerConfig {

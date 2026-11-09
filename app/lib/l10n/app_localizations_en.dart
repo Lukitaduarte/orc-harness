@@ -1839,4 +1839,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get toolsCatalogSearch => 'Search the catalog';
+
+  @override
+  String get devEditRepo => 'Repository settings';
+
+  @override
+  String get devRemoveRepo => 'Remove repository';
+
+  @override
+  String get devRemoveRepoSure => 'Remove for good';
+
+  @override
+  String get devRemoveRepoConfirm =>
+      'It leaves the harness; its folder, worktrees and branches stay in git.';
 }

@@ -624,6 +624,8 @@ pub enum ClientMessage {
     /// session on it), placed in `workspace_id`.
     AddAccount { id: String, workspace_id: String },
     RemoveProject { id: String },
+    /// Renames a repository or changes its base branch (it must exist).
+    UpdateProject { id: String, name: String, base_branch: String },
     /// A worktree on `branch` (created from the base if new) and a session
     /// in it, with conventional commits enforced.
     CreateWorktreeSession {

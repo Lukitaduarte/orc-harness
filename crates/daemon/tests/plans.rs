@@ -83,7 +83,7 @@ fn cards_run_in_order_and_follow_their_prs() {
                 otlp_metrics: None,
                 orc_mcp: None,
             },
-            vec![Account { id: "work".into(), config_dir: None, gh_config_dir: None }],
+            vec![Account { id: "work".into(), config_dir: Some(dir.join("claude-work")), gh_config_dir: None }],
             std::sync::Arc::new(orc_daemon::secrets::SecretStore::memory()),
         ),
         orc_daemon::catalog::Catalog::load(dir).unwrap(),

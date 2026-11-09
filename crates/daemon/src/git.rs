@@ -69,6 +69,11 @@ pub fn valid_branch(name: &str) -> bool {
         && name.chars().all(|c| c.is_ascii_alphanumeric() || "._/-".contains(c))
 }
 
+/// Whether `branch` is a branch (or remote branch) of the repository.
+pub fn has_branch(repo: &Path, branch: &str) -> bool {
+    valid_branch(branch) && git(repo, &["rev-parse", "--verify", "--quiet", &format!("{branch}^{{commit}}")]).is_ok()
+}
+
 pub fn is_repo(dir: &Path) -> bool {
     git(dir, &["rev-parse", "--git-dir"]).is_ok()
 }

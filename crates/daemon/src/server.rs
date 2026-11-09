@@ -1362,6 +1362,13 @@ impl Daemon {
                 }
                 emit(DaemonMessage::Projects { projects: projects.list() });
             }
+            ClientMessage::UpdateProject { id, name, base_branch } => {
+                let mut projects = self.projects.lock().unwrap();
+                if let Err(e) = projects.update(&id, &name, &base_branch) {
+                    return error(e);
+                }
+                emit(DaemonMessage::Projects { projects: projects.list() });
+            }
             ClientMessage::RemoveProject { id } => {
                 let mut projects = self.projects.lock().unwrap();
                 if let Err(e) = projects.remove(&id) {
@@ -1681,17 +1688,16 @@ impl Daemon {
                     Err(message) => vec![DaemonMessage::Error { message }],
                 };
             }
+            // Older apps' button: worktree sessions are trusted when they
+            // start now; this marks the worktrees folder for that account.
             ClientMessage::TrustWorktrees { account_id } => {
-                // Answering Claude Code's trust question here once covers
-                // every worktree the harness creates inside.
-                if let Err(e) = std::fs::create_dir_all(&self.git.worktrees) {
+                let state = match self.sessions.lock().unwrap().account(&account_id) {
+                    Some(a) => crate::manager::claude_json(a),
+                    None => return vec![DaemonMessage::Error { message: format!("conta desconhecida: {account_id}") }],
+                };
+                if let Err(e) = crate::manager::trust_folder(&state, &self.git.worktrees) {
                     return error(e);
                 }
-                let mut sessions = self.sessions.lock().unwrap();
-                if let Err(e) = sessions.create(&account_id, Some(self.git.worktrees.clone()), Profile::default(), 100, 30) {
-                    return error(e);
-                }
-                emit(DaemonMessage::Sessions { sessions: sessions.list() });
             }
             ClientMessage::Learn { plan_id, account_id, notes, skills } => {
                 return match self.start_learner(&plan_id, &account_id, &notes, &skills) {
